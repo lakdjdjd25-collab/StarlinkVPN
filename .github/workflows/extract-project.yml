@@ -1,0 +1,55 @@
+name: Extract StarlinkVPN Project
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract-project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Extract project ZIP
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "StarlinkVPN-Pro-v2.zip" ]; then
+            echo "StarlinkVPN-Pro-v2.zip was not found."
+            exit 1
+          fi
+
+          rm -rf .extract-temp
+          mkdir -p .extract-temp
+
+          unzip -q "StarlinkVPN-Pro-v2.zip" -d .extract-temp
+
+          if [ ! -d ".extract-temp/StarlinkVPN" ]; then
+            echo "StarlinkVPN folder was not found inside ZIP."
+            exit 1
+          fi
+
+          cp -a .extract-temp/StarlinkVPN/. .
+
+          rm -rf .extract-temp
+          rm -f "StarlinkVPN-Pro-v2.zip"
+          rm -f ".github/workflows/extract-project.yml"
+
+      - name: Save extracted project
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No files changed."
+            exit 0
+          fi
+
+          git commit -m "Extract StarlinkVPN project"
+          git push
