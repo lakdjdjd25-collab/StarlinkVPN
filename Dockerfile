@@ -10,6 +10,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json ./
 COPY apps/control-plane/package.json apps/control-plane/package.json
+COPY apps/control-plane/prisma.config.ts apps/control-plane/prisma.config.ts
+COPY apps/control-plane/prisma apps/control-plane/prisma
 RUN npm ci
 
 COPY . .
