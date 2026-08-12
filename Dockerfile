@@ -22,4 +22,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["npm", "--workspace", "@quickping/control-plane", "run", "start"]
+CMD ["sh", "-c", "npm run db:seed && npm --workspace @quickping/control-plane run start"]
