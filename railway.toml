@@ -1,6 +1,6 @@
 [build]
-builder = "RAILPACK"
-buildCommand = "npm ci && npm run db:generate && npm run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm run db:migrate && npm --workspace @quickping/control-plane run start"
