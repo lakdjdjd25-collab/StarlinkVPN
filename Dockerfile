@@ -22,4 +22,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm run db:migrate && npm --workspace @quickping/control-plane run start"]
+CMD ["npm", "--workspace", "@quickping/control-plane", "run", "start"]
