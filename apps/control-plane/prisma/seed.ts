@@ -97,12 +97,23 @@ async function main() {
       priority: 100,
     },
   });
+
+  console.log("QuickPing seed completed");
 }
 
 main()
-  .then(() => db.$disconnect())
+  .then(async () => {
+    await Promise.race([
+      db.$disconnect(),
+      new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+    process.exit(0);
+  })
   .catch(async (error) => {
     console.error(error);
-    await db.$disconnect();
+    await Promise.race([
+      db.$disconnect(),
+      new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+    ]);
     process.exit(1);
   });
