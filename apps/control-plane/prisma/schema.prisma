@@ -1,0 +1,365 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  SUPPORT
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ServiceStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  CANCELLED
+}
+
+enum PlanInterval {
+  FREE
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum NodeProtocol {
+  VLESS
+  VMESS
+  TROJAN
+  WIREGUARD
+  HYSTERIA2
+  SOCKS5
+  SINGBOX
+  XRAY
+}
+
+enum NodeStatus {
+  ONLINE
+  DEGRADED
+  OFFLINE
+  MAINTENANCE
+}
+
+enum NotificationAudience {
+  ALL
+  FREE
+  PAID
+  SELECTED
+}
+
+enum ReleasePlatform {
+  ANDROID
+  WINDOWS
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  telegramId      String?    @unique
+  balance         BigInt     @default(0)
+  language        String     @default("fa")
+  role            UserRole   @default(CUSTOMER)
+  status          UserStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  devices       Device[]
+  refreshTokens RefreshToken[]
+  services      Service[]
+  authCodes     AuthCode[]
+  auditLogs     AuditLog[]             @relation("AuditActor")
+  deliveries    NotificationDelivery[]
+
+  @@index([status, createdAt])
+}
+
+model Device {
+  id             String    @id @default(cuid())
+  userId         String
+  installationId String    @unique
+  name           String
+  platform       String    @default("android")
+  appVersion     String?
+  pushToken      String?
+  lastIpHash     String?
+  lastSeenAt     DateTime  @default(now())
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId, revokedAt])
+}
+
+model RefreshToken {
+  id            String    @id @default(cuid())
+  userId        String
+  deviceId      String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  rotatedFromId String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([deviceId, expiresAt])
+}
+
+model AuthCode {
+  id             String    @id @default(cuid())
+  userId         String
+  codeHash       String
+  purpose        String
+  installationId String?
+  attempts       Int       @default(0)
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, expiresAt])
+}
+
+model Plan {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  interval       PlanInterval
+  price          Decimal      @db.Decimal(12, 2)
+  compareAtPrice Decimal?     @db.Decimal(12, 2)
+  durationDays   Int
+  dataLimitBytes BigInt
+  maxDevices     Int          @default(1)
+  isActive       Boolean      @default(true)
+  isPublic       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  services Service[]
+}
+
+model Service {
+  id               String        @id @default(cuid())
+  userId           String
+  planId           String
+  name             String
+  license          String        @unique
+  status           ServiceStatus @default(ACTIVE)
+  quotaBytes       BigInt
+  usedBytes        BigInt        @default(0)
+  expiresAt        DateTime
+  maxDevices       Int
+  autoPay          Boolean       @default(false)
+  isFree           Boolean       @default(false)
+  subscriptionLink String?       @unique
+  hiddifyLink      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            Plan             @relation(fields: [planId], references: [id])
+  nodes           ServiceNode[]
+  usageSamples    UsageSample[]
+  payments        Payment[]
+  guardianProfile GuardianProfile?
+
+  @@index([userId, status])
+  @@index([expiresAt, status])
+}
+
+model ServerRegion {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  countryCode String
+  priority    Int      @default(0)
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nodes VpnNode[]
+}
+
+model VpnNode {
+  id               String       @id @default(cuid())
+  regionId         String
+  name             String
+  host             String
+  port             Int
+  protocol         NodeProtocol
+  coreType         String       @default("sing-box")
+  configCiphertext String
+  configVersion    Int          @default(1)
+  capacity         Int          @default(1000)
+  activeSessions   Int          @default(0)
+  freeAllowed      Boolean      @default(false)
+  unmetered        Boolean      @default(false)
+  status           NodeStatus   @default(OFFLINE)
+  lastSeenAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  region   ServerRegion  @relation(fields: [regionId], references: [id])
+  services ServiceNode[]
+
+  @@unique([host, port, protocol])
+  @@index([regionId, status])
+}
+
+model ServiceNode {
+  serviceId String
+  nodeId    String
+  priority  Int      @default(0)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  node    VpnNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, nodeId])
+  @@index([nodeId, enabled])
+}
+
+model UsageSample {
+  id              BigInt   @id @default(autoincrement())
+  serviceId       String
+  uploadedBytes   BigInt
+  downloadedBytes BigInt
+  sampledAt       DateTime @default(now())
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, sampledAt])
+}
+
+model GuardianProfile {
+  id        String   @id @default(cuid())
+  serviceId String   @unique
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  rules   GuardianRule[]
+}
+
+model GuardianRule {
+  id        String  @id @default(cuid())
+  profileId String
+  category  String
+  enabled   Boolean @default(false)
+
+  profile GuardianProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, category])
+}
+
+model Notification {
+  id          String               @id @default(cuid())
+  title       String
+  body        String
+  audience    NotificationAudience @default(ALL)
+  actionUrl   String?
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  deliveries NotificationDelivery[]
+}
+
+model NotificationDelivery {
+  notificationId String
+  userId         String
+  deliveredAt    DateTime?
+  readAt         DateTime?
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, readAt])
+}
+
+model AppRelease {
+  id                 String          @id @default(cuid())
+  platform           ReleasePlatform
+  versionName        String
+  versionCode        Int
+  minimumVersionCode Int
+  mandatory          Boolean         @default(false)
+  changelog          String
+  downloadUrl        String
+  sha256             String
+  publishedAt        DateTime?
+  createdAt          DateTime        @default(now())
+
+  @@unique([platform, versionCode])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  serviceId  String
+  provider   String
+  externalId String?       @unique
+  amount     Decimal       @db.Decimal(12, 2)
+  currency   String        @default("USD")
+  status     PaymentStatus @default(PENDING)
+  paidAt     DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([serviceId, status])
+}
+
+model GlobalSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipHash     String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}

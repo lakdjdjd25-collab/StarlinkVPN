@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+*.iml
+local.properties
+**/build/
+**/.kotlin/
+node_modules/
+.next/
+coverage/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+generated/

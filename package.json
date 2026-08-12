@@ -1,0 +1,20 @@
+{
+  "name": "quickping-platform",
+  "version": "2.6.0",
+  "private": true,
+  "workspaces": [
+    "apps/control-plane"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @quickping/control-plane run dev",
+    "build": "npm --workspace @quickping/control-plane run build",
+    "lint": "npm --workspace @quickping/control-plane run lint",
+    "test": "npm --workspace @quickping/control-plane run test",
+    "db:generate": "npm --workspace @quickping/control-plane run db:generate",
+    "db:migrate": "npm --workspace @quickping/control-plane run db:migrate",
+    "db:seed": "npm --workspace @quickping/control-plane run db:seed"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

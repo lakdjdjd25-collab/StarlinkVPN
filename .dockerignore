@@ -1,0 +1,15 @@
+.git
+.github
+.gradle
+.idea
+**/build
+**/.kotlin
+node_modules
+**/node_modules
+**/.next
+references
+upload
+*.apk
+*.jks
+*.keystore
+.env*

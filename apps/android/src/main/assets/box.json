@@ -1,0 +1,10 @@
+{
+  "log": {
+    "disabled": false,
+    "level": "info"
+  },
+  "dns": {},
+  "inbounds": [],
+  "outbounds": [],
+  "route": {}
+}

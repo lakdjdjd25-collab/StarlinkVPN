@@ -1,0 +1,167 @@
+package org.quickping.app.navigation
+
+import android.app.Activity
+import android.net.VpnService
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import org.quickping.app.core.design.QuickPingTheme
+import org.quickping.app.model.ConnectionStatus
+import org.quickping.app.state.QuickPingViewModel
+import org.quickping.app.ui.screens.AccountScreen
+import org.quickping.app.ui.screens.GuardianScreen
+import org.quickping.app.ui.screens.HomeScreen
+import org.quickping.app.ui.screens.LoginScreen
+import org.quickping.app.ui.screens.NotificationsScreen
+import org.quickping.app.ui.screens.ServicesScreen
+import org.quickping.app.ui.screens.SettingsScreen
+import org.quickping.app.ui.screens.SplashScreen
+import org.quickping.app.ui.screens.SplitTunnelingScreen
+import org.quickping.app.ui.screens.VersionScreen
+
+private object Route {
+    const val Splash = "splash"
+    const val Login = "login"
+    const val Home = "home"
+    const val Settings = "settings"
+    const val Guardian = "settings/guardian"
+    const val SplitTunneling = "settings/split-tunneling"
+    const val Account = "account"
+    const val Services = "account/services"
+    const val Notifications = "notifications"
+    const val Version = "update/latest"
+}
+
+@Composable
+fun QuickPingApp(
+    navController: NavHostController = rememberNavController(),
+    quickPingViewModel: QuickPingViewModel = viewModel(),
+) {
+    val state by quickPingViewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val vpnPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) quickPingViewModel.connectVpn()
+    }
+    val onToggleVpn = {
+        if (state.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
+            quickPingViewModel.disconnectVpn()
+        } else {
+            val permissionIntent = VpnService.prepare(context)
+            if (permissionIntent == null) {
+                quickPingViewModel.connectVpn()
+            } else {
+                vpnPermissionLauncher.launch(permissionIntent)
+            }
+        }
+    }
+
+    QuickPingTheme(languageCode = state.user.language) {
+        NavHost(
+            navController = navController,
+            startDestination = Route.Splash,
+        ) {
+            composable(Route.Splash) {
+                SplashScreen(ready = state.initialized) {
+                    navController.navigate(if (state.signedIn) Route.Home else Route.Login) {
+                        popUpTo(Route.Splash) { inclusive = true }
+                    }
+                }
+            }
+            composable(Route.Login) {
+                LaunchedEffect(state.signedIn) {
+                    if (state.signedIn) {
+                        navController.navigate(Route.Home) {
+                            popUpTo(Route.Login) { inclusive = true }
+                        }
+                    }
+                }
+                LoginScreen(
+                    busy = state.busy,
+                    challengeId = state.loginChallengeId,
+                    debugCode = state.loginDebugCode,
+                    error = state.loginError,
+                    onRequestEmail = quickPingViewModel::requestEmailCode,
+                    onVerifyCode = quickPingViewModel::verifyEmailCode,
+                    onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
+                    onGoogleRequested = quickPingViewModel::notifyGoogleLoginRequiresConfiguration,
+                )
+            }
+            composable(Route.Home) {
+                HomeScreen(
+                    state = state,
+                    onToggleConnection = onToggleVpn,
+                    onSelectServer = quickPingViewModel::selectServer,
+                    onSettings = { navController.navigate(Route.Settings) },
+                    onAccount = { navController.navigate(Route.Account) },
+                    onNotifications = { navController.navigate(Route.Notifications) },
+                )
+            }
+            composable(Route.Settings) {
+                SettingsScreen(
+                    settings = state.settings,
+                    onUpdateSettings = quickPingViewModel::updateSetting,
+                    onBack = navController::popBackStack,
+                    onSplitTunneling = { navController.navigate(Route.SplitTunneling) },
+                    onGuardian = { navController.navigate(Route.Guardian) },
+                    onAccount = { navController.navigate(Route.Account) },
+                    onNotifications = { navController.navigate(Route.Notifications) },
+                    onVersion = { navController.navigate(Route.Version) },
+                )
+            }
+            composable(Route.Guardian) {
+                GuardianScreen(
+                    enabled = state.settings.guardianEnabled,
+                    categories = state.guardianCategories,
+                    onEnabledChange = { value ->
+                        quickPingViewModel.updateSetting { it.copy(guardianEnabled = value) }
+                    },
+                    onToggleCategory = quickPingViewModel::toggleGuardian,
+                    onBack = navController::popBackStack,
+                )
+            }
+            composable(Route.SplitTunneling) {
+                SplitTunnelingScreen(
+                    enabled = state.settings.splitTunnelingEnabled,
+                    onEnabledChange = { value ->
+                        quickPingViewModel.updateSetting { it.copy(splitTunnelingEnabled = value) }
+                    },
+                    onBack = navController::popBackStack,
+                )
+            }
+            composable(Route.Account) {
+                AccountScreen(
+                    user = state.user,
+                    service = state.service,
+                    onBack = navController::popBackStack,
+                    onServices = { navController.navigate(Route.Services) },
+                )
+            }
+            composable(Route.Services) {
+                ServicesScreen(
+                    service = state.service,
+                    onBack = navController::popBackStack,
+                )
+            }
+            composable(Route.Notifications) {
+                NotificationsScreen(
+                    notifications = state.notifications,
+                    onBack = navController::popBackStack,
+                )
+            }
+            composable(Route.Version) {
+                VersionScreen(onBack = navController::popBackStack)
+            }
+        }
+    }
+}

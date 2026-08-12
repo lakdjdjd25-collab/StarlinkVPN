@@ -1,0 +1,3 @@
+-keep class org.quickping.app.vpn.** { *; }
+-keep class org.quickping.app.data.api.** { *; }
+-dontwarn org.conscrypt.**
