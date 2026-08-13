@@ -128,6 +128,6 @@ class QuickPingSettingsStore(context: Context) {
             "crypto",
             "fake-news",
         )
-        private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "phishing")
+        private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
     }
 }

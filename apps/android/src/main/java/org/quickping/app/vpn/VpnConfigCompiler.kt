@@ -248,8 +248,12 @@ internal object VpnConfigCompiler {
      * Libbox.checkConfig validates the selected node.
      */
     private fun migrateLegacyProviderConfig(config: JSONObject, route: JSONObject) {
-        val sourceOutbounds = config.optJSONArray("outbounds") ?: return
+        val sourceOutbounds = config.optJSONArray("outbounds") ?: JSONArray()
         val migratedOutbounds = JSONArray()
+        val endpoints = config.optJSONArray("endpoints") ?: JSONArray()
+        val endpointTags = (0 until endpoints.length())
+            .mapNotNull { endpoints.optJSONObject(it)?.optString("tag")?.takeIf(String::isNotBlank) }
+            .toMutableSet()
         val removedActions = mutableMapOf<String, String>()
 
         for (index in 0 until sourceOutbounds.length()) {
@@ -259,6 +263,15 @@ internal object VpnConfigCompiler {
             when (type) {
                 "block" -> if (tag.isNotBlank()) removedActions[tag] = "reject"
                 "dns" -> if (tag.isNotBlank()) removedActions[tag] = "hijack-dns"
+                "wireguard" -> {
+                    // The legacy WireGuard outbound was removed in sing-box
+                    // 1.13.  Endpoints can still be used as route targets, so
+                    // preserve the tag while translating the old shape.
+                    if (tag !in endpointTags) {
+                        endpoints.put(migrateLegacyWireGuardOutbound(outbound))
+                        endpointTags += tag
+                    }
+                }
                 else -> {
                     if (type == "direct") {
                         // Destination overrides moved to route actions in 1.11
@@ -286,10 +299,109 @@ internal object VpnConfigCompiler {
         }
 
         config.put("outbounds", migratedOutbounds)
+        if (endpoints.length() > 0) config.put("endpoints", endpoints)
         route.remove("geoip")
         route.remove("geosite")
         route.optJSONArray("rules")?.let { providerRules ->
             route.put("rules", migrateLegacyRouteRules(providerRules, removedActions))
+        }
+    }
+
+    private fun migrateLegacyWireGuardOutbound(outbound: JSONObject): JSONObject {
+        val tag = outbound.optString("tag")
+        require(tag.isNotBlank()) { "Legacy WireGuard config is missing an outbound tag" }
+
+        val localAddresses = jsonStringArray(outbound, "local_address")
+            .takeIf { it.length() > 0 }
+            ?: jsonStringArray(outbound, "address")
+        require(localAddresses.length() > 0) { "Legacy WireGuard config is missing a local address" }
+        require(outbound.optString("private_key").isNotBlank()) {
+            "Legacy WireGuard config is missing a private key"
+        }
+
+        val endpoint = JSONObject()
+            .put("type", "wireguard")
+            .put("tag", tag)
+            .put("address", localAddresses)
+            .put("private_key", outbound.get("private_key"))
+
+        copyJsonField(outbound, endpoint, "system_interface", "system")
+        copyJsonField(outbound, endpoint, "interface_name", "name")
+        copyJsonField(outbound, endpoint, "mtu")
+        copyJsonField(outbound, endpoint, "workers")
+        WIREGUARD_DIAL_FIELDS.forEach { field -> copyJsonField(outbound, endpoint, field) }
+
+        val legacyPeers = outbound.optJSONArray("peers")
+        val peers = JSONArray()
+        if (legacyPeers != null && legacyPeers.length() > 0) {
+            for (index in 0 until legacyPeers.length()) {
+                val peer = legacyPeers.optJSONObject(index) ?: continue
+                peers.put(migrateLegacyWireGuardPeer(peer, localAddresses))
+            }
+        } else {
+            peers.put(migrateLegacyWireGuardPeer(outbound, localAddresses))
+        }
+        require(peers.length() > 0) { "Legacy WireGuard config has no usable peer" }
+        endpoint.put("peers", peers)
+        return endpoint
+    }
+
+    private fun migrateLegacyWireGuardPeer(source: JSONObject, localAddresses: JSONArray): JSONObject {
+        val address = source.optString("address").ifBlank { source.optString("server") }
+        val port = when {
+            source.has("port") -> source.optInt("port")
+            else -> source.optInt("server_port")
+        }
+        val publicKey = source.optString("public_key").ifBlank { source.optString("peer_public_key") }
+        require(address.isNotBlank() && port in 1..65535 && publicKey.isNotBlank()) {
+            "Legacy WireGuard config contains an incomplete peer"
+        }
+
+        val peer = JSONObject()
+            .put("address", address)
+            .put("port", port)
+            .put("public_key", publicKey)
+
+        copyJsonField(source, peer, "pre_shared_key")
+        copyJsonField(source, peer, "reserved")
+        copyJsonField(source, peer, "persistent_keepalive_interval")
+        val allowedIps = jsonStringArray(source, "allowed_ips")
+        peer.put(
+            "allowed_ips",
+            if (allowedIps.length() > 0) allowedIps else defaultWireGuardAllowedIps(localAddresses),
+        )
+        return peer
+    }
+
+    private fun defaultWireGuardAllowedIps(localAddresses: JSONArray): JSONArray {
+        var ipv4 = false
+        var ipv6 = false
+        for (index in 0 until localAddresses.length()) {
+            val address = localAddresses.optString(index)
+            if (':' in address) ipv6 = true else if (address.isNotBlank()) ipv4 = true
+        }
+        return JSONArray().apply {
+            if (ipv4 || !ipv6) put("0.0.0.0/0")
+            if (ipv6) put("::/0")
+        }
+    }
+
+    private fun jsonStringArray(source: JSONObject, field: String): JSONArray {
+        source.optJSONArray(field)?.let { return JSONArray(it.toString()) }
+        return source.optString(field)
+            .takeIf(String::isNotBlank)
+            ?.let { JSONArray().put(it) }
+            ?: JSONArray()
+    }
+
+    private fun copyJsonField(
+        source: JSONObject,
+        destination: JSONObject,
+        sourceField: String,
+        destinationField: String = sourceField,
+    ) {
+        if (source.has(sourceField) && !source.isNull(sourceField)) {
+            destination.put(destinationField, source.get(sourceField))
         }
     }
 
@@ -343,12 +455,18 @@ internal object VpnConfigCompiler {
     }
 
     private fun firstUsableOutboundTag(config: JSONObject): String? {
-        val outbounds = config.optJSONArray("outbounds") ?: return null
-        for (index in 0 until outbounds.length()) {
-            val outbound = outbounds.optJSONObject(index) ?: continue
-            if (outbound.optString("type") !in setOf("direct", "block", "dns")) {
-                return outbound.optString("tag").takeIf(String::isNotBlank)
+        config.optJSONArray("outbounds")?.let { outbounds ->
+            for (index in 0 until outbounds.length()) {
+                val outbound = outbounds.optJSONObject(index) ?: continue
+                if (outbound.optString("type") !in setOf("direct", "block", "dns")) {
+                    return outbound.optString("tag").takeIf(String::isNotBlank)
+                }
             }
+        }
+        val endpoints = config.optJSONArray("endpoints") ?: return null
+        for (index in 0 until endpoints.length()) {
+            val endpoint = endpoints.optJSONObject(index) ?: continue
+            endpoint.optString("tag").takeIf(String::isNotBlank)?.let { return it }
         }
         return null
     }
@@ -358,6 +476,30 @@ internal object VpnConfigCompiler {
     private const val LOCAL_PROXY_TAG = "quickping-local-proxy"
     private const val CUSTOM_DNS_TAG = "quickping-dns"
     private const val DIRECT_OUTBOUND_TAG = "quickping-direct"
+
+    private val WIREGUARD_DIAL_FIELDS = setOf(
+        "detour",
+        "bind_interface",
+        "inet4_bind_address",
+        "inet6_bind_address",
+        "bind_address_no_port",
+        "routing_mark",
+        "reuse_addr",
+        "netns",
+        "connect_timeout",
+        "tcp_fast_open",
+        "tcp_multi_path",
+        "disable_tcp_keep_alive",
+        "tcp_keep_alive",
+        "tcp_keep_alive_interval",
+        "udp_fragment",
+        "domain_resolver",
+        "network_strategy",
+        "network_type",
+        "fallback_network_type",
+        "fallback_delay",
+        "domain_strategy",
+    )
 
     private val GUARDIAN_DOMAINS = mapOf(
         "malware" to listOf(

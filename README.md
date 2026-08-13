@@ -38,15 +38,25 @@ No original backend credentials, signing keys, or user data are stored here.
   sing-box `v1.13.18`. The version and upstream commit are pinned, Android owns
   the TUN interface, and no unrecoverable native binary from the supplied APK is
   treated as source code.
+- Split tunneling applies Android per-app allow/deny rules plus validated
+  domain, IPv4, IPv6 and CIDR route rules. Guardian categories compile into
+  active sing-box reject rules, and runtime-affecting settings restart an active
+  tunnel so changes take effect immediately.
+- Provider configurations are normalized for sing-box 1.13, including legacy
+  special outbounds, route fields and WireGuard outbounds that now require
+  endpoint syntax.
+- The supplied nine-language selector changes locale copy, layout direction and
+  fonts. Account password change and account deletion are backed by authenticated
+  control-plane APIs rather than visual-only controls.
 
-## Remaining before release
+## Production configuration still required
 
-- Run the Compose application on the target Android devices and complete
-  screenshot-based pixel regression against all supplied captures.
-- Configure production email delivery, Google OAuth, signing keys and real VPN
-  node credentials.
-- Complete the client write APIs for account changes, Guardian preferences,
-  split tunneling, notification receipts and usage accounting.
+- Configure `RESEND_API_KEY` and a verified `AUTH_FROM_EMAIL` sender before
+  enabling email-code login and password-change delivery in production.
+- Configure Google OAuth client credentials before exposing Google sign-in.
+- Provide and protect a production Android signing key before store publication.
+- Keep provider credentials and VPN node material in Railway secrets/the
+  encrypted database; never add them to this repository.
 
 ## License
 

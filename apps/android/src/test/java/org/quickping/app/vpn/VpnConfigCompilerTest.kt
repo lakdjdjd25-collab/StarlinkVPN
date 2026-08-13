@@ -82,6 +82,33 @@ class VpnConfigCompilerTest {
     }
 
     @Test
+    fun `legacy WireGuard outbound is migrated to a sing-box 1_13 endpoint`() {
+        val result = VpnConfigCompiler.compile(
+            rawConfigJson = legacyWireGuardConfig,
+            settings = AppSettings(blockIrDomains = false),
+            enabledGuardianCategories = emptySet(),
+            applicationPackage = "org.quickping",
+        )
+
+        val config = JSONObject(result.configJson)
+        assertEquals(0, config.getJSONArray("outbounds").length())
+        val endpoint = config.getJSONArray("endpoints").getJSONObject(0)
+        assertEquals("wireguard", endpoint.getString("type"))
+        assertEquals("wg-selected", endpoint.getString("tag"))
+        assertEquals("10.20.0.2/32", endpoint.getJSONArray("address").getString(0))
+        assertFalse(endpoint.has("server"))
+        assertFalse(endpoint.has("server_port"))
+        assertFalse(endpoint.has("local_address"))
+        assertFalse(endpoint.has("peer_public_key"))
+        val peer = endpoint.getJSONArray("peers").getJSONObject(0)
+        assertEquals("wg.example.com", peer.getString("address"))
+        assertEquals(51820, peer.getInt("port"))
+        assertEquals("peer-public-key", peer.getString("public_key"))
+        assertEquals("0.0.0.0/0", peer.getJSONArray("allowed_ips").getString(0))
+        assertEquals("wg-selected", config.getJSONObject("route").getString("final"))
+    }
+
+    @Test
     fun `include split mode with no selected apps does not accidentally tunnel every app`() {
         val result = VpnConfigCompiler.compile(
             rawConfigJson = providerConfig,
@@ -219,6 +246,26 @@ class VpnConfigCompilerTest {
               {"protocol":"dns","outbound":"dns-out"}
             ]
           }
+        }
+    """.trimIndent()
+
+    private val legacyWireGuardConfig = """
+        {
+          "outbounds": [
+            {
+              "type":"wireguard",
+              "tag":"wg-selected",
+              "server":"wg.example.com",
+              "server_port":51820,
+              "local_address":["10.20.0.2/32"],
+              "private_key":"private-key",
+              "peer_public_key":"peer-public-key",
+              "pre_shared_key":"pre-shared-key",
+              "reserved":[0,0,0],
+              "mtu":1408
+            }
+          ],
+          "route": {"final":"wg-selected"}
         }
     """.trimIndent()
 }
