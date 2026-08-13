@@ -91,10 +91,11 @@ fun QuickPingApp(
                     challengeId = state.loginChallengeId,
                     debugCode = state.loginDebugCode,
                     error = state.loginError,
-                    onRequestEmail = quickPingViewModel::requestEmailCode,
+                    onPasswordLogin = quickPingViewModel::loginWithPassword,
                     onVerifyCode = quickPingViewModel::verifyEmailCode,
                     onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
                     onGoogleRequested = quickPingViewModel::notifyGoogleLoginRequiresConfiguration,
+                    onHelpRequested = quickPingViewModel::notifyLoginHelp,
                 )
             }
             composable(Route.Home) {

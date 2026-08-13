@@ -49,6 +49,31 @@ class ApiException(
 class QuickPingApiClient(baseUrl: String) {
     private val origin = baseUrl.trim().trimEnd('/')
 
+    fun loginWithPassword(
+        email: String,
+        password: String,
+        installationId: String,
+        deviceName: String,
+        appVersion: String,
+    ): AuthSession {
+        val data = request(
+            method = "POST",
+            path = "/api/v1/auth/login",
+            body = JSONObject()
+                .put("email", email)
+                .put("password", password)
+                .put("installationId", installationId)
+                .put("deviceName", deviceName)
+                .put("appVersion", appVersion),
+        )
+        return AuthSession(
+            accessToken = data.getString("accessToken"),
+            refreshToken = data.getString("refreshToken"),
+            expiresInSeconds = data.getLong("expiresInSeconds"),
+            user = data.getJSONObject("user").toUserInfo(),
+        )
+    }
+
     fun requestEmailCode(email: String, installationId: String, language: String): EmailChallenge {
         val data = request(
             method = "POST",

@@ -116,6 +116,37 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun loginWithPassword(email: String, password: String) {
+        loginJob?.cancel()
+        loginJob = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    busy = true,
+                    pendingEmail = email,
+                    loginChallengeId = null,
+                    loginDebugCode = null,
+                    loginError = null,
+                )
+            }
+            runCatching { repository.loginWithPassword(email, password) }
+                .onSuccess { bootstrap ->
+                    _state.update {
+                        it.withBootstrap(bootstrap).copy(
+                            signedIn = true,
+                            busy = false,
+                            loginChallengeId = null,
+                            loginDebugCode = null,
+                            loginError = null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    _state.update { it.copy(busy = false, loginError = error.loginMessage()) }
+                }
+        }
+    }
+
     fun verifyEmailCode(code: String) {
         val challengeId = _state.value.loginChallengeId ?: return
         loginJob?.cancel()
@@ -154,7 +185,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun notifyGoogleLoginRequiresConfiguration() = _state.update {
-        it.copy(loginError = "ورود با گوگل پس از ثبت شناسهٔ OAuth برنامه فعال می‌شود")
+        it.copy(loginError = "ورود گوگل پس از ثبت شناسهٔ رسمی OAuth فعال می‌شود؛ فعلاً از ایمیل و رمز عبور استفاده کنید")
+    }
+
+    fun notifyLoginHelp() = _state.update {
+        it.copy(loginError = "ایمیل و رمز عبور حسابی را که در پنل مدیریت ساخته شده وارد کنید")
     }
 
     fun signOut() {

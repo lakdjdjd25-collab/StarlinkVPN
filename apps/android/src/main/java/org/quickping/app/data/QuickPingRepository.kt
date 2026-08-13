@@ -33,6 +33,18 @@ class QuickPingRepository(context: Context) {
             api.requestEmailCode(email, tokens.installationId(), language)
         }
 
+    suspend fun loginWithPassword(email: String, password: String): BootstrapPayload =
+        withContext(Dispatchers.IO) {
+            val session = api.loginWithPassword(
+                email = email,
+                password = password,
+                installationId = tokens.installationId(),
+                deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+                appVersion = BuildConfig.VERSION_NAME,
+            )
+            saveAndBootstrap(session)
+        }
+
     suspend fun verifyEmailCode(challengeId: String, code: String): BootstrapPayload =
         withContext(Dispatchers.IO) {
             val session = api.verifyEmailCode(
@@ -42,19 +54,7 @@ class QuickPingRepository(context: Context) {
                 deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
                 appVersion = BuildConfig.VERSION_NAME,
             )
-            tokens.save(
-                StoredSession(
-                    accessToken = session.accessToken,
-                    refreshToken = session.refreshToken,
-                    accessExpiresAtMillis = expiryFromNow(session.expiresInSeconds),
-                ),
-            )
-            try {
-                api.bootstrap(session.accessToken)
-            } catch (error: Throwable) {
-                tokens.clear()
-                throw error
-            }
+            saveAndBootstrap(session)
         }
 
     suspend fun runtimeConfig(serviceId: String, nodeId: String): String = withContext(Dispatchers.IO) {
@@ -68,6 +68,22 @@ class QuickPingRepository(context: Context) {
     }
 
     fun signOut() = tokens.clear()
+
+    private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {
+        tokens.save(
+            StoredSession(
+                accessToken = session.accessToken,
+                refreshToken = session.refreshToken,
+                accessExpiresAtMillis = expiryFromNow(session.expiresInSeconds),
+            ),
+        )
+        return try {
+            api.bootstrap(session.accessToken)
+        } catch (error: Throwable) {
+            tokens.clear()
+            throw error
+        }
+    }
 
     private suspend fun bootstrapAuthenticated(): BootstrapPayload {
         val accessToken = validAccessToken()

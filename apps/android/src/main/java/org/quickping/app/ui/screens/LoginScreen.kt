@@ -46,6 +46,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.text.style.TextAlign
@@ -235,14 +236,18 @@ fun LoginScreen(
     challengeId: String?,
     debugCode: String?,
     error: String?,
-    onRequestEmail: (String) -> Unit,
+    onPasswordLogin: (String, String) -> Unit,
     onVerifyCode: (String) -> Unit,
     onCancelChallenge: () -> Unit,
     onGoogleRequested: () -> Unit,
+    onHelpRequested: () -> Unit,
 ) {
     var language by remember { mutableStateOf("فارسی") }
     var showLanguages by remember { mutableStateOf(false) }
+    var showPasswordLogin by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
+    var passwordEmail by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var verificationCode by remember { mutableStateOf("") }
 
     LaunchedEffect(debugCode) {
@@ -299,7 +304,11 @@ fun LoginScreen(
                 email = email,
                 onEmailChange = { email = it.trim() },
                 enabled = !busy,
-                onSubmit = { if (email.contains("@")) onRequestEmail(email) },
+                onSubmit = {
+                    passwordEmail = email
+                    password = ""
+                    showPasswordLogin = true
+                },
             )
             if (error != null && challengeId == null) {
                 Spacer(Modifier.height(6.dp))
@@ -319,8 +328,12 @@ fun LoginScreen(
             ) {
                 LoginSquareButton(
                     icon = R.drawable.ic_password_biometric,
-                    contentDescription = "ورود با گذرواژه ذخیره‌شده",
-                    onClick = onGoogleRequested,
+                    contentDescription = "ورود با رمز عبور",
+                    onClick = {
+                        passwordEmail = email
+                        password = ""
+                        showPasswordLogin = true
+                    },
                 )
                 Box {
                     LoginSquareButton(
@@ -355,7 +368,7 @@ fun LoginScreen(
             }
             Spacer(Modifier.height(10.dp))
             Row(
-                modifier = Modifier.clickable(onClick = onGoogleRequested),
+                modifier = Modifier.clickable(onClick = onHelpRequested),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -489,6 +502,85 @@ fun LoginScreen(
                 }
             }
         }
+    }
+
+    if (showPasswordLogin) {
+        AlertDialog(
+            onDismissRequest = { showPasswordLogin = false },
+            containerColor = QuickPingColors.SurfaceHigh,
+            shape = RoundedCornerShape(22.dp),
+            title = {
+                Text(
+                    "ورود با ایمیل و رمز عبور",
+                    modifier = Modifier.fillMaxWidth(),
+                    color = QuickPingColors.TextPrimary,
+                    textAlign = TextAlign.Center,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = passwordEmail,
+                        onValueChange = { passwordEmail = it.trim() },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("ایمیل") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = QuickPingColors.Primary,
+                            unfocusedBorderColor = QuickPingColors.Border,
+                            focusedTextColor = QuickPingColors.TextPrimary,
+                            unfocusedTextColor = QuickPingColors.TextPrimary,
+                            focusedLabelColor = QuickPingColors.TextSecondary,
+                            unfocusedLabelColor = QuickPingColors.TextMuted,
+                        ),
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("رمز عبور") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = QuickPingColors.Primary,
+                            unfocusedBorderColor = QuickPingColors.Border,
+                            focusedTextColor = QuickPingColors.TextPrimary,
+                            unfocusedTextColor = QuickPingColors.TextPrimary,
+                            focusedLabelColor = QuickPingColors.TextSecondary,
+                            unfocusedLabelColor = QuickPingColors.TextMuted,
+                        ),
+                    )
+                    Text(
+                        "از همان حسابی استفاده کنید که در پنل مدیریت ساخته شده است.",
+                        color = QuickPingColors.TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val normalizedEmail = passwordEmail.trim()
+                        email = normalizedEmail
+                        showPasswordLogin = false
+                        onPasswordLogin(normalizedEmail, password)
+                    },
+                    enabled = passwordEmail.contains("@") && password.isNotEmpty(),
+                ) {
+                    Text("ورود", color = QuickPingColors.PrimaryLight)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPasswordLogin = false }) {
+                    Text("انصراف", color = QuickPingColors.TextSecondary)
+                }
+            },
+        )
     }
 
     if (busy) {
