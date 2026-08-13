@@ -1,0 +1,1 @@
+Reference feedback patch: selected country label alignment, sign-out confirmation, IME-safe login layout, animated welcome text, and existing real Google authentication flow.
