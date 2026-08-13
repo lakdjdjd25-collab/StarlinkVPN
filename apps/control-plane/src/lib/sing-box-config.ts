@@ -1,6 +1,19 @@
 import { z } from "zod";
 
 const jsonObject = z.record(z.string(), z.unknown());
+const remoteOutboundTypes = new Set([
+  "anytls",
+  "hysteria",
+  "hysteria2",
+  "naive",
+  "shadowsocks",
+  "ssh",
+  "trojan",
+  "tuic",
+  "vless",
+  "vmess",
+  "wireguard",
+]);
 
 export const singBoxRuntimeConfigSchema = z.object({
   inbounds: z.array(jsonObject).min(1),
@@ -12,6 +25,16 @@ export const singBoxRuntimeConfigSchema = z.object({
       code: "custom",
       path: ["inbounds"],
       message: "A tun inbound is required for the Android client",
+    });
+  }
+  const hasRemoteOutbound = config.outbounds.some((outbound) =>
+    typeof outbound.type === "string" && remoteOutboundTypes.has(outbound.type),
+  );
+  if (!hasRemoteOutbound) {
+    context.addIssue({
+      code: "custom",
+      path: ["outbounds"],
+      message: "A remote proxy outbound is required; direct-only configurations are unsafe",
     });
   }
 });
@@ -42,8 +65,15 @@ export const defaultSingBoxRuntimeConfig = {
   ],
   outbounds: [
     {
-      type: "direct",
+      type: "vless",
       tag: "proxy",
+      server: "vpn.example.com",
+      server_port: 443,
+      uuid: "00000000-0000-4000-8000-000000000000",
+      tls: {
+        enabled: true,
+        server_name: "vpn.example.com",
+      },
     },
   ],
   route: {

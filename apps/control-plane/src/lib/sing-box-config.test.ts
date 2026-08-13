@@ -11,7 +11,15 @@ describe("sing-box runtime configuration", () => {
   it("rejects configs that cannot create an Android TUN", () => {
     const result = singBoxRuntimeConfigSchema.safeParse({
       inbounds: [{ type: "mixed", listen: "127.0.0.1", listen_port: 1080 }],
-      outbounds: [{ type: "direct" }],
+      outbounds: [{ type: "vless" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects direct-only configs to prevent a false VPN connection", () => {
+    const result = singBoxRuntimeConfigSchema.safeParse({
+      inbounds: [{ type: "tun", address: ["172.19.0.1/30"], auto_route: true }],
+      outbounds: [{ type: "direct", tag: "proxy" }],
     });
     expect(result.success).toBe(false);
   });
