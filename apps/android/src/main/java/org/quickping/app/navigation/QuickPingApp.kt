@@ -132,6 +132,7 @@ fun QuickPingApp(
                 SettingsScreen(
                     settings = state.settings,
                     onUpdateSettings = quickPingViewModel::updateSetting,
+                    onResetSettings = quickPingViewModel::resetSettings,
                     onBack = navController::popBackStack,
                     onSplitTunneling = { navController.navigate(Route.SplitTunneling) },
                     onGuardian = { navController.navigate(Route.Guardian) },
@@ -174,6 +175,7 @@ fun QuickPingApp(
                     onDeleteAccount = quickPingViewModel::deleteAccount,
                     onClearAction = quickPingViewModel::clearAccountAction,
                     onBack = navController::popBackStack,
+                    onSignOut = quickPingViewModel::signOut,
                     onServices = { navController.navigate(Route.Services) },
                 )
             }
@@ -190,7 +192,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Version) {
-                VersionScreen(onBack = navController::popBackStack)
+                VersionScreen(release = state.release, onBack = navController::popBackStack)
             }
         }
     }

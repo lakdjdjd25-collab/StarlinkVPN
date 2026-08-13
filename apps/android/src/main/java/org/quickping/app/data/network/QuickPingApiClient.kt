@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.model.AppRelease
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
@@ -38,6 +39,7 @@ data class BootstrapPayload(
     val serversByService: Map<String, List<Server>>,
     val guardianCategories: List<GuardianCategory>,
     val notifications: List<NotificationItem>,
+    val release: AppRelease?,
 )
 
 class ApiException(
@@ -158,6 +160,17 @@ class QuickPingApiClient(baseUrl: String) {
             serversByService = serversByService,
             guardianCategories = guardianCatalog(guardianStates),
             notifications = data.optJSONArray("notifications").toNotifications(),
+            release = data.optJSONObject("release")?.let { release ->
+                AppRelease(
+                    versionName = release.optString("versionName"),
+                    versionCode = release.optInt("versionCode"),
+                    minimumVersionCode = release.optInt("minimumVersionCode"),
+                    mandatory = release.optBoolean("mandatory"),
+                    changelog = release.optString("changelog"),
+                    downloadUrl = release.optString("downloadUrl"),
+                    sha256 = release.optString("sha256"),
+                )
+            },
         )
     }
 

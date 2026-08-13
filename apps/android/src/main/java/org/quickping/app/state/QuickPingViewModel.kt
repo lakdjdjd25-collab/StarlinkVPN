@@ -362,6 +362,17 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun resetSettings() {
+        val reset = settingsStore.reset()
+        _state.update { state ->
+            val guardian = state.guardianCategories.map { category ->
+                category.copy(enabled = category.id in DEFAULT_GUARDIAN_CATEGORIES)
+            }
+            settingsStore.saveGuardian(guardian)
+            state.copy(settings = reset, guardianCategories = guardian)
+        }
+    }
+
     fun toggleGuardian(id: String) {
         _state.update { state ->
             val updated = state.guardianCategories.map { category ->
@@ -408,6 +419,10 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         settingsStore.saveGuardian(merged)
         return merged
     }
+
+    private companion object {
+        val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
+    }
 }
 
 private fun tcpPing(host: String, port: Int): Int? = runCatching {
@@ -429,6 +444,7 @@ private fun QuickPingUiState.withBootstrap(
         selectedServerId = servers.firstOrNull()?.id.orEmpty(),
         guardianCategories = guardian,
         notifications = payload.notifications,
+        release = payload.release,
     )
 }
 

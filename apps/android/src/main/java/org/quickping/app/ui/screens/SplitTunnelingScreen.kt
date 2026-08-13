@@ -36,11 +36,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
+import org.quickping.app.core.design.quickText
 import org.quickping.app.model.AppSettings
 import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.SplitTunnelMode
@@ -60,8 +62,9 @@ fun SplitTunnelingScreen(
 ) {
     var showAppsDialog by remember { mutableStateOf(false) }
     var showAddressesDialog by remember { mutableStateOf(false) }
+    var showModeDialog by remember { mutableStateOf(false) }
     QuickPingScreen {
-        QuickPingTopBar(title = "تقسیم تونل", onBack = onBack)
+        QuickPingTopBar(title = quickText("تقسیم تونل", "Split tunneling"), onBack = onBack)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -71,13 +74,13 @@ fun SplitTunnelingScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 18.dp),
+                    .padding(horizontal = 18.dp, vertical = 22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(70.dp)
-                        .background(QuickPingColors.Surface, CircleShape),
+                        .size(74.dp)
+                        .border(1.dp, QuickPingColors.Border, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -89,7 +92,10 @@ fun SplitTunnelingScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "تقسیم تونل به شما اجازه می‌دهد انتخاب کنید کدام برنامه‌ها از VPN استفاده کنند و کدام به‌صورت مستقیم به اینترنت متصل شوند.",
+                    quickText(
+                        "تقسیم تونل به شما اجازه می‌دهد انتخاب کنید کدام برنامه‌ها از VPN استفاده کنند و کدام به‌صورت مستقیم به اینترنت متصل شوند.",
+                        "Split tunneling lets you choose which apps use the VPN and which connect directly to the internet.",
+                    ),
                     color = QuickPingColors.TextSecondary,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
@@ -97,76 +103,108 @@ fun SplitTunnelingScreen(
             }
             GlassCard(Modifier.fillMaxWidth()) {
                 SettingRow(
-                    title = "فعال‌سازی تقسیم تونل",
+                    title = quickText("فعال‌سازی تقسیم تونل", "Enable split tunneling"),
                     icon = R.drawable.ic_split_tunneling,
                     trailing = {
                         QuickSwitch(
                             checked = settings.splitTunnelingEnabled,
-                            onCheckedChange = { enabled ->
-                                onUpdateSettings { it.copy(splitTunnelingEnabled = enabled) }
-                            },
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(splitTunnelingEnabled = enabled) } },
                         )
                     },
                 )
-            }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "حالت",
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-                color = QuickPingColors.TextMuted,
-                style = MaterialTheme.typography.labelSmall,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ModeCard(
-                    modifier = Modifier.weight(1f),
-                    title = "فقط انتخاب‌شده‌ها",
-                    subtitle = "تنها موارد انتخابی از VPN عبور کنند",
-                    selected = settings.splitTunnelMode == SplitTunnelMode.Include,
-                    onClick = { onUpdateSettings { it.copy(splitTunnelMode = SplitTunnelMode.Include) } },
-                )
-                ModeCard(
-                    modifier = Modifier.weight(1f),
-                    title = "به‌جز انتخاب‌شده‌ها",
-                    subtitle = "موارد انتخابی مستقیم متصل شوند",
-                    selected = settings.splitTunnelMode == SplitTunnelMode.Exclude,
-                    onClick = { onUpdateSettings { it.copy(splitTunnelMode = SplitTunnelMode.Exclude) } },
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            GlassCard(Modifier.fillMaxWidth()) {
-                SettingRow(
-                    title = "برنامه‌ها",
-                    subtitle = "${settings.splitTunnelPackages.size} برنامه انتخاب شده",
-                    icon = R.drawable.ic_apps,
-                    onClick = { showAppsDialog = true },
-                )
-                SettingRow(
-                    title = "نشانی‌ها",
-                    subtitle = "${settings.splitTunnelAddresses.size} نشانی انتخاب شده",
-                    icon = R.drawable.ic_addresses,
-                    onClick = { showAddressesDialog = true },
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(58.dp).clickable { showModeDialog = true }.padding(horizontal = 18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        quickText(
+                            if (settings.splitTunnelMode == SplitTunnelMode.Exclude) "انحصاری" else "شامل",
+                            if (settings.splitTunnelMode == SplitTunnelMode.Exclude) "Exclude selected" else "Only selected",
+                        ),
+                        modifier = Modifier
+                            .border(1.dp, QuickPingColors.Border, RoundedCornerShape(18.dp))
+                            .padding(horizontal = 15.dp, vertical = 8.dp),
+                        color = QuickPingColors.TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(quickText("حالت", "Mode"), color = QuickPingColors.TextSecondary)
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    SplitSelectionCard(
+                        modifier = Modifier.weight(1f),
+                        title = quickText("نشانی‌ها", "Addresses"),
+                        count = quickText("${settings.splitTunnelAddresses.size} علامت‌گذاری شده", "${settings.splitTunnelAddresses.size} selected"),
+                        icon = R.drawable.ic_addresses,
+                        onClick = { showAddressesDialog = true },
+                    )
+                    SplitSelectionCard(
+                        modifier = Modifier.weight(1f),
+                        title = quickText("برنامه‌ها", "Apps"),
+                        count = quickText("${settings.splitTunnelPackages.size} علامت‌گذاری شده", "${settings.splitTunnelPackages.size} selected"),
+                        icon = R.drawable.ic_apps,
+                        onClick = { showAppsDialog = true },
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             GlassCard(Modifier.fillMaxWidth()) {
                 SettingRow(
-                    title = "حفظ تنظیمات هنگام تغییر سرویس",
+                    title = quickText("مسدود کردن اتصالات .ir", "Block .ir connections"),
                     icon = R.drawable.ic_lock,
                     trailing = {
                         QuickSwitch(
-                            checked = settings.rememberSplitTunnelSettings,
-                            onCheckedChange = { remember ->
-                                onUpdateSettings { it.copy(rememberSplitTunnelSettings = remember) }
-                            },
+                            checked = settings.blockIrDomains,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(blockIrDomains = enabled) } },
                         )
                     },
                 )
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (settings.blockIrDomains) quickText("🔒 مسدود است", "🔒 Blocked") else quickText("🔓 مجاز است", "🔓 Allowed"),
+                        color = if (settings.blockIrDomains) Color(0xFF59BFD8) else QuickPingColors.TextMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(quickText("وضعیت:", "Status:"), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
+
+    if (showModeDialog) {
+        AlertDialog(
+            onDismissRequest = { showModeDialog = false },
+            containerColor = QuickPingColors.SurfaceHigh,
+            shape = RoundedCornerShape(22.dp),
+            title = { Text(quickText("حالت تقسیم تونل", "Split-tunnel mode")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChoice(
+                        title = quickText("انحصاری", "Exclude selected"),
+                        subtitle = quickText("موارد انتخاب‌شده مستقیم متصل می‌شوند", "Selected items connect directly"),
+                        selected = settings.splitTunnelMode == SplitTunnelMode.Exclude,
+                    ) {
+                        onUpdateSettings { it.copy(splitTunnelMode = SplitTunnelMode.Exclude) }
+                        showModeDialog = false
+                    }
+                    ModeChoice(
+                        title = quickText("شامل", "Only selected"),
+                        subtitle = quickText("فقط موارد انتخاب‌شده از VPN عبور می‌کنند", "Only selected items use the VPN"),
+                        selected = settings.splitTunnelMode == SplitTunnelMode.Include,
+                    ) {
+                        onUpdateSettings { it.copy(splitTunnelMode = SplitTunnelMode.Include) }
+                        showModeDialog = false
+                    }
+                }
+            },
+            confirmButton = {},
+        )
     }
 
     if (showAppsDialog) {
@@ -199,6 +237,45 @@ fun SplitTunnelingScreen(
             },
             onDismiss = { showAddressesDialog = false },
         )
+    }
+}
+
+@Composable
+private fun SplitSelectionCard(
+    modifier: Modifier,
+    title: String,
+    count: String,
+    icon: Int,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .height(110.dp)
+            .background(QuickPingColors.SurfaceHigh, RoundedCornerShape(17.dp))
+            .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(17.dp))
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(painterResource(icon), null, tint = QuickPingColors.TextSecondary, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(title, color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.labelLarge)
+        Text(count, color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun ModeChoice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, if (selected) QuickPingColors.Primary else QuickPingColors.Border, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+    ) {
+        Text(title, color = QuickPingColors.TextPrimary)
+        Text(subtitle, color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall)
     }
 }
 

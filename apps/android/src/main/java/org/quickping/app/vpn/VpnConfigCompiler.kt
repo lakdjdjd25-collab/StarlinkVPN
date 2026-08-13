@@ -102,8 +102,6 @@ internal object VpnConfigCompiler {
         val endpoint = when (provider) {
             DnsProvider.Cloudflare -> DnsEndpoint("1.1.1.1", "cloudflare-dns.com")
             DnsProvider.Google -> DnsEndpoint("8.8.8.8", "dns.google")
-            DnsProvider.Quad9 -> DnsEndpoint("9.9.9.9", "dns.quad9.net")
-            DnsProvider.AdGuard -> DnsEndpoint("94.140.14.14", "dns.adguard-dns.com")
             DnsProvider.Default -> return
         }
         config.put(
@@ -138,16 +136,36 @@ internal object VpnConfigCompiler {
         settings: AppSettings,
         enabledGuardianCategories: Set<String>,
     ) {
+        val providerRules = route.optJSONArray("rules")
         val rules = JSONArray()
         rules.put(JSONObject().put("action", "sniff"))
         rules.put(JSONObject().put("protocol", "dns").put("action", "hijack-dns"))
 
+        if (settings.blockIrDomains) {
+            rules.put(
+                JSONObject()
+                    .put("domain_suffix", JSONArray().put("ir"))
+                    .put("action", "reject")
+                    .put("method", "default"),
+            )
+        }
         guardianRule(enabledGuardianCategories)?.let { rules.put(it) }
         splitAddressRules(config, settings, proxyOutbound).forEach { rules.put(it) }
+        if (providerRules != null) {
+            for (index in 0 until providerRules.length()) {
+                val providerRule = providerRules.optJSONObject(index) ?: continue
+                val duplicateSniff = providerRule.optString("action") == "sniff"
+                val duplicateDnsHijack = providerRule.optString("action") == "hijack-dns" ||
+                    providerRule.optString("protocol") == "dns" &&
+                    providerRule.optString("action").isBlank()
+                if (!duplicateSniff && !duplicateDnsHijack) rules.put(providerRule)
+            }
+        }
 
         route.put("rules", rules)
-        route.remove("rule_set")
-        route.put("auto_detect_interface", settings.reconnectOnNetworkChange)
+        // Android must always protect the proxy's own sockets from the VPN.  This
+        // is separate from the user-facing reconnect preference.
+        route.put("auto_detect_interface", true)
         route.put("override_android_vpn", true)
         route.put("final", if (settings.splitTunnelingEnabled &&
             settings.splitTunnelMode == SplitTunnelMode.Include &&

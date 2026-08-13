@@ -33,6 +33,8 @@ class VpnConfigCompilerTest {
         assertTrue(result.launchOptions.includePackages.isEmpty())
         val rules = config.getJSONObject("route").getJSONArray("rules")
         assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("action") == "reject" })
+        assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("rule_set") == "geo" })
+        assertTrue(config.getJSONObject("route").has("rule_set"))
     }
 
     @Test
@@ -73,11 +75,43 @@ class VpnConfigCompilerTest {
 
         val config = JSONObject(result.configJson)
         val route = config.getJSONObject("route")
-        assertEquals("quickping-direct", route.getString("final"))
+        assertEquals("direct", route.getString("final"))
         val domainRule = (0 until route.getJSONArray("rules").length())
             .map { route.getJSONArray("rules").getJSONObject(it) }
             .first { it.has("domain_suffix") }
         assertEquals("selected", domainRule.getString("outbound"))
+    }
+
+    @Test
+    fun `ir blocking adds an explicit reject rule and can be disabled`() {
+        val blocked = JSONObject(
+            VpnConfigCompiler.compile(
+                rawConfigJson = providerConfig,
+                settings = AppSettings(blockIrDomains = true),
+                enabledGuardianCategories = emptySet(),
+                applicationPackage = "org.quickping",
+            ).configJson,
+        ).getJSONObject("route").getJSONArray("rules")
+        assertTrue((0 until blocked.length()).any { index ->
+            val rule = blocked.getJSONObject(index)
+            rule.optJSONArray("domain_suffix")?.let { suffixes ->
+                (0 until suffixes.length()).any { suffixes.getString(it) == "ir" }
+            } == true && rule.optString("action") == "reject"
+        })
+
+        val allowed = JSONObject(
+            VpnConfigCompiler.compile(
+                rawConfigJson = providerConfig,
+                settings = AppSettings(blockIrDomains = false),
+                enabledGuardianCategories = emptySet(),
+                applicationPackage = "org.quickping",
+            ).configJson,
+        ).getJSONObject("route").getJSONArray("rules")
+        assertFalse((0 until allowed.length()).any { index ->
+            allowed.getJSONObject(index).optJSONArray("domain_suffix")?.let { suffixes ->
+                (0 until suffixes.length()).any { suffixes.getString(it) == "ir" }
+            } == true
+        })
     }
 
     private val providerConfig = """

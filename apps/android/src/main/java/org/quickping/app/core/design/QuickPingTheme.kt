@@ -7,6 +7,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -64,6 +65,31 @@ val MonaSans = FontFamily(
 val Unbounded = FontFamily(Font(R.font.unbounded_regular, FontWeight.Normal))
 val Bitcount = FontFamily(Font(R.font.bitcount_prop_single_light, FontWeight.Light))
 
+val LocalQuickPingLanguage = staticCompositionLocalOf { "fa" }
+
+@Composable
+fun quickText(
+    fa: String,
+    en: String,
+    nl: String = en,
+    ar: String = en,
+    tr: String = en,
+    ru: String = en,
+    hi: String = en,
+    zh: String = en,
+    ur: String = en,
+): String = when (LocalQuickPingLanguage.current.lowercase(Locale.US)) {
+    "fa" -> fa
+    "nl" -> nl
+    "ar" -> ar
+    "tr" -> tr
+    "ru" -> ru
+    "hi" -> hi
+    "zh" -> zh
+    "ur" -> ur
+    else -> en
+}
+
 private fun quickPingTypography(font: FontFamily) = Typography(
     displayLarge = TextStyle(fontFamily = font, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 40.sp),
     headlineLarge = TextStyle(fontFamily = font, fontWeight = FontWeight.Bold, fontSize = 24.sp, lineHeight = 32.sp),
@@ -112,6 +138,7 @@ fun QuickPingTheme(
     }
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isRtlLanguage) LayoutDirection.Rtl else LayoutDirection.Ltr,
+        LocalQuickPingLanguage provides normalizedLanguage,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

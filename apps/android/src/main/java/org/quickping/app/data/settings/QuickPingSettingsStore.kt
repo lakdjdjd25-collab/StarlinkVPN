@@ -25,6 +25,7 @@ class QuickPingSettingsStore(context: Context) {
         splitTunnelPackages = preferences.getStringSet(KEY_SPLIT_PACKAGES, emptySet()).orEmpty().toSet(),
         splitTunnelAddresses = preferences.getString(KEY_SPLIT_ADDRESSES, null).toStringList(),
         rememberSplitTunnelSettings = preferences.getBoolean(KEY_SPLIT_REMEMBER, true),
+        blockIrDomains = preferences.getBoolean(KEY_BLOCK_IR_DOMAINS, true),
         guardianEnabled = preferences.getBoolean(KEY_GUARDIAN_ENABLED, true),
         dnsProvider = DnsProvider.fromStorage(preferences.getString(KEY_DNS_PROVIDER, null)),
         proxyPort = preferences.getInt(KEY_PROXY_PORT, 10810).coerceIn(1024, 65535),
@@ -48,6 +49,7 @@ class QuickPingSettingsStore(context: Context) {
             .putStringSet(KEY_SPLIT_PACKAGES, settings.splitTunnelPackages)
             .putString(KEY_SPLIT_ADDRESSES, JSONArray(settings.splitTunnelAddresses).toString())
             .putBoolean(KEY_SPLIT_REMEMBER, settings.rememberSplitTunnelSettings)
+            .putBoolean(KEY_BLOCK_IR_DOMAINS, settings.blockIrDomains)
             .putBoolean(KEY_GUARDIAN_ENABLED, settings.guardianEnabled)
             .putString(KEY_DNS_PROVIDER, settings.dnsProvider.storageValue)
             .putInt(KEY_PROXY_PORT, settings.proxyPort.coerceIn(1024, 65535))
@@ -57,6 +59,11 @@ class QuickPingSettingsStore(context: Context) {
             .putBoolean(KEY_IPV6, settings.ipv6Enabled)
             .putInt(KEY_MTU, settings.mtu.coerceIn(1280, 9000))
             .apply()
+    }
+
+    fun reset(): AppSettings {
+        preferences.edit().clear().apply()
+        return AppSettings()
     }
 
     fun mergeGuardian(categories: List<GuardianCategory>): List<GuardianCategory> = categories.map { category ->
@@ -100,6 +107,7 @@ class QuickPingSettingsStore(context: Context) {
         private const val KEY_SPLIT_PACKAGES = "split_packages"
         private const val KEY_SPLIT_ADDRESSES = "split_addresses"
         private const val KEY_SPLIT_REMEMBER = "split_remember"
+        private const val KEY_BLOCK_IR_DOMAINS = "block_ir_domains"
         private const val KEY_GUARDIAN_ENABLED = "guardian_enabled"
         private const val KEY_DNS_PROVIDER = "dns_provider"
         private const val KEY_PROXY_PORT = "proxy_port"

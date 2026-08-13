@@ -1,5 +1,7 @@
 package org.quickping.app.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,16 +22,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.quickping.app.R
+import org.quickping.app.BuildConfig
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.Unbounded
+import org.quickping.app.core.design.quickText
+import org.quickping.app.model.AppRelease
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Service
 import org.quickping.app.ui.components.GlassCard
+import org.quickping.app.ui.components.PrimaryButton
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.SettingRow
@@ -92,9 +99,11 @@ fun NotificationsScreen(notifications: List<NotificationItem>, onBack: () -> Uni
 }
 
 @Composable
-fun VersionScreen(onBack: () -> Unit) {
+fun VersionScreen(release: AppRelease?, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val updateAvailable = release != null && release.versionCode > BuildConfig.VERSION_CODE
     QuickPingScreen {
-        QuickPingTopBar(title = "نسخه", onBack = onBack)
+        QuickPingTopBar(title = quickText("نسخه", "Version"), onBack = onBack)
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Image(
                 painterResource(R.drawable.update_last_version_ovals),
@@ -103,7 +112,7 @@ fun VersionScreen(onBack: () -> Unit) {
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "2.6.0",
+                    if (updateAvailable) release!!.versionName else BuildConfig.VERSION_NAME.substringBefore('-'),
                     color = QuickPingColors.Background,
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontFamily = Unbounded,
@@ -115,16 +124,36 @@ fun VersionScreen(onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(56.dp))
                 Text(
-                    "تبریک! QuickPing شما به‌روز است",
+                    if (updateAvailable) {
+                        quickText("نسخهٔ جدید QuickPing آماده است", "A new QuickPing version is available")
+                    } else {
+                        quickText("تبریک! QuickPing شما به‌روز است", "QuickPing is up to date")
+                    },
                     color = QuickPingColors.TextPrimary,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "آماده‌اید برای اتصال سریع و پایدار!",
+                    if (updateAvailable) {
+                        release!!.changelog.ifBlank { quickText("بهبود پایداری و امنیت اتصال", "Connection stability and security improvements") }
+                    } else {
+                        quickText("آماده‌اید برای اتصال سریع و پایدار!", "Ready for a fast and stable connection!")
+                    },
+                    modifier = Modifier.padding(horizontal = 30.dp),
                     color = QuickPingColors.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
                 )
+                if (updateAvailable && release!!.downloadUrl.startsWith("https://")) {
+                    Spacer(Modifier.height(20.dp))
+                    PrimaryButton(
+                        text = quickText("دریافت نسخهٔ جدید", "Download update"),
+                        onClick = {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)))
+                        },
+                        modifier = Modifier.padding(horizontal = 46.dp),
+                    )
+                }
             }
         }
     }

@@ -49,6 +49,16 @@ data class NotificationItem(
     val read: Boolean,
 )
 
+data class AppRelease(
+    val versionName: String,
+    val versionCode: Int,
+    val minimumVersionCode: Int,
+    val mandatory: Boolean,
+    val changelog: String,
+    val downloadUrl: String,
+    val sha256: String,
+)
+
 data class GuardianCategory(
     val id: String,
     val title: String,
@@ -69,8 +79,6 @@ enum class DnsProvider(
     Default("default", "پیش‌فرض"),
     Cloudflare("cloudflare", "کلودفلر"),
     Google("google", "گوگل"),
-    Quad9("quad9", "Quad9"),
-    AdGuard("adguard", "AdGuard"),
     ;
 
     companion object {
@@ -86,6 +94,13 @@ enum class AppLanguage(
 ) {
     Persian("fa", "فارسی"),
     English("en", "English"),
+    Dutch("nl", "Nederlands"),
+    Arabic("ar", "العربية"),
+    Turkish("tr", "Türkçe"),
+    Russian("ru", "Русский"),
+    Hindi("hi", "हिन्दी"),
+    Chinese("zh", "中文"),
+    Urdu("ur", "اردو"),
     ;
 
     companion object {
@@ -113,6 +128,7 @@ data class AppSettings(
     val splitTunnelPackages: Set<String> = emptySet(),
     val splitTunnelAddresses: List<String> = emptyList(),
     val rememberSplitTunnelSettings: Boolean = true,
+    val blockIrDomains: Boolean = true,
     val guardianEnabled: Boolean = true,
     val dnsProvider: DnsProvider = DnsProvider.Default,
     val proxyPort: Int = 10810,
