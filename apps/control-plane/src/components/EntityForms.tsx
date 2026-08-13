@@ -57,6 +57,114 @@ export function CreateUserForm() {
 
 type Option = { id: string; label: string };
 
+type PasarGuardRemoteUser = {
+  id: number;
+  username: string;
+  status: string;
+  usedTraffic: string;
+  dataLimit: string | null;
+  expiresAt: string | null;
+};
+
+export function PasarGuardIntegrationForm({
+  configured,
+  quickPingUsers,
+}: {
+  configured: boolean;
+  quickPingUsers: Option[];
+}) {
+  const router = useRouter();
+  const [remoteUsers, setRemoteUsers] = useState<PasarGuardRemoteUser[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadRemoteUsers() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const response = await fetch("/api/v1/admin/integrations/pasarguard?remote=1", { cache: "no-store" });
+    const body = await response.json().catch(() => null) as {
+      data?: { users?: PasarGuardRemoteUser[] };
+      error?: { message?: string };
+    } | null;
+    if (!response.ok) {
+      setError(body?.error?.message ?? "دریافت کاربران پاسارگارد انجام نشد");
+    } else {
+      setRemoteUsers(body?.data?.users ?? []);
+      setMessage(`${body?.data?.users?.length ?? 0} کاربر از پاسارگارد دریافت شد`);
+    }
+    setBusy(false);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const response = await fetch("/api/v1/admin/integrations/pasarguard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "bind",
+        quickPingUserId: data.get("quickPingUserId"),
+        externalUserId: Number(data.get("externalUserId")),
+      }),
+    });
+    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    if (!response.ok) {
+      setError(body?.error?.message ?? "اتصال کاربر پاسارگارد انجام نشد");
+    } else {
+      setMessage("اتصال و همگام‌سازی با موفقیت انجام شد");
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <div className="form-grid">
+        <div className="field">
+          <label>حساب QuickPing</label>
+          <select className="select" name="quickPingUserId" required disabled={!quickPingUsers.length}>
+            {quickPingUsers.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>کاربر اشتراک پاسارگارد</label>
+          <select className="select" name="externalUserId" required disabled={!remoteUsers.length}>
+            {remoteUsers.map((user) => <option value={user.id} key={user.id}>{user.username} — {user.status}</option>)}
+          </select>
+        </div>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {message ? <p style={{ color: "var(--success)", fontSize: 13 }}>{message}</p> : null}
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <button className="button secondary" type="button" onClick={loadRemoteUsers} disabled={busy || !configured}>
+          دریافت کاربران پنل
+        </button>
+        <button className="button" disabled={busy || !configured || !quickPingUsers.length || !remoteUsers.length}>
+          اتصال و همگام‌سازی
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function PasarGuardSyncButton({ bindingId }: { bindingId: string }) {
+  const action = useMutation("/api/v1/admin/integrations/pasarguard");
+  async function sync() {
+    await action.send({ action: "sync", bindingId });
+  }
+  return (
+    <div style={{ minWidth: 150 }}>
+      <button className="button secondary" type="button" onClick={sync} disabled={action.busy}>همگام‌سازی</button>
+      {action.error ? <span className="error" style={{ display: "block" }}>{action.error}</span> : null}
+    </div>
+  );
+}
+
 export function CreateServiceForm({ users, plans }: { users: Option[]; plans: Option[] }) {
   const action = useMutation("/api/v1/admin/services");
   async function submit(event: FormEvent<HTMLFormElement>) {

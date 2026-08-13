@@ -18,6 +18,7 @@ const remoteOutboundTypes = new Set([
 export const singBoxRuntimeConfigSchema = z.object({
   inbounds: z.array(jsonObject).min(1),
   outbounds: z.array(jsonObject).min(1),
+  endpoints: z.array(jsonObject).optional(),
 }).passthrough().superRefine((config, context) => {
   const hasTunInbound = config.inbounds.some((inbound) => inbound.type === "tun");
   if (!hasTunInbound) {
@@ -29,7 +30,7 @@ export const singBoxRuntimeConfigSchema = z.object({
   }
   const hasRemoteOutbound = config.outbounds.some((outbound) =>
     typeof outbound.type === "string" && remoteOutboundTypes.has(outbound.type),
-  );
+  ) || config.endpoints?.some((endpoint) => endpoint.type === "wireguard");
   if (!hasRemoteOutbound) {
     context.addIssue({
       code: "custom",

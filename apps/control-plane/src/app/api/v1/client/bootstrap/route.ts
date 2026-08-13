@@ -1,10 +1,12 @@
 import type { NextRequest } from "next/server";
 import { fail, ok, requireBearer } from "@/lib/api";
 import { db } from "@/lib/db";
+import { refreshPasarGuardBindingsForUser } from "@/lib/pasarguard/sync";
 
 export async function GET(request: NextRequest) {
   const auth = await requireBearer(request);
   if (!auth.ok) return auth.response;
+  await refreshPasarGuardBindingsForUser(auth.userId);
   const user = await db.user.findUnique({
     where: { id: auth.userId },
     include: {
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
               },
             },
             include: { node: { include: { region: true } } },
+            orderBy: { priority: "desc" },
           },
           guardianProfile: { include: { rules: true } },
         },
