@@ -17,7 +17,7 @@ import androidx.navigation.compose.rememberNavController
 import org.quickping.app.core.design.QuickPingTheme
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.state.QuickPingViewModel
-import org.quickping.app.ui.screens.AccountScreen
+import org.quickping.app.ui.screens.AccountScreenWithSignOutConfirmation
 import org.quickping.app.ui.screens.GuardianScreen
 import org.quickping.app.ui.screens.HomeScreen
 import org.quickping.app.ui.screens.LoginScreen
@@ -175,7 +175,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Account) {
-                AccountScreen(
+                AccountScreenWithSignOutConfirmation(
                     user = state.user,
                     service = state.service,
                     busy = state.accountActionBusy,
