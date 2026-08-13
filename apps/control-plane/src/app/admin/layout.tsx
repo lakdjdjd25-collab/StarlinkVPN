@@ -7,6 +7,7 @@ const navigation = [
   ["کاربران", "/admin/users"],
   ["سرویس‌ها", "/admin/services"],
   ["سرورها", "/admin/nodes"],
+  ["پاسارگارد", "/admin/integrations/pasarguard"],
   ["تنظیمات", "/admin/settings"],
 ] as const;
 

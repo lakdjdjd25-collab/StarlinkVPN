@@ -182,12 +182,13 @@ model Service {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan            Plan             @relation(fields: [planId], references: [id])
-  nodes           ServiceNode[]
-  usageSamples    UsageSample[]
-  payments        Payment[]
-  guardianProfile GuardianProfile?
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan              Plan               @relation(fields: [planId], references: [id])
+  nodes             ServiceNode[]
+  usageSamples      UsageSample[]
+  payments          Payment[]
+  guardianProfile   GuardianProfile?
+  pasarGuardBinding PasarGuardBinding?
 
   @@index([userId, status])
   @@index([expiresAt, status])
@@ -207,29 +208,52 @@ model ServerRegion {
 }
 
 model VpnNode {
-  id               String       @id @default(cuid())
-  regionId         String
-  name             String
-  host             String
-  port             Int
-  protocol         NodeProtocol
-  coreType         String       @default("sing-box")
-  configCiphertext String
-  configVersion    Int          @default(1)
-  capacity         Int          @default(1000)
-  activeSessions   Int          @default(0)
-  freeAllowed      Boolean      @default(false)
-  unmetered        Boolean      @default(false)
-  status           NodeStatus   @default(OFFLINE)
-  lastSeenAt       DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  id                  String       @id @default(cuid())
+  regionId            String
+  name                String
+  host                String
+  port                Int
+  protocol            NodeProtocol
+  coreType            String       @default("sing-box")
+  configCiphertext    String
+  configVersion       Int          @default(1)
+  capacity            Int          @default(1000)
+  activeSessions      Int          @default(0)
+  freeAllowed         Boolean      @default(false)
+  unmetered           Boolean      @default(false)
+  status              NodeStatus   @default(OFFLINE)
+  lastSeenAt          DateTime?
+  provider            String       @default("MANUAL")
+  providerKey         String?      @unique
+  providerTag         String?
+  pasarGuardBindingId String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
-  region   ServerRegion  @relation(fields: [regionId], references: [id])
-  services ServiceNode[]
+  region            ServerRegion       @relation(fields: [regionId], references: [id])
+  services          ServiceNode[]
+  pasarGuardBinding PasarGuardBinding? @relation(fields: [pasarGuardBindingId], references: [id], onDelete: Cascade)
 
-  @@unique([host, port, protocol])
   @@index([regionId, status])
+  @@index([host, port, protocol])
+  @@index([pasarGuardBindingId])
+}
+
+model PasarGuardBinding {
+  id                String    @id @default(cuid())
+  serviceId         String    @unique
+  externalUserId    BigInt    @unique
+  externalUsername  String
+  configFingerprint String?
+  lastSyncAt        DateTime?
+  lastError         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  service Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  nodes   VpnNode[]
+
+  @@index([lastSyncAt])
 }
 
 model ServiceNode {

@@ -23,4 +23,13 @@ describe("sing-box runtime configuration", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts WireGuard represented as a modern sing-box endpoint", () => {
+    const result = singBoxRuntimeConfigSchema.safeParse({
+      inbounds: [{ type: "tun", address: ["172.19.0.1/30"], auto_route: true }],
+      outbounds: [{ type: "selector", tag: "proxy", outbounds: ["wireguard"] }],
+      endpoints: [{ type: "wireguard", tag: "wireguard", peers: [] }],
+    });
+    expect(result.success).toBe(true);
+  });
 });

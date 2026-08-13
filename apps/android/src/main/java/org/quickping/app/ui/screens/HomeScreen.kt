@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -91,7 +92,9 @@ fun HomeScreen(
                     onToggleConnection = onToggleConnection,
                 )
             }
-            item { SuggestedServers(state, onSelectServer) }
+            if (state.servers.isNotEmpty()) {
+                item { SuggestedServers(state, onSelectServer) }
+            }
             item {
                 Row(
                     modifier = Modifier
@@ -285,16 +288,36 @@ private fun ConnectionPanel(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Image(
-                    painter = painterResource(flagResource(server.countryCode)),
-                    contentDescription = server.countryName,
-                    modifier = Modifier.size(width = 48.dp, height = 34.dp),
-                )
+                if (state.servers.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 48.dp, height = 34.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color(0xFF0900F2)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_globe),
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                } else {
+                    Image(
+                        painter = painterResource(flagResource(server.countryCode)),
+                        contentDescription = server.countryName,
+                        modifier = Modifier.size(width = 48.dp, height = 34.dp),
+                    )
+                }
                 Spacer(Modifier.height(5.dp))
                 Text(
                     text = server.title,
                     color = QuickPingColors.TextPrimary,
                     style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.widthIn(max = 92.dp),
+                    maxLines = 2,
+                    textAlign = TextAlign.End,
                 )
             }
         }
@@ -397,9 +420,64 @@ private fun ServerRow(server: Server, selected: Boolean, onClick: () -> Unit) {
 
 @DrawableRes
 private fun flagResource(countryCode: String): Int = when (countryCode.lowercase()) {
+    "ad" -> R.drawable.flag_ad
+    "ae" -> R.drawable.flag_ae
+    "al" -> R.drawable.flag_al
+    "am" -> R.drawable.flag_am
+    "ar" -> R.drawable.flag_ar
+    "at" -> R.drawable.flag_at
+    "az" -> R.drawable.flag_az
+    "ba" -> R.drawable.flag_ba
+    "be" -> R.drawable.flag_be
+    "bg" -> R.drawable.flag_bg
+    "bh" -> R.drawable.flag_bh
+    "br" -> R.drawable.flag_br
+    "by" -> R.drawable.flag_by
+    "ca" -> R.drawable.flag_ca
+    "ch" -> R.drawable.flag_ch
+    "cl" -> R.drawable.flag_cl
+    "cn" -> R.drawable.flag_cn
+    "co" -> R.drawable.flag_co
+    "cr" -> R.drawable.flag_cr
+    "cy" -> R.drawable.flag_cy
+    "cz" -> R.drawable.flag_cz
     "de" -> R.drawable.flag_de
+    "dk" -> R.drawable.flag_dk
+    "ec" -> R.drawable.flag_ec
+    "ee" -> R.drawable.flag_ee
+    "es" -> R.drawable.flag_es
+    "fi" -> R.drawable.flag_fi
+    "fr" -> R.drawable.flag_fr
+    "gb" -> R.drawable.flag_gb
+    "ge" -> R.drawable.flag_ge
+    "gr" -> R.drawable.flag_gr
+    "gt" -> R.drawable.flag_gt
+    "hr" -> R.drawable.flag_hr
+    "hu" -> R.drawable.flag_hu
+    "ie" -> R.drawable.flag_ie
+    "im" -> R.drawable.flag_im
+    "in" -> R.drawable.flag_in
     "nl" -> R.drawable.flag_nl
+    "no" -> R.drawable.flag_no
+    "om" -> R.drawable.flag_om
+    "pa" -> R.drawable.flag_pa
+    "pe" -> R.drawable.flag_pe
+    "pk" -> R.drawable.flag_pk
+    "pl" -> R.drawable.flag_pl
+    "pt" -> R.drawable.flag_pt
+    "qa" -> R.drawable.flag_qa
+    "ro" -> R.drawable.flag_ro
+    "rs" -> R.drawable.flag_rs
+    "ru" -> R.drawable.flag_ru
+    "sa" -> R.drawable.flag_sa
+    "se" -> R.drawable.flag_se
+    "si" -> R.drawable.flag_si
+    "sk" -> R.drawable.flag_sk
+    "tr" -> R.drawable.flag_tr
+    "ua" -> R.drawable.flag_ua
     "us" -> R.drawable.flag_us
+    "uy" -> R.drawable.flag_uy
+    "ve" -> R.drawable.flag_ve
     "ir" -> R.drawable.flag_ir
     "global" -> R.drawable.flag_global
     else -> R.drawable.flag_qa
