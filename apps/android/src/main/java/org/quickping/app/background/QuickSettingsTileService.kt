@@ -17,7 +17,7 @@ class QuickSettingsTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        val connected = QuickPingVpnService.state.value == ServiceState.Connected
+        val connected = QuickPingVpnService.status.value.state == ServiceState.Connected
         if (connected) {
             startService(
                 Intent(this, QuickPingVpnService::class.java)
@@ -44,7 +44,7 @@ class QuickSettingsTileService : TileService() {
     }
 
     private fun refresh() {
-        val current = QuickPingVpnService.state.value
+        val current = QuickPingVpnService.status.value.state
         qsTile?.apply {
             state = when (current) {
                 ServiceState.Connected -> Tile.STATE_ACTIVE

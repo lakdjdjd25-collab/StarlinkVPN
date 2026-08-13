@@ -3,6 +3,7 @@ package org.quickping.app.state
 import org.quickping.app.model.AppSettings
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
@@ -24,6 +25,10 @@ data class QuickPingUiState(
     val loginChallengeId: String? = null,
     val loginDebugCode: String? = null,
     val loginError: String? = null,
+    val connectionError: String? = null,
+    val connectionErrorCode: String? = null,
+    val installedApps: List<InstalledApp> = emptyList(),
+    val loadingInstalledApps: Boolean = false,
 )
 
 internal val emptyService = Service(

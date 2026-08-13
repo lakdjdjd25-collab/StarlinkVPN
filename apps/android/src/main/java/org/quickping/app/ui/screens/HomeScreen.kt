@@ -417,7 +417,11 @@ private fun SelectedServerSummary(
                 color = QuickPingColors.TextPrimary,
             )
             HomeRtlText(
-                text = "شبکهٔ ${server.countryName}  •  ------",
+                text = if (state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank()) {
+                    state.connectionError
+                } else {
+                    "شبکهٔ ${server.countryName}  •  ------"
+                },
                 modifier = Modifier.widthIn(max = 110.dp),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Normal,

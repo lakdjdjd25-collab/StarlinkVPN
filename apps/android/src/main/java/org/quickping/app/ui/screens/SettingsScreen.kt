@@ -1,5 +1,8 @@
 package org.quickping.app.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,11 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.model.AppSettings
+import org.quickping.app.model.AppLanguage
+import org.quickping.app.model.DnsProvider
 import org.quickping.app.ui.components.GlassCard
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
@@ -55,7 +61,9 @@ fun SettingsScreen(
     var showVpnDialog by remember { mutableStateOf(false) }
     var showProxyDialog by remember { mutableStateOf(false) }
     var showDnsDialog by remember { mutableStateOf(false) }
+    var showLanguageDialog by remember { mutableStateOf(false) }
     var showBackgroundWarning by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     QuickPingScreen {
         QuickPingTopBar(title = "تنظیمات", onBack = onBack)
@@ -91,9 +99,9 @@ fun SettingsScreen(
                         icon = R.drawable.ic_proxy,
                         trailing = {
                             QuickSwitch(
-                                checked = settings.proxyEnabled,
+                                checked = settings.proxyModeEnabled,
                                 onCheckedChange = { enabled ->
-                                    onUpdateSettings { current -> current.copy(proxyEnabled = enabled) }
+                                    onUpdateSettings { current -> current.copy(proxyModeEnabled = enabled) }
                                 },
                             )
                         },
@@ -112,13 +120,17 @@ fun SettingsScreen(
                     )
                     SettingRow(
                         title = "پروکسی HTTP و SOCKS5",
-                        subtitle = "127.0.0.1:${settings.proxyPort}",
+                        subtitle = if (settings.localProxyEnabled) {
+                            "${if (settings.shareHotspot) "0.0.0.0" else "127.0.0.1"}:${settings.proxyPort}"
+                        } else {
+                            "خاموش"
+                        },
                         icon = R.drawable.ic_port,
                         onClick = { showProxyDialog = true },
                     )
                     SettingRow(
                         title = "DNS",
-                        subtitle = settings.dnsProvider,
+                        subtitle = settings.dnsProvider.persianLabel,
                         icon = R.drawable.ic_dns,
                         onClick = { showDnsDialog = true },
                     )
@@ -161,8 +173,9 @@ fun SettingsScreen(
                     )
                     SettingRow(
                         title = "زبان",
-                        subtitle = settings.language,
+                        subtitle = settings.language.label,
                         icon = R.drawable.ic_language,
+                        onClick = { showLanguageDialog = true },
                     )
                     SettingRow(
                         title = "گرافیک و ظاهر",
@@ -184,9 +197,9 @@ fun SettingsScreen(
         CompactChoiceDialog(
             title = "پروکسی HTTP و SOCKS5",
             options = listOf("خاموش", "فعال روی پورت ۱۰۸۱۰"),
-            selected = if (settings.proxyEnabled) "فعال روی پورت ۱۰۸۱۰" else "خاموش",
+            selected = if (settings.localProxyEnabled) "فعال روی پورت ۱۰۸۱۰" else "خاموش",
             onSelect = { value ->
-                onUpdateSettings { it.copy(proxyEnabled = value != "خاموش") }
+                onUpdateSettings { it.copy(localProxyEnabled = value != "خاموش", proxyPort = 10810) }
                 showProxyDialog = false
             },
             onDismiss = { showProxyDialog = false },
@@ -195,10 +208,10 @@ fun SettingsScreen(
     if (showDnsDialog) {
         CompactChoiceDialog(
             title = "DNS",
-            options = listOf("پیش‌فرض", "گوگل", "کلودفلر"),
-            selected = settings.dnsProvider,
+            options = DnsProvider.entries.map(DnsProvider::persianLabel),
+            selected = settings.dnsProvider.persianLabel,
             onSelect = { value ->
-                onUpdateSettings { it.copy(dnsProvider = value) }
+                onUpdateSettings { it.copy(dnsProvider = DnsProvider.fromStorage(value)) }
                 showDnsDialog = false
             },
             onDismiss = { showDnsDialog = false },
@@ -229,6 +242,50 @@ fun SettingsScreen(
                                 },
                             )
                         },
+                    )
+                    SettingRow(
+                        title = "اتصال مجدد پس از تغییر شبکه",
+                        icon = R.drawable.ic_reload,
+                        trailing = {
+                            QuickSwitch(settings.reconnectOnNetworkChange) { enabled ->
+                                onUpdateSettings { it.copy(reconnectOnNetworkChange = enabled) }
+                            }
+                        },
+                    )
+                    SettingRow(
+                        title = "مسیر‌یابی سخت‌گیرانه",
+                        icon = R.drawable.ic_shield,
+                        trailing = {
+                            QuickSwitch(settings.strictRoute) { enabled ->
+                                onUpdateSettings { it.copy(strictRoute = enabled) }
+                            }
+                        },
+                    )
+                    SettingRow(
+                        title = "IPv6",
+                        icon = R.drawable.ic_globe,
+                        trailing = {
+                            QuickSwitch(settings.ipv6Enabled) { enabled ->
+                                onUpdateSettings { it.copy(ipv6Enabled = enabled) }
+                            }
+                        },
+                    )
+                    Text(
+                        "MTU: ${settings.mtu}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onUpdateSettings { current ->
+                                    current.copy(mtu = when (current.mtu) {
+                                        1280 -> 1400
+                                        1400 -> 1500
+                                        else -> 1280
+                                    })
+                                }
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        color = QuickPingColors.TextSecondary,
+                        textAlign = TextAlign.End,
                     )
                 }
             },
@@ -272,11 +329,37 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { showBackgroundWarning = false }) { Text("ادامه") }
+                TextButton(
+                    onClick = {
+                        showBackgroundWarning = false
+                        runCatching {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}"),
+                                ),
+                            )
+                        }.onFailure {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        }
+                    },
+                ) { Text("ادامه") }
             },
             dismissButton = {
                 TextButton(onClick = { showBackgroundWarning = false }) { Text("بعداً") }
             },
+        )
+    }
+    if (showLanguageDialog) {
+        CompactChoiceDialog(
+            title = "زبان",
+            options = AppLanguage.entries.map(AppLanguage::label),
+            selected = settings.language.label,
+            onSelect = { value ->
+                onUpdateSettings { it.copy(language = AppLanguage.fromCode(value)) }
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false },
         )
     }
 }

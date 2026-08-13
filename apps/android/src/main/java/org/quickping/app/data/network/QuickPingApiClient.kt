@@ -268,6 +268,8 @@ private fun JSONArray?.toServers(): List<Server> {
             countryName = location,
             title = item.optString("remarks", location),
             remarks = item.optString("remarks"),
+            host = item.optString("host"),
+            port = item.optInt("port"),
             coreType = item.optString("coreType", "sing-box"),
             freeAllowed = item.optBoolean("freeAllowed"),
             unmetered = item.optBoolean("unmetered"),

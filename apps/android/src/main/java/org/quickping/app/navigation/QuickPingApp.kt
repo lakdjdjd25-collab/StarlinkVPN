@@ -57,7 +57,7 @@ fun QuickPingApp(
         if (state.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
             quickPingViewModel.disconnectVpn()
         } else {
-            val permissionIntent = VpnService.prepare(context)
+            val permissionIntent = if (state.settings.proxyModeEnabled) null else VpnService.prepare(context)
             if (permissionIntent == null) {
                 quickPingViewModel.connectVpn()
             } else {
@@ -66,7 +66,7 @@ fun QuickPingApp(
         }
     }
 
-    QuickPingTheme(languageCode = state.user.language) {
+    QuickPingTheme(languageCode = state.settings.language.code) {
         NavHost(
             navController = navController,
             startDestination = Route.Splash,
@@ -99,6 +99,12 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Home) {
+                LaunchedEffect(
+                    state.settings.autoPing,
+                    state.servers.joinToString(separator = ",", transform = { it.id }),
+                ) {
+                    quickPingViewModel.refreshServerPings()
+                }
                 HomeScreen(
                     state = state,
                     onToggleConnection = onToggleVpn,
@@ -132,11 +138,12 @@ fun QuickPingApp(
                 )
             }
             composable(Route.SplitTunneling) {
+                LaunchedEffect(Unit) { quickPingViewModel.loadInstalledApps() }
                 SplitTunnelingScreen(
-                    enabled = state.settings.splitTunnelingEnabled,
-                    onEnabledChange = { value ->
-                        quickPingViewModel.updateSetting { it.copy(splitTunnelingEnabled = value) }
-                    },
+                    settings = state.settings,
+                    installedApps = state.installedApps,
+                    loadingApps = state.loadingInstalledApps,
+                    onUpdateSettings = quickPingViewModel::updateSetting,
                     onBack = navController::popBackStack,
                 )
             }

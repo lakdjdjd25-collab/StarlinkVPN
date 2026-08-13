@@ -11,7 +11,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 interface TunnelCore {
-    suspend fun start(configJson: String)
+    suspend fun start(configJson: String, launchOptions: TunnelLaunchOptions = TunnelLaunchOptions())
     suspend fun stop()
     fun isRunning(): Boolean
 }
@@ -25,7 +25,7 @@ internal class SingBoxTunnelCore(
     @Volatile
     private var commandServer: CommandServer? = null
 
-    override suspend fun start(configJson: String) = lifecycle.withLock {
+    override suspend fun start(configJson: String, launchOptions: TunnelLaunchOptions) = lifecycle.withLock {
         require(configJson.isNotBlank()) { "Missing runtime configuration" }
         check(commandServer == null) { "sing-box is already running" }
         Libbox.checkConfig(configJson)
@@ -33,7 +33,18 @@ internal class SingBoxTunnelCore(
         val candidate = CommandServer(this, platform)
         try {
             candidate.start()
-            candidate.startOrReloadService(configJson, OverrideOptions().apply { autoRedirect = false })
+            candidate.startOrReloadService(
+                configJson,
+                OverrideOptions().apply {
+                    autoRedirect = false
+                    if (launchOptions.includePackages.isNotEmpty()) {
+                        includePackage = AndroidSingBoxPlatform.StringArray(launchOptions.includePackages)
+                    }
+                    if (launchOptions.excludePackages.isNotEmpty()) {
+                        excludePackage = AndroidSingBoxPlatform.StringArray(launchOptions.excludePackages)
+                    }
+                },
+            )
             commandServer = candidate
         } catch (error: Throwable) {
             runCatching { candidate.closeService() }
