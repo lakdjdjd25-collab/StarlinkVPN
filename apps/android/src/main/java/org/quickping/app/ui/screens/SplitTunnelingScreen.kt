@@ -100,9 +100,12 @@ fun SplitTunnelingScreen(
                     title = "فعال‌سازی تقسیم تونل",
                     icon = R.drawable.ic_split_tunneling,
                     trailing = {
-                        QuickSwitch(settings.splitTunnelingEnabled) { enabled ->
-                            onUpdateSettings { it.copy(splitTunnelingEnabled = enabled) }
-                        }
+                        QuickSwitch(
+                            checked = settings.splitTunnelingEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateSettings { it.copy(splitTunnelingEnabled = enabled) }
+                            },
+                        )
                     },
                 )
             }
@@ -153,9 +156,12 @@ fun SplitTunnelingScreen(
                     title = "حفظ تنظیمات هنگام تغییر سرویس",
                     icon = R.drawable.ic_lock,
                     trailing = {
-                        QuickSwitch(settings.rememberSplitTunnelSettings) { remember ->
-                            onUpdateSettings { it.copy(rememberSplitTunnelSettings = remember) }
-                        }
+                        QuickSwitch(
+                            checked = settings.rememberSplitTunnelSettings,
+                            onCheckedChange = { remember ->
+                                onUpdateSettings { it.copy(rememberSplitTunnelSettings = remember) }
+                            },
+                        )
                     },
                 )
             }

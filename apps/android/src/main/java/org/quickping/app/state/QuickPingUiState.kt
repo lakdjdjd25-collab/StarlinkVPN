@@ -29,6 +29,10 @@ data class QuickPingUiState(
     val connectionErrorCode: String? = null,
     val installedApps: List<InstalledApp> = emptyList(),
     val loadingInstalledApps: Boolean = false,
+    val accountActionBusy: Boolean = false,
+    val accountActionError: String? = null,
+    val passwordChangeChallengeId: String? = null,
+    val passwordChangeDebugCode: String? = null,
 )
 
 internal val emptyService = Service(

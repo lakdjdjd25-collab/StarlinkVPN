@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.quickping.app.R
@@ -49,12 +50,22 @@ import org.quickping.app.ui.components.StatusPill
 fun AccountScreen(
     user: UserInfo,
     service: Service,
+    busy: Boolean,
+    error: String?,
+    passwordChallengeId: String?,
+    passwordDebugCode: String?,
+    onRequestPasswordCode: () -> Unit,
+    onConfirmPasswordChange: (String, String) -> Unit,
+    onDeleteAccount: (String) -> Unit,
+    onClearAction: () -> Unit,
     onBack: () -> Unit,
     onServices: () -> Unit,
 ) {
     var showEmailDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var newEmail by remember { mutableStateOf(user.email) }
+    var passwordCode by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var deletionPassword by remember { mutableStateOf("") }
 
     QuickPingScreen {
         QuickPingTopBar(title = "حساب کاربری", onBack = onBack)
@@ -108,16 +119,25 @@ fun AccountScreen(
                 ) {
                     AccountAction(
                         modifier = Modifier.weight(1f),
-                        text = "تغییر ایمیل",
-                        icon = R.drawable.ic_edit,
-                        onClick = { showEmailDialog = true },
+                        text = "تغییر گذرواژه",
+                        icon = R.drawable.ic_key,
+                        onClick = {
+                            onClearAction()
+                            passwordCode = ""
+                            newPassword = ""
+                            showEmailDialog = true
+                        },
                     )
                     AccountAction(
                         modifier = Modifier.weight(1f),
                         text = "حذف حساب",
                         icon = R.drawable.ic_trash,
                         danger = true,
-                        onClick = { showDeleteDialog = true },
+                        onClick = {
+                            onClearAction()
+                            deletionPassword = ""
+                            showDeleteDialog = true
+                        },
                     )
                 }
             }
@@ -150,29 +170,35 @@ fun AccountScreen(
 
     if (showEmailDialog) {
         AlertDialog(
-            onDismissRequest = { showEmailDialog = false },
+            onDismissRequest = {
+                if (!busy) {
+                    showEmailDialog = false
+                    onClearAction()
+                }
+            },
             containerColor = QuickPingColors.SurfaceHigh,
             shape = RoundedCornerShape(22.dp),
             icon = {
                 Icon(
-                    painterResource(R.drawable.ic_language),
+                    painterResource(R.drawable.ic_change_password),
                     contentDescription = null,
                     tint = QuickPingColors.PrimaryLight,
                     modifier = Modifier.size(30.dp),
                 )
             },
-            title = { Text("تغییر نشانی ایمیل", color = QuickPingColors.TextPrimary) },
+            title = { Text("تغییر گذرواژه", color = QuickPingColors.TextPrimary) },
             text = {
                 Column {
                     Text(
-                        "کد تأیید به ایمیل جدید ارسال خواهد شد.",
+                        "یک کد تأیید به ایمیل حساب شما ارسال می‌کنیم.",
                         color = QuickPingColors.TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
-                        value = newEmail,
-                        onValueChange = { newEmail = it },
+                        value = user.email,
+                        onValueChange = {},
+                        enabled = false,
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -182,19 +208,78 @@ fun AccountScreen(
                             unfocusedTextColor = QuickPingColors.TextPrimary,
                         ),
                     )
+                    if (passwordChallengeId != null) {
+                        Spacer(Modifier.height(9.dp))
+                        OutlinedTextField(
+                            value = passwordCode,
+                            onValueChange = { value ->
+                                passwordCode = value.filter(Char::isDigit).take(6)
+                            },
+                            singleLine = true,
+                            label = { Text("کد شش‌رقمی") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = accountFieldColors(),
+                        )
+                        Spacer(Modifier.height(9.dp))
+                        OutlinedTextField(
+                            value = newPassword,
+                            onValueChange = { newPassword = it.take(72) },
+                            singleLine = true,
+                            label = { Text("گذرواژه جدید (حداقل ۸ نویسه)") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = accountFieldColors(),
+                        )
+                    }
+                    passwordDebugCode?.let { debugCode ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "کد آزمایشی: $debugCode",
+                            color = QuickPingColors.Warning,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                    error?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            message,
+                            color = QuickPingColors.Danger,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showEmailDialog = false }) { Text("تأیید") }
+                if (passwordChallengeId == null) {
+                    TextButton(onClick = onRequestPasswordCode, enabled = !busy) {
+                        Text(if (busy) "در حال ارسال…" else "فرستادن کد")
+                    }
+                } else {
+                    TextButton(
+                        onClick = { onConfirmPasswordChange(passwordCode, newPassword) },
+                        enabled = !busy && passwordCode.length == 6 && newPassword.length >= 8,
+                    ) { Text(if (busy) "در حال ثبت…" else "تأیید") }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showEmailDialog = false }) { Text("انصراف") }
+                TextButton(
+                    onClick = {
+                        showEmailDialog = false
+                        onClearAction()
+                    },
+                    enabled = !busy,
+                ) { Text("انصراف") }
             },
         )
     }
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
+            onDismissRequest = {
+                if (!busy) {
+                    showDeleteDialog = false
+                    onClearAction()
+                }
+            },
             containerColor = QuickPingColors.SurfaceHigh,
             shape = RoundedCornerShape(22.dp),
             icon = {
@@ -214,23 +299,65 @@ fun AccountScreen(
             },
             title = { Text("حذف حساب کاربری", color = QuickPingColors.TextPrimary) },
             text = {
-                Text(
-                    "پس از حذف حساب، دسترسی به سرویس‌ها و اطلاعات حساب از بین می‌رود. این کار قابل بازگشت نیست.",
-                    color = QuickPingColors.TextSecondary,
-                    textAlign = TextAlign.Center,
-                )
+                Column {
+                    Text(
+                        "پس از حذف حساب، دسترسی به سرویس‌ها و اطلاعات حساب از بین می‌رود. این کار قابل بازگشت نیست.",
+                        color = QuickPingColors.TextSecondary,
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = deletionPassword,
+                        onValueChange = { deletionPassword = it.take(256) },
+                        singleLine = true,
+                        label = { Text("گذرواژه خود را وارد کنید") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = accountFieldColors(),
+                    )
+                    error?.let { message ->
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            message,
+                            color = QuickPingColors.Danger,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             },
             confirmButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("حذف حساب کاربری", color = QuickPingColors.Danger)
+                TextButton(
+                    onClick = { onDeleteAccount(deletionPassword) },
+                    enabled = deletionPassword.isNotBlank() && !busy,
+                ) {
+                    Text(
+                        if (busy) "در حال حذف…" else "حذف حساب کاربری",
+                        color = QuickPingColors.Danger,
+                    )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("انصراف") }
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        onClearAction()
+                    },
+                    enabled = !busy,
+                ) { Text("انصراف") }
             },
         )
     }
 }
+
+@Composable
+private fun accountFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = QuickPingColors.Primary,
+    unfocusedBorderColor = QuickPingColors.Border,
+    focusedTextColor = QuickPingColors.TextPrimary,
+    unfocusedTextColor = QuickPingColors.TextPrimary,
+    focusedLabelColor = QuickPingColors.TextSecondary,
+    unfocusedLabelColor = QuickPingColors.TextMuted,
+)
 
 @Composable
 private fun AccountAction(

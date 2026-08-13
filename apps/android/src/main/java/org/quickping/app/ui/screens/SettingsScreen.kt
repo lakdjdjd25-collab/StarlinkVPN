@@ -247,27 +247,36 @@ fun SettingsScreen(
                         title = "اتصال مجدد پس از تغییر شبکه",
                         icon = R.drawable.ic_reload,
                         trailing = {
-                            QuickSwitch(settings.reconnectOnNetworkChange) { enabled ->
-                                onUpdateSettings { it.copy(reconnectOnNetworkChange = enabled) }
-                            }
+                            QuickSwitch(
+                                checked = settings.reconnectOnNetworkChange,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { it.copy(reconnectOnNetworkChange = enabled) }
+                                },
+                            )
                         },
                     )
                     SettingRow(
                         title = "مسیر‌یابی سخت‌گیرانه",
                         icon = R.drawable.ic_shield,
                         trailing = {
-                            QuickSwitch(settings.strictRoute) { enabled ->
-                                onUpdateSettings { it.copy(strictRoute = enabled) }
-                            }
+                            QuickSwitch(
+                                checked = settings.strictRoute,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { it.copy(strictRoute = enabled) }
+                                },
+                            )
                         },
                     )
                     SettingRow(
                         title = "IPv6",
                         icon = R.drawable.ic_globe,
                         trailing = {
-                            QuickSwitch(settings.ipv6Enabled) { enabled ->
-                                onUpdateSettings { it.copy(ipv6Enabled = enabled) }
-                            }
+                            QuickSwitch(
+                                checked = settings.ipv6Enabled,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { it.copy(ipv6Enabled = enabled) }
+                                },
+                            )
                         },
                     )
                     Text(

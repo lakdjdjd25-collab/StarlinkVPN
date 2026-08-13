@@ -39,6 +39,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     private val runtimeStore = VpnRuntimeStore(application)
     private var loginJob: Job? = null
     private var pingJob: Job? = null
+    private var accountJob: Job? = null
     private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load()))
     val state: StateFlow<QuickPingUiState> = _state.asStateFlow()
 
@@ -258,6 +259,96 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load())
     }
 
+    fun requestPasswordChange() {
+        accountJob?.cancel()
+        accountJob = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    accountActionBusy = true,
+                    accountActionError = null,
+                    passwordChangeChallengeId = null,
+                    passwordChangeDebugCode = null,
+                )
+            }
+            runCatching { repository.requestPasswordChange() }
+                .onSuccess { challenge ->
+                    _state.update {
+                        it.copy(
+                            accountActionBusy = false,
+                            passwordChangeChallengeId = challenge.id,
+                            passwordChangeDebugCode = challenge.debugCode,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    _state.update {
+                        it.copy(accountActionBusy = false, accountActionError = error.accountMessage())
+                    }
+                }
+        }
+    }
+
+    fun confirmPasswordChange(code: String, newPassword: String) {
+        val challengeId = _state.value.passwordChangeChallengeId ?: return
+        accountJob?.cancel()
+        accountJob = viewModelScope.launch {
+            _state.update { it.copy(accountActionBusy = true, accountActionError = null) }
+            runCatching { repository.confirmPasswordChange(challengeId, code, newPassword) }
+                .onSuccess {
+                    disconnectVpn()
+                    repository.signOut()
+                    _state.value = QuickPingUiState(
+                        initialized = true,
+                        settings = settingsStore.load(),
+                        loginError = "گذرواژه با موفقیت تغییر کرد؛ دوباره وارد شوید",
+                    )
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    _state.update {
+                        it.copy(accountActionBusy = false, accountActionError = error.accountMessage())
+                    }
+                }
+        }
+    }
+
+    fun deleteAccount(password: String) {
+        accountJob?.cancel()
+        accountJob = viewModelScope.launch {
+            _state.update { it.copy(accountActionBusy = true, accountActionError = null) }
+            runCatching { repository.deleteAccount(password) }
+                .onSuccess {
+                    disconnectVpn()
+                    repository.signOut()
+                    _state.value = QuickPingUiState(
+                        initialized = true,
+                        settings = settingsStore.load(),
+                        loginError = "حساب کاربری حذف شد",
+                    )
+                }
+                .onFailure { error ->
+                    if (error is CancellationException) return@onFailure
+                    _state.update {
+                        it.copy(accountActionBusy = false, accountActionError = error.accountMessage())
+                    }
+                }
+        }
+    }
+
+    fun clearAccountAction() {
+        accountJob?.cancel()
+        accountJob = null
+        _state.update {
+            it.copy(
+                accountActionBusy = false,
+                accountActionError = null,
+                passwordChangeChallengeId = null,
+                passwordChangeDebugCode = null,
+            )
+        }
+    }
+
     fun updateSetting(transform: (org.quickping.app.model.AppSettings) -> org.quickping.app.model.AppSettings) {
         _state.update {
             val candidate = transform(it.settings)
@@ -305,7 +396,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                     .distinctBy(InstalledApp::packageName)
-                    .sortedWith(compareBy<InstalledApp>(String.CASE_INSENSITIVE_ORDER) { it.label })
+                    .sortedWith { left, right -> left.label.compareTo(right.label, ignoreCase = true) }
                     .toList()
             }
             _state.update { it.copy(installedApps = apps, loadingInstalledApps = false) }
@@ -360,4 +451,18 @@ private fun Throwable.connectionMessage(): String = when (this) {
     is java.io.IOException -> "ارتباط امن با پنل مدیریت برقرار نشد"
     is IllegalArgumentException -> "پیکربندی دریافت‌شده معتبر نیست"
     else -> "آماده‌سازی اتصال ناموفق بود"
+}
+
+private fun Throwable.accountMessage(): String = when (this) {
+    is ApiException -> when (code) {
+        "invalid_code" -> "کد تأیید نامعتبر یا منقضی شده است"
+        "invalid_password" -> "گذرواژه صحیح نیست"
+        "try_later" -> "برای دریافت کد جدید کمی صبر کنید"
+        "email_unavailable" -> "ارسال کد ایمیل فعلاً امکان‌پذیر نیست"
+        "invalid_input" -> message
+        else -> message.ifBlank { "انجام عملیات حساب ناموفق بود" }
+    }
+    is java.net.SocketTimeoutException -> "پاسخی از سرور دریافت نشد"
+    is java.io.IOException -> "ارتباط امن با پنل مدیریت برقرار نشد"
+    else -> "انجام عملیات حساب ناموفق بود"
 }

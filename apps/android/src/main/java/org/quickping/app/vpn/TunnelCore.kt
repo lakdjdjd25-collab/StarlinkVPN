@@ -10,7 +10,7 @@ import io.nekohasekai.libbox.SystemProxyStatus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-interface TunnelCore {
+internal interface TunnelCore {
     suspend fun start(configJson: String, launchOptions: TunnelLaunchOptions = TunnelLaunchOptions())
     suspend fun stop()
     fun isRunning(): Boolean

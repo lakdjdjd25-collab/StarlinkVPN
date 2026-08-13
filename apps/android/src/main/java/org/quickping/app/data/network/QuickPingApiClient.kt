@@ -179,6 +179,46 @@ class QuickPingApiClient(baseUrl: String) {
         }
     }
 
+    fun requestPasswordChange(accessToken: String): EmailChallenge {
+        val data = request(
+            method = "POST",
+            path = "/api/v1/client/account/password/request",
+            body = JSONObject(),
+            accessToken = accessToken,
+        )
+        return EmailChallenge(
+            id = data.getString("challengeId"),
+            expiresInSeconds = data.optLong("expiresInSeconds", 600),
+            debugCode = data.optNullableString("debugCode"),
+        )
+    }
+
+    fun confirmPasswordChange(
+        accessToken: String,
+        challengeId: String,
+        code: String,
+        newPassword: String,
+    ) {
+        request(
+            method = "POST",
+            path = "/api/v1/client/account/password/confirm",
+            body = JSONObject()
+                .put("challengeId", challengeId)
+                .put("code", code)
+                .put("newPassword", newPassword),
+            accessToken = accessToken,
+        )
+    }
+
+    fun deleteAccount(accessToken: String, password: String) {
+        request(
+            method = "DELETE",
+            path = "/api/v1/client/account",
+            body = JSONObject().put("password", password),
+            accessToken = accessToken,
+        )
+    }
+
     private fun request(
         method: String,
         path: String,

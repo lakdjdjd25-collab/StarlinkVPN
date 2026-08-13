@@ -53,6 +53,20 @@ fun QuickPingApp(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) quickPingViewModel.connectVpn()
     }
+    LaunchedEffect(state.initialized, state.signedIn) {
+        val currentRoute = navController.currentDestination?.route
+        if (
+            state.initialized &&
+            !state.signedIn &&
+            currentRoute != null &&
+            currentRoute !in setOf(Route.Splash, Route.Login)
+        ) {
+            navController.navigate(Route.Login) {
+                popUpTo(Route.Home) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
     val onToggleVpn = {
         if (state.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
             quickPingViewModel.disconnectVpn()
@@ -151,6 +165,14 @@ fun QuickPingApp(
                 AccountScreen(
                     user = state.user,
                     service = state.service,
+                    busy = state.accountActionBusy,
+                    error = state.accountActionError,
+                    passwordChallengeId = state.passwordChangeChallengeId,
+                    passwordDebugCode = state.passwordChangeDebugCode,
+                    onRequestPasswordCode = quickPingViewModel::requestPasswordChange,
+                    onConfirmPasswordChange = quickPingViewModel::confirmPasswordChange,
+                    onDeleteAccount = quickPingViewModel::deleteAccount,
+                    onClearAction = quickPingViewModel::clearAccountAction,
                     onBack = navController::popBackStack,
                     onServices = { navController.navigate(Route.Services) },
                 )

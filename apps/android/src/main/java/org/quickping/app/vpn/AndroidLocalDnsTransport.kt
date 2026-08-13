@@ -13,10 +13,15 @@ import io.nekohasekai.libbox.ExchangeContext
 import io.nekohasekai.libbox.LocalDNSTransport
 import java.net.InetAddress
 import java.net.UnknownHostException
+import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 internal class AndroidLocalDnsTransport(
     private val networkMonitor: AndroidDefaultNetworkMonitor,
@@ -27,13 +32,13 @@ internal class AndroidLocalDnsTransport(
         check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { "Raw DNS requires Android 10 or newer" }
         val network = networkMonitor.defaultNetwork ?: error("Physical network is unavailable")
         runBlocking {
-            suspendCancellableCoroutine { continuation ->
+            suspendCoroutine { continuation ->
                 val signal = CancellationSignal()
+                val completion = OneShotContinuation(continuation)
                 ctx.onCancel {
                     signal.cancel()
-                    continuation.cancel()
+                    completion.fail(CancellationException())
                 }
-                continuation.invokeOnCancellation { signal.cancel() }
                 DnsResolver.getInstance().rawQuery(
                     network,
                     message,
@@ -43,16 +48,16 @@ internal class AndroidLocalDnsTransport(
                     object : DnsResolver.Callback<ByteArray> {
                         override fun onAnswer(answer: ByteArray, rcode: Int) {
                             if (rcode == 0) ctx.rawSuccess(answer) else ctx.errorCode(rcode)
-                            continuation.resumeSafely()
+                            completion.resume()
                         }
 
                         override fun onError(error: DnsResolver.DnsException) {
                             val cause = error.cause
                             if (cause is ErrnoException) {
                                 ctx.errnoCode(cause.errno)
-                                continuation.resumeSafely()
+                                completion.resume()
                             } else {
-                                continuation.failSafely(error)
+                                completion.fail(error)
                             }
                         }
                     },
@@ -74,13 +79,13 @@ internal class AndroidLocalDnsTransport(
             return
         }
         runBlocking {
-            suspendCancellableCoroutine { continuation ->
+            suspendCoroutine { continuation ->
                 val signal = CancellationSignal()
+                val completion = OneShotContinuation(continuation)
                 ctx.onCancel {
                     signal.cancel()
-                    continuation.cancel()
+                    completion.fail(CancellationException())
                 }
-                continuation.invokeOnCancellation { signal.cancel() }
                 val callback = object : DnsResolver.Callback<Collection<InetAddress>> {
                     override fun onAnswer(answer: Collection<InetAddress>, rcode: Int) {
                         if (rcode == 0) {
@@ -88,16 +93,16 @@ internal class AndroidLocalDnsTransport(
                         } else {
                             ctx.errorCode(rcode)
                         }
-                        continuation.resumeSafely()
+                        completion.resume()
                     }
 
                     override fun onError(error: DnsResolver.DnsException) {
                         val cause = error.cause
                         if (cause is ErrnoException) {
                             ctx.errnoCode(cause.errno)
-                            continuation.resumeSafely()
+                            completion.resume()
                         } else {
-                            continuation.failSafely(error)
+                            completion.fail(error)
                         }
                     }
                 }
@@ -130,12 +135,18 @@ internal class AndroidLocalDnsTransport(
         }
     }
 
-    private fun kotlinx.coroutines.CancellableContinuation<Unit>.resumeSafely() {
-        tryResume(Unit)?.let(::completeResume)
-    }
+    private class OneShotContinuation(
+        private val continuation: Continuation<Unit>,
+    ) {
+        private val completed = AtomicBoolean(false)
 
-    private fun kotlinx.coroutines.CancellableContinuation<Unit>.failSafely(error: Throwable) {
-        tryResumeWithException(error)?.let(::completeResume)
+        fun resume() {
+            if (completed.compareAndSet(false, true)) continuation.resume(Unit)
+        }
+
+        fun fail(error: Throwable) {
+            if (completed.compareAndSet(false, true)) continuation.resumeWithException(error)
+        }
     }
 
     private companion object {
