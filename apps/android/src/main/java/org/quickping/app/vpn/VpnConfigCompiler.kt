@@ -25,6 +25,7 @@ internal object VpnConfigCompiler {
     ): CompiledVpnConfig {
         val config = JSONObject(rawConfigJson)
         val route = config.optJSONObject("route") ?: JSONObject().also { config.put("route", it) }
+        migrateLegacyProviderConfig(config, route)
         val proxyOutbound = route.optString("final").takeIf(String::isNotBlank)
             ?: firstUsableOutboundTag(config)
             ?: error("No usable proxy outbound is configured")
@@ -73,8 +74,7 @@ internal object VpnConfigCompiler {
                     .put("type", "mixed")
                     .put("tag", LOCAL_PROXY_TAG)
                     .put("listen", if (settings.shareHotspot) "0.0.0.0" else "127.0.0.1")
-                    .put("listen_port", settings.proxyPort.coerceIn(1024, 65535))
-                    .put("sniff", true),
+                    .put("listen_port", settings.proxyPort.coerceIn(1024, 65535)),
             )
         }
         check(inbounds.length() > 0) { "At least one inbound is required" }
@@ -225,7 +225,7 @@ internal object VpnConfigCompiler {
     }
 
     private fun compilePackageOverrides(settings: AppSettings, applicationPackage: String): TunnelLaunchOptions {
-        if (!settings.splitTunnelingEnabled || settings.splitTunnelPackages.isEmpty()) return TunnelLaunchOptions()
+        if (!settings.splitTunnelingEnabled) return TunnelLaunchOptions()
         val packages = settings.splitTunnelPackages
             .asSequence()
             .map(String::trim)
@@ -238,6 +238,94 @@ internal object VpnConfigCompiler {
         } else {
             TunnelLaunchOptions(excludePackages = packages.filterNot { it == applicationPackage })
         }
+    }
+
+    /**
+     * PasarGuard and other subscription panels can still emit fields that were
+     * accepted by sing-box 1.12 but were removed in 1.13.  The Android runtime
+     * is pinned to 1.13, so migrate the safe/common legacy constructs before
+     * Libbox.checkConfig validates the selected node.
+     */
+    private fun migrateLegacyProviderConfig(config: JSONObject, route: JSONObject) {
+        val sourceOutbounds = config.optJSONArray("outbounds") ?: return
+        val migratedOutbounds = JSONArray()
+        val removedActions = mutableMapOf<String, String>()
+
+        for (index in 0 until sourceOutbounds.length()) {
+            val outbound = sourceOutbounds.optJSONObject(index) ?: continue
+            val type = outbound.optString("type")
+            val tag = outbound.optString("tag")
+            when (type) {
+                "block" -> if (tag.isNotBlank()) removedActions[tag] = "reject"
+                "dns" -> if (tag.isNotBlank()) removedActions[tag] = "hijack-dns"
+                else -> {
+                    if (type == "direct") {
+                        // Destination overrides moved to route actions in 1.11
+                        // and the outbound fields were removed in 1.13.
+                        outbound.remove("override_address")
+                        outbound.remove("override_port")
+                    }
+                    migratedOutbounds.put(outbound)
+                }
+            }
+        }
+
+        if (removedActions.isNotEmpty()) {
+            for (index in 0 until migratedOutbounds.length()) {
+                val outbound = migratedOutbounds.optJSONObject(index) ?: continue
+                if (outbound.optString("type") !in setOf("selector", "urltest")) continue
+                val choices = outbound.optJSONArray("outbounds") ?: continue
+                val migratedChoices = JSONArray()
+                for (choiceIndex in 0 until choices.length()) {
+                    val choice = choices.optString(choiceIndex)
+                    if (choice.isNotBlank() && choice !in removedActions) migratedChoices.put(choice)
+                }
+                outbound.put("outbounds", migratedChoices)
+            }
+        }
+
+        config.put("outbounds", migratedOutbounds)
+        route.remove("geoip")
+        route.remove("geosite")
+        route.optJSONArray("rules")?.let { providerRules ->
+            route.put("rules", migrateLegacyRouteRules(providerRules, removedActions))
+        }
+    }
+
+    private fun migrateLegacyRouteRules(
+        source: JSONArray,
+        removedActions: Map<String, String>,
+    ): JSONArray {
+        val migrated = JSONArray()
+        for (index in 0 until source.length()) {
+            val rule = source.optJSONObject(index) ?: continue
+
+            // GeoIP/Geosite rule items were removed in sing-box 1.12.  They
+            // cannot be translated without their original databases, so omit
+            // only those provider rules and retain the rest of the route.
+            if (rule.has("geoip") || rule.has("source_geoip") || rule.has("geosite")) continue
+
+            if (rule.has("rule_set_ipcidr_match_source")) {
+                rule.put("rule_set_ip_cidr_match_source", rule.remove("rule_set_ipcidr_match_source"))
+            }
+            rule.optJSONArray("rules")?.let { nested ->
+                rule.put("rules", migrateLegacyRouteRules(nested, removedActions))
+            }
+
+            when (removedActions[rule.optString("outbound")]) {
+                "reject" -> {
+                    rule.remove("outbound")
+                    rule.put("action", "reject")
+                    rule.put("method", "default")
+                }
+                "hijack-dns" -> {
+                    rule.remove("outbound")
+                    rule.put("action", "hijack-dns")
+                }
+            }
+            migrated.put(rule)
+        }
+        return migrated
     }
 
     private fun ensureDirectOutbound(config: JSONObject): String {

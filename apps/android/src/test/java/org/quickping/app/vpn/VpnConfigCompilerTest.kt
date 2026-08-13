@@ -57,7 +57,45 @@ class VpnConfigCompilerTest {
         assertEquals("mixed", inbounds.getJSONObject(0).getString("type"))
         assertEquals("127.0.0.1", inbounds.getJSONObject(0).getString("listen"))
         assertEquals(10810, inbounds.getJSONObject(0).getInt("listen_port"))
+        assertFalse(inbounds.getJSONObject(0).has("sniff"))
         assertEquals("https", config.getJSONObject("dns").getJSONArray("servers").getJSONObject(0).getString("type"))
+    }
+
+    @Test
+    fun `legacy special outbounds are migrated for sing-box 1_13`() {
+        val result = VpnConfigCompiler.compile(
+            rawConfigJson = legacyProviderConfig,
+            settings = AppSettings(blockIrDomains = false),
+            enabledGuardianCategories = emptySet(),
+            applicationPackage = "org.quickping",
+        )
+
+        val config = JSONObject(result.configJson)
+        val outbounds = config.getJSONArray("outbounds")
+        assertFalse((0 until outbounds.length()).any { index ->
+            outbounds.getJSONObject(index).optString("type") in setOf("block", "dns")
+        })
+        assertFalse(outbounds.getJSONObject(1).has("override_address"))
+        val rules = config.getJSONObject("route").getJSONArray("rules")
+        assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("action") == "reject" })
+        assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("action") == "hijack-dns" })
+    }
+
+    @Test
+    fun `include split mode with no selected apps does not accidentally tunnel every app`() {
+        val result = VpnConfigCompiler.compile(
+            rawConfigJson = providerConfig,
+            settings = AppSettings(
+                splitTunnelingEnabled = true,
+                splitTunnelMode = SplitTunnelMode.Include,
+                splitTunnelPackages = emptySet(),
+            ),
+            enabledGuardianCategories = emptySet(),
+            applicationPackage = "org.quickping",
+        )
+
+        assertEquals(listOf("org.quickping"), result.launchOptions.includePackages)
+        assertTrue(result.launchOptions.excludePackages.isEmpty())
     }
 
     @Test
@@ -133,6 +171,24 @@ class VpnConfigCompilerTest {
             "rules":[{"rule_set":"geo","outbound":"proxy"}]
           },
           "experimental": {"clash_api":{"external_controller":"127.0.0.1:9090"}}
+        }
+    """.trimIndent()
+
+    private val legacyProviderConfig = """
+        {
+          "outbounds": [
+            {"type":"vless","tag":"selected","server":"vpn.example.com","server_port":443,"uuid":"id"},
+            {"type":"direct","tag":"direct","override_address":"1.1.1.1","override_port":53},
+            {"type":"block","tag":"block"},
+            {"type":"dns","tag":"dns-out"}
+          ],
+          "route": {
+            "final":"selected",
+            "rules":[
+              {"domain_suffix":["ads.example"],"outbound":"block"},
+              {"protocol":"dns","outbound":"dns-out"}
+            ]
+          }
         }
     """.trimIndent()
 }
