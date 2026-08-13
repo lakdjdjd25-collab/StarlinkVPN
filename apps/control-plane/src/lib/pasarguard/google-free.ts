@@ -7,7 +7,6 @@ import {
   type PasarGuardUser,
   type PasarGuardUserTemplate,
 } from "@/lib/pasarguard/client";
-import { createDirectGoogleFreeUser } from "@/lib/pasarguard/direct-free-user";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 export const GOOGLE_FREE_QUOTA_BYTES = 10n * 1024n ** 3n;
@@ -45,14 +44,28 @@ async function optionalTemplateId(client: PasarGuardClient): Promise<number | nu
 
 export async function resolveGoogleFreeTemplateId(client: PasarGuardClient): Promise<number> {
   const id = await optionalTemplateId(client);
-  if (!id) {
-    throw new PasarGuardError("not_configured", "قالب 10GB قابل انتخابی در پاسارگارد وجود ندارد");
-  }
+  if (!id) throw new PasarGuardError("not_configured", "قالب 10GB قابل انتخابی در پاسارگارد وجود ندارد");
   return id;
 }
 
 export function googleFreeUsername(googleSubject: string): string {
   return `g_${createHash("sha256").update(googleSubject).digest("hex").slice(0, 24)}`;
+}
+
+function groupIdsFromVisibleUsers(users: PasarGuardUser[]): number[] {
+  const active = users.filter((user) => user.status.toLowerCase() === "active" && user.groupIds.length > 0);
+  const source = active.length > 0 ? active : users.filter((user) => user.groupIds.length > 0);
+  const ids = [...new Set(source.flatMap((user) => user.groupIds))].sort((a, b) => a - b);
+  if (ids.length === 0) {
+    throw new PasarGuardError("not_configured", "از کاربران فعلی پاسارگارد هیچ گروه سروری برای سرویس رایگان پیدا نشد");
+  }
+  return ids;
+}
+
+export async function preflightGoogleFreeProvisioning(
+  client: PasarGuardClient = createPasarGuardClient(),
+): Promise<void> {
+  groupIdsFromVisibleUsers(await client.listUsers());
 }
 
 function assertFreeUser(user: PasarGuardUser): void {
@@ -69,19 +82,19 @@ function assertFreeUser(user: PasarGuardUser): void {
 
 function findRemote(users: PasarGuardUser[], username: string): PasarGuardUser | null {
   const matches = users.filter((user) => user.username === username || user.username.includes(username));
-  if (matches.length > 1) {
-    throw new PasarGuardError("invalid_response", "بیش از یک سرویس رایگان متناظر در پاسارگارد پیدا شد");
-  }
+  if (matches.length > 1) throw new PasarGuardError("invalid_response", "بیش از یک سرویس رایگان متناظر در پاسارگارد پیدا شد");
   return matches[0] ?? null;
 }
 
-async function createRemote(client: PasarGuardClient, username: string): Promise<PasarGuardUser> {
+async function createRemote(
+  client: PasarGuardClient,
+  username: string,
+  visibleUsers: PasarGuardUser[],
+): Promise<PasarGuardUser> {
   const note = "QuickPing Google signup - one-time 10GB gift";
   const templateId = await optionalTemplateId(client);
-  if (templateId) {
-    return client.createUserFromTemplate(templateId, username, note);
-  }
-  return createDirectGoogleFreeUser(username, GOOGLE_FREE_QUOTA_BYTES, note);
+  if (templateId) return client.createUserFromTemplate(templateId, username, note);
+  return client.createUser(username, GOOGLE_FREE_QUOTA_BYTES, groupIdsFromVisibleUsers(visibleUsers), note, 1);
 }
 
 export async function ensureGoogleFreeService(
@@ -101,21 +114,18 @@ export async function ensureGoogleFreeService(
   });
   if (existing) {
     const externalUserId = Number(existing.externalUserId);
-    if (!Number.isSafeInteger(externalUserId)) {
-      throw new PasarGuardError("invalid_response", "شناسه سرویس رایگان پاسارگارد معتبر نیست");
-    }
+    if (!Number.isSafeInteger(externalUserId)) throw new PasarGuardError("invalid_response", "شناسه سرویس رایگان پاسارگارد معتبر نیست");
     const remote = await client.getUser(externalUserId);
-    if (remote.dataLimit !== GOOGLE_FREE_QUOTA_BYTES) {
-      throw new PasarGuardError("invalid_response", "حجم سرویس رایگان پاسارگارد تغییر کرده است");
-    }
+    if (remote.dataLimit !== GOOGLE_FREE_QUOTA_BYTES) throw new PasarGuardError("invalid_response", "حجم سرویس رایگان پاسارگارد تغییر کرده است");
     return syncPasarGuardBinding(existing.id, client);
   }
 
   const stableUsername = googleFreeUsername(googleSubject);
-  let remote = findRemote(await client.listUsers(), stableUsername);
+  const visibleUsers = await client.listUsers();
+  let remote = findRemote(visibleUsers, stableUsername);
   if (!remote) {
     try {
-      remote = await createRemote(client, stableUsername);
+      remote = await createRemote(client, stableUsername, visibleUsers);
     } catch (error) {
       remote = findRemote(await client.listUsers(), stableUsername);
       if (!remote) throw error;
@@ -136,9 +146,7 @@ export async function ensureGoogleFreeService(
       where: { externalUserId: BigInt(remote.id) },
       include: { service: { select: { userId: true, isFree: true } } },
     });
-    if (recovered?.service.userId === quickPingUserId && recovered.service.isFree) {
-      return syncPasarGuardBinding(recovered.id, client);
-    }
+    if (recovered?.service.userId === quickPingUserId && recovered.service.isFree) return syncPasarGuardBinding(recovered.id, client);
     throw error;
   }
 }
