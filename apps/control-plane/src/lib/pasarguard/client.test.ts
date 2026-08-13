@@ -49,4 +49,40 @@ describe("PasarGuard API client", () => {
     expect(usersUrl.pathname).toBe("/api/users");
     expect(usersInit.headers).toMatchObject({ authorization: "Bearer test-token" });
   });
+
+  it("reads user templates with quota and one-time reset metadata", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "template-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{
+        id: 9,
+        name: "Google Free 10GB",
+        data_limit: 10737418240,
+        expire_duration: 0,
+        group_ids: [1, 2],
+        status: "active",
+        is_disabled: false,
+        data_limit_reset_strategy: "no_reset",
+      }]), { status: 200 }));
+    const client = new PasarGuardClient({
+      baseUrl: normalizePasarGuardBaseUrl("https://panel.example.com/dashboard"),
+      username: "admin",
+      password: "test-password",
+      fetch: fetcher as unknown as typeof fetch,
+    });
+
+    const templates = await client.listUserTemplates();
+
+    expect(templates).toEqual([{
+      id: 9,
+      name: "Google Free 10GB",
+      dataLimit: 10737418240n,
+      expireDurationSeconds: 0,
+      groupIds: [1, 2],
+      status: "active",
+      isDisabled: false,
+      resetStrategy: "no_reset",
+    }]);
+    const [templatesUrl] = fetcher.mock.calls[1] as [URL, RequestInit];
+    expect(templatesUrl.pathname).toBe("/api/user_templates");
+  });
 });

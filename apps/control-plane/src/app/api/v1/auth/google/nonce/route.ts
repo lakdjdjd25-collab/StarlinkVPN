@@ -4,8 +4,8 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { GoogleAuthError, googleWebClientId } from "@/lib/google-auth";
-import { isPasarGuardConfigured, PasarGuardError } from "@/lib/pasarguard/client";
-import { pasarGuardFreeTemplateId } from "@/lib/pasarguard/google-free";
+import { createPasarGuardClient, isPasarGuardConfigured, PasarGuardError } from "@/lib/pasarguard/client";
+import { resolveGoogleFreeTemplateId } from "@/lib/pasarguard/google-free";
 
 const schema = z.object({
   installationId: z.string().min(8).max(160),
@@ -21,10 +21,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const serverClientId = googleWebClientId();
-    pasarGuardFreeTemplateId();
     if (!isPasarGuardConfigured()) {
       throw new PasarGuardError("not_configured", "اتصال پاسارگارد برای سرویس رایگان تنظیم نشده است");
     }
+    // Read-only preflight: make sure an unambiguous one-time 10GB template exists before opening Google UI.
+    await resolveGoogleFreeTemplateId(createPasarGuardClient());
 
     const challengeId = randomUUID();
     const nonce = randomBytes(32).toString("base64url");

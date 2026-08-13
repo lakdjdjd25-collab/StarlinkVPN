@@ -11,6 +11,17 @@ const rawUserSchema = z.object({
   hwid_limit: z.coerce.number().int().positive().nullable().optional(),
 });
 
+const rawTemplateSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  name: z.string().nullable().optional(),
+  data_limit: trafficValue,
+  expire_duration: z.coerce.number().int().nonnegative().nullable().optional(),
+  group_ids: z.array(z.coerce.number().int().positive()).default([]),
+  status: z.string().nullable().optional(),
+  is_disabled: z.boolean().nullable().optional(),
+  data_limit_reset_strategy: z.string().nullable().optional(),
+});
+
 const usersResponseSchema = z.object({
   users: z.array(rawUserSchema),
   total: z.number().int().nonnegative(),
@@ -28,6 +39,17 @@ export type PasarGuardUser = {
   dataLimit: bigint | null;
   expiresAt: Date | null;
   maxDevices: number | null;
+};
+
+export type PasarGuardUserTemplate = {
+  id: number;
+  name: string;
+  dataLimit: bigint | null;
+  expireDurationSeconds: number | null;
+  groupIds: number[];
+  status: string;
+  isDisabled: boolean;
+  resetStrategy: string;
 };
 
 type PasarGuardCredentials = {
@@ -85,6 +107,20 @@ function mapUser(input: z.infer<typeof rawUserSchema>): PasarGuardUser {
     dataLimit: dataLimit > 0n ? dataLimit : null,
     expiresAt: parseExpiry(input.expire),
     maxDevices: input.hwid_limit ?? null,
+  };
+}
+
+function mapTemplate(input: z.infer<typeof rawTemplateSchema>): PasarGuardUserTemplate {
+  const dataLimit = toBigInt(input.data_limit);
+  return {
+    id: input.id,
+    name: input.name?.trim() || `Template ${input.id}`,
+    dataLimit: dataLimit > 0n ? dataLimit : null,
+    expireDurationSeconds: input.expire_duration ?? null,
+    groupIds: input.group_ids,
+    status: input.status?.trim().toLowerCase() || "active",
+    isDisabled: input.is_disabled ?? false,
+    resetStrategy: input.data_limit_reset_strategy?.trim().toLowerCase() || "no_reset",
   };
 }
 
@@ -220,6 +256,15 @@ export class PasarGuardClient {
       throw new PasarGuardError("invalid_response", "فهرست کاربران پاسارگارد ساختار معتبری ندارد");
     }
     return parsed.data.users.map(mapUser);
+  }
+
+  async listUserTemplates(): Promise<PasarGuardUserTemplate[]> {
+    const response = await this.authorized("api/user_templates");
+    const parsed = z.array(rawTemplateSchema).safeParse(await response.json().catch(() => null));
+    if (!parsed.success) {
+      throw new PasarGuardError("invalid_response", "فهرست قالب‌های پاسارگارد ساختار معتبری ندارد");
+    }
+    return parsed.data.map(mapTemplate);
   }
 
   async getUser(id: number): Promise<PasarGuardUser> {
