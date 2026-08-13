@@ -59,6 +59,10 @@ android {
     sourceSets.getByName("main").assets.srcDir(generatedLicenseAssets)
 
     packaging {
+        // Match the reference APK's install packaging: compress the large
+        // native sing-box libraries in the APK and extract them on-device.
+        // This keeps direct downloads close to the original app's size.
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf(
             "/META-INF/{AL2.0,LGPL2.1}",
             "/META-INF/LICENSE*",
