@@ -1,7 +1,10 @@
 package org.quickping.app.ui.screens
 
-import androidx.compose.foundation.Image
+import android.net.Uri
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,9 +13,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -21,10 +26,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
@@ -42,185 +48,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
+import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.barcode.common.Barcode
 import org.quickping.app.R
+import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.quickping.app.model.AppLanguage
-import org.quickping.app.ui.components.StatusPill
 
 private val supportedLanguages = AppLanguage.entries
-
-@Composable
-private fun LoginEmailBar(
-    email: String,
-    onEmailChange: (String) -> Unit,
-    enabled: Boolean,
-    onSubmit: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .background(QuickPingColors.Surface.copy(alpha = 0.95f), RoundedCornerShape(17.dp))
-            .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(17.dp))
-            .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            painterResource(R.drawable.ic_mail),
-            contentDescription = null,
-            tint = QuickPingColors.TextSecondary,
-            modifier = Modifier
-                .padding(horizontal = 9.dp)
-                .size(20.dp),
-        )
-        Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            if (email.isEmpty()) {
-                Text(
-                    quickText("ایمیل خود را وارد کنید", "Enter your email"),
-                    color = QuickPingColors.TextMuted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            BasicTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                textStyle = MaterialTheme.typography.bodyMedium.merge(
-                    TextStyle(color = QuickPingColors.TextPrimary, textAlign = TextAlign.Start),
-                ),
-                cursorBrush = SolidColor(QuickPingColors.Primary),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .background(QuickPingColors.SurfacePressed, RoundedCornerShape(11.dp))
-                .clickable(enabled = enabled && email.contains("@"), onClick = onSubmit),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painterResource(R.drawable.ic_chevron_end),
-                contentDescription = quickText("ادامه", "Continue"),
-                tint = if (email.contains("@")) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun OrDivider() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-            drawLine(QuickPingColors.Border, start = androidx.compose.ui.geometry.Offset.Zero, end = androidx.compose.ui.geometry.Offset(size.width, 0f))
-        }
-        Text(
-            quickText("یا", "or"),
-            modifier = Modifier.padding(horizontal = 9.dp),
-            color = QuickPingColors.TextMuted,
-            style = MaterialTheme.typography.labelSmall,
-        )
-        Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-            drawLine(QuickPingColors.Border, start = androidx.compose.ui.geometry.Offset.Zero, end = androidx.compose.ui.geometry.Offset(size.width, 0f))
-        }
-    }
-}
-
-@Composable
-private fun LoginSquareButton(
-    icon: Int,
-    contentDescription: String,
-    onClick: () -> Unit,
-    iconTint: Color = QuickPingColors.TextPrimary,
-) {
-    Box(
-        modifier = Modifier
-            .size(66.dp)
-            .background(QuickPingColors.Background.copy(alpha = 0.75f), RoundedCornerShape(17.dp))
-            .border(1.dp, QuickPingColors.Border, RoundedCornerShape(17.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painterResource(icon),
-            contentDescription = contentDescription,
-            tint = iconTint,
-            modifier = Modifier.size(25.dp),
-        )
-    }
-}
-
-@Composable
-private fun BusyLoginDialog(onCancel: () -> Unit) {
-    Dialog(onDismissRequest = {}) {
-        Column(
-            modifier = Modifier
-                .width(278.dp)
-                .background(QuickPingColors.SurfaceHigh, RoundedCornerShape(24.dp))
-                .border(1.dp, QuickPingColors.TextMuted, RoundedCornerShape(24.dp))
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .background(Color(0xFF5D646D), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = QuickPingColors.TextPrimary,
-                    strokeWidth = 2.dp,
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-            Text(
-                quickText("در حال دریافت سرویس‌های شما...", "Loading your services…"),
-                color = QuickPingColors.TextPrimary,
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(20.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(42.dp)
-                    .background(QuickPingColors.SurfacePressed, RoundedCornerShape(13.dp))
-                    .clickable(onClick = onCancel),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    quickText("انصراف", "Cancel"),
-                    color = QuickPingColors.TextSecondary,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-        }
-    }
-}
+private const val LOGIN_MOTION_MS = 280
 
 @Composable
 fun LoginScreen(
@@ -237,28 +92,75 @@ fun LoginScreen(
     onGoogleRequested: () -> Unit,
     onHelpRequested: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+
     var showLanguages by remember { mutableStateOf(false) }
     var showPasswordLogin by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf("") }
+    var license by remember { mutableStateOf("") }
     var passwordEmail by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var verificationCode by remember { mutableStateOf("") }
+    var scanError by remember { mutableStateOf<String?>(null) }
+
+    val logoWidth by animateDpAsState(
+        if (keyboardVisible) 104.dp else 156.dp,
+        tween(LOGIN_MOTION_MS),
+        label = "loginLogoWidth",
+    )
+    val logoHeight by animateDpAsState(
+        if (keyboardVisible) 70.dp else 105.dp,
+        tween(LOGIN_MOTION_MS),
+        label = "loginLogoHeight",
+    )
+    val heroTop by animateDpAsState(
+        if (keyboardVisible) 2.dp else 50.dp,
+        tween(LOGIN_MOTION_MS),
+        label = "loginHeroTop",
+    )
+    val heroGap by animateDpAsState(
+        if (keyboardVisible) 3.dp else 10.dp,
+        tween(LOGIN_MOTION_MS),
+        label = "loginHeroGap",
+    )
+    val lowerGap by animateDpAsState(
+        if (keyboardVisible) 5.dp else 11.dp,
+        tween(LOGIN_MOTION_MS),
+        label = "loginLowerGap",
+    )
+
+    val scannerOptions = remember {
+        GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .enableAutoZoom()
+            .build()
+    }
+    val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }
 
     LaunchedEffect(debugCode) {
         if (!debugCode.isNullOrBlank()) verificationCode = debugCode
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(QuickPingColors.Background),
-    ) {
+    Box(Modifier.fillMaxSize().background(QuickPingColors.Background)) {
         Image(
             painter = painterResource(R.drawable.bg_login),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
         )
+        Image(
+            painter = painterResource(R.drawable.header_login),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(if (keyboardVisible) 270.dp else 390.dp),
+            contentScale = ContentScale.FillWidth,
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -269,64 +171,111 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 horizontalArrangement = Arrangement.Absolute.Right,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StatusPill(
-                    text = language.label,
-                    color = QuickPingColors.TextSecondary,
-                    modifier = Modifier.clickable { showLanguages = true },
-                )
+                Row(
+                    modifier = Modifier
+                        .background(Color(0xFF111318).copy(alpha = .92f), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFF22262D), RoundedCornerShape(16.dp))
+                        .clickable { showLanguages = true }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = language.label,
+                        color = Color(0xFFB8BBC4),
+                        fontFamily = Peyda,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text("⌄", color = Color(0xFF8A8E98), fontSize = 13.sp)
+                }
             }
-            Spacer(Modifier.height(58.dp))
+
+            Spacer(Modifier.height(heroTop))
             Image(
                 painter = painterResource(R.drawable.ic_logo_welcome),
                 contentDescription = "QuickPing",
-                modifier = Modifier.size(172.dp),
+                modifier = Modifier.size(logoWidth, logoHeight),
+                contentScale = ContentScale.Fit,
             )
-            Text(
-                text = quickText("خوش‌آمدید!", "Welcome!"),
-                color = QuickPingColors.TextPrimary,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Spacer(Modifier.height(heroGap))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .width(2.dp)
+                        .height(18.dp)
+                        .background(Color(0xFF347BFF), CircleShape),
+                )
+                Spacer(Modifier.width(7.dp))
+                Text(
+                    text = quickText("خوش آمدید", "Welcome"),
+                    color = Color(0xFFCDD0D7),
+                    fontFamily = Peyda,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
             Spacer(Modifier.weight(1f))
-            LoginEmailBar(
-                email = email,
-                onEmailChange = { email = it.trim() },
+            LicenseEntryBar(
+                value = license,
                 enabled = !busy,
+                onValueChange = {
+                    license = it
+                    scanError = null
+                },
+                onBack = {
+                    if (license.isNotBlank()) license = ""
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                },
+                onScan = {
+                    scanner.startScan()
+                        .addOnSuccessListener { barcode ->
+                            val parsed = extractLicense(barcode.rawValue.orEmpty())
+                            if (parsed.isNotBlank()) {
+                                license = parsed
+                                scanError = null
+                            } else {
+                                scanError = "کد مجوز در QR پیدا نشد"
+                            }
+                        }
+                        .addOnCanceledListener { scanError = null }
+                        .addOnFailureListener { scanError = "اسکن QR انجام نشد" }
+                },
                 onSubmit = {
-                    onRequestEmailCode(email)
+                    val value = license.trim()
+                    if (value.isNotBlank()) {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onPasswordLogin(value, value)
+                    }
                 },
             )
-            if (error != null && challengeId == null) {
-                Spacer(Modifier.height(6.dp))
+
+            val visibleError = scanError ?: error?.takeIf { challengeId == null }
+            if (!visibleError.isNullOrBlank()) {
+                Spacer(Modifier.height(5.dp))
                 Text(
-                    text = error,
+                    visibleError,
                     color = QuickPingColors.Danger,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = Peyda,
+                    fontSize = 11.sp,
                     textAlign = TextAlign.Center,
                 )
             }
-            Spacer(Modifier.height(10.dp))
+
+            Spacer(Modifier.height(lowerGap))
             OrDivider()
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(lowerGap))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                LoginSquareButton(
-                    icon = R.drawable.ic_password_biometric,
-                    contentDescription = quickText("ورود با رمز عبور", "Sign in with password"),
-                    onClick = {
-                        passwordEmail = email
-                        password = ""
-                        showPasswordLogin = true
-                    },
-                )
                 Box {
                     LoginSquareButton(
                         icon = R.drawable.logo_google,
@@ -337,15 +286,14 @@ fun LoginScreen(
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 1.dp)
-                            .background(Color(0xFFE8E9EC), RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE9EAED), RoundedCornerShape(8.dp))
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             "10GB",
                             color = Color(0xFF282B31),
-                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                         )
                         Spacer(Modifier.width(2.dp))
@@ -357,8 +305,18 @@ fun LoginScreen(
                         )
                     }
                 }
+                LoginSquareButton(
+                    icon = R.drawable.ic_mail,
+                    contentDescription = quickText("ورود با ایمیل", "Sign in with email"),
+                    onClick = {
+                        passwordEmail = ""
+                        password = ""
+                        showPasswordLogin = true
+                    },
+                )
             }
-            Spacer(Modifier.height(10.dp))
+
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 10.dp))
             Row(
                 modifier = Modifier.clickable(onClick = onHelpRequested),
                 verticalAlignment = Alignment.CenterVertically,
@@ -366,285 +324,410 @@ fun LoginScreen(
                 Icon(
                     painterResource(R.drawable.ic_help_hexagon),
                     contentDescription = null,
-                    tint = QuickPingColors.TextSecondary,
+                    tint = Color(0xFF999DA7),
                     modifier = Modifier.size(15.dp),
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
                     quickText("به کمک نیاز دارید؟", "Need help?"),
-                    color = QuickPingColors.TextSecondary,
-                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF999DA7),
+                    fontFamily = Peyda,
+                    fontSize = 11.sp,
                 )
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = quickText(
-                    "با ادامه دادن، شما با شرایط سرویس‌ها و سیاست حفظ حریم خصوصی موافقت می‌کنید",
-                    "By continuing, you agree to the Terms of Service and Privacy Policy",
-                ),
-                modifier = Modifier.padding(horizontal = 12.dp),
-                color = QuickPingColors.TextMuted,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-            )
-            Spacer(Modifier.height(12.dp))
+
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 12.dp))
+            LoginTermsText()
+            Spacer(Modifier.height(if (keyboardVisible) 4.dp else 12.dp))
         }
     }
 
     if (showLanguages) {
-        Dialog(
-            onDismissRequest = { showLanguages = false },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = false,
-            ),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(QuickPingColors.Scrim)
-                    .clickable { showLanguages = false },
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            QuickPingColors.SurfaceHigh,
-                            RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
-                        )
-                        .clickable { }
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Absolute.Left,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(QuickPingColors.BackgroundRaised, CircleShape)
-                                .clickable { showLanguages = false },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                painterResource(R.drawable.ic_clear),
-                                contentDescription = quickText("بستن", "Close"),
-                                tint = QuickPingColors.TextSecondary,
-                                modifier = Modifier.size(15.dp),
-                            )
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(QuickPingColors.Primary.copy(alpha = 0.25f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.ic_language),
-                            contentDescription = null,
-                            tint = QuickPingColors.PrimaryLight,
-                            modifier = Modifier.size(23.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        quickText("انتخاب زبان برنامه", "Choose app language"),
-                        color = QuickPingColors.TextPrimary,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        supportedLanguages.forEach { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .background(QuickPingColors.Surface, RoundedCornerShape(9.dp))
-                                    .border(
-                                        1.dp,
-                                        if (language == item) QuickPingColors.TextMuted else QuickPingColors.BorderSoft,
-                                        RoundedCornerShape(9.dp),
-                                    )
-                                    .clickable {
-                                        onLanguageChange(item)
-                                        showLanguages = false
-                                    }
-                                    .padding(horizontal = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    item.label,
-                                    modifier = Modifier.weight(1f),
-                                    color = QuickPingColors.TextPrimary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    textAlign = TextAlign.End,
-                                )
-                                RadioButton(
-                                    selected = language == item,
-                                    onClick = null,
-                                    colors = RadioButtonDefaults.colors(
-                                        selectedColor = QuickPingColors.Primary,
-                                        unselectedColor = QuickPingColors.TextMuted,
-                                    ),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        LanguagePicker(
+            current = language,
+            onSelect = {
+                onLanguageChange(it)
+                showLanguages = false
+            },
+            onDismiss = { showLanguages = false },
+        )
     }
 
     if (showPasswordLogin) {
-        AlertDialog(
-            onDismissRequest = { showPasswordLogin = false },
-            containerColor = QuickPingColors.SurfaceHigh,
-            shape = RoundedCornerShape(22.dp),
-            title = {
-                Text(
-                    quickText("ورود با ایمیل و رمز عبور", "Sign in with email and password"),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = QuickPingColors.TextPrimary,
-                    textAlign = TextAlign.Center,
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = passwordEmail,
-                        onValueChange = { passwordEmail = it.trim() },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(quickText("ایمیل", "Email")) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        shape = RoundedCornerShape(13.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = QuickPingColors.Primary,
-                            unfocusedBorderColor = QuickPingColors.Border,
-                            focusedTextColor = QuickPingColors.TextPrimary,
-                            unfocusedTextColor = QuickPingColors.TextPrimary,
-                            focusedLabelColor = QuickPingColors.TextSecondary,
-                            unfocusedLabelColor = QuickPingColors.TextMuted,
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(quickText("رمز عبور", "Password")) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(13.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = QuickPingColors.Primary,
-                            unfocusedBorderColor = QuickPingColors.Border,
-                            focusedTextColor = QuickPingColors.TextPrimary,
-                            unfocusedTextColor = QuickPingColors.TextPrimary,
-                            focusedLabelColor = QuickPingColors.TextSecondary,
-                            unfocusedLabelColor = QuickPingColors.TextMuted,
-                        ),
-                    )
-                    Text(
-                        quickText(
-                            "از همان حسابی استفاده کنید که در پنل مدیریت ساخته شده است.",
-                            "Use the same account that was created in the management panel.",
-                        ),
-                        color = QuickPingColors.TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val normalizedEmail = passwordEmail.trim()
-                        email = normalizedEmail
-                        showPasswordLogin = false
-                        onPasswordLogin(normalizedEmail, password)
-                    },
-                    enabled = passwordEmail.contains("@") && password.isNotEmpty(),
-                ) {
-                    Text(quickText("ورود", "Sign in"), color = QuickPingColors.PrimaryLight)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPasswordLogin = false }) {
-                    Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary)
-                }
+        PasswordLoginDialog(
+            email = passwordEmail,
+            password = password,
+            onEmailChange = { passwordEmail = it.trim() },
+            onPasswordChange = { password = it },
+            onDismiss = { showPasswordLogin = false },
+            onSubmit = {
+                val email = passwordEmail.trim()
+                showPasswordLogin = false
+                onPasswordLogin(email, password)
             },
         )
     }
 
     if (busy) {
-        BusyLoginDialog(onCancel = onCancelChallenge)
+        BusyLoginDialog(onCancelChallenge)
     } else if (challengeId != null) {
-        AlertDialog(
-            onDismissRequest = onCancelChallenge,
-            containerColor = QuickPingColors.SurfaceHigh,
-            shape = RoundedCornerShape(22.dp),
-            title = {
-                Text(
-                    quickText("کد تأیید ایمیل", "Email verification code"),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = QuickPingColors.TextPrimary,
-                    textAlign = TextAlign.Center,
-                )
-            },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        quickText("کد شش‌رقمی ارسال‌شده به ایمیل را وارد کنید.", "Enter the six-digit code sent to your email."),
-                        color = QuickPingColors.TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    OutlinedTextField(
-                        value = verificationCode,
-                        onValueChange = { value ->
-                            verificationCode = value.filter(Char::isDigit).take(6)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        shape = RoundedCornerShape(13.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = QuickPingColors.Primary,
-                            unfocusedBorderColor = QuickPingColors.Border,
-                            focusedTextColor = QuickPingColors.TextPrimary,
-                            unfocusedTextColor = QuickPingColors.TextPrimary,
-                        ),
-                    )
-                    if (error != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            error,
-                            color = QuickPingColors.Danger,
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { onVerifyCode(verificationCode) },
-                    enabled = verificationCode.length == 6,
-                ) {
-                    Text(quickText("تأیید و ورود", "Verify and sign in"), color = QuickPingColors.PrimaryLight)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onCancelChallenge) {
-                    Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary)
-                }
-            },
+        VerificationDialog(
+            value = verificationCode,
+            error = error,
+            onValueChange = { verificationCode = it.filter(Char::isDigit).take(6) },
+            onVerify = { onVerifyCode(verificationCode) },
+            onDismiss = onCancelChallenge,
         )
     }
+}
+
+@Composable
+private fun LicenseEntryBar(
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit,
+    onBack: () -> Unit,
+    onScan: () -> Unit,
+    onSubmit: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(54.dp)
+            .background(Color(0xFF17191E), RoundedCornerShape(18.dp))
+            .border(1.dp, Color(0xFF23262D), RoundedCornerShape(18.dp))
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LoginInnerButton(R.drawable.ic_arrow_back, onBack)
+        Spacer(Modifier.width(6.dp))
+        LoginInnerButton(R.drawable.ic_scan, onScan)
+        Box(
+            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+            contentAlignment = Alignment.CenterEnd,
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    quickText("مجوز خود را وارد کنید", "Enter your license"),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF727680),
+                    fontFamily = Peyda,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.End,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                textStyle = TextStyle(
+                    color = QuickPingColors.TextPrimary,
+                    fontFamily = Peyda,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.End,
+                ),
+                cursorBrush = SolidColor(Color(0xFF4A82FF)),
+            )
+        }
+        LoginInnerButton(
+            icon = R.drawable.ic_ticket,
+            onClick = onSubmit,
+            enabled = enabled && value.isNotBlank(),
+        )
+    }
+}
+
+@Composable
+private fun LoginInnerButton(
+    icon: Int,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .background(Color(0xFF202329), RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            tint = if (enabled) Color(0xFFB9BDC6) else Color(0xFF666B75),
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun OrDivider() {
+    Row(Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.weight(1f).height(1.dp)) {
+            drawLine(Color(0xFF292C33), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset(size.width, 0f))
+        }
+        Text(
+            quickText("یا", "or"),
+            modifier = Modifier.padding(horizontal = 11.dp),
+            color = Color(0xFF7B7F89),
+            fontFamily = Peyda,
+            fontSize = 11.sp,
+        )
+        Canvas(Modifier.weight(1f).height(1.dp)) {
+            drawLine(Color(0xFF292C33), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset(size.width, 0f))
+        }
+    }
+}
+
+@Composable
+private fun LoginSquareButton(icon: Int, contentDescription: String, onClick: () -> Unit, iconTint: Color = QuickPingColors.TextPrimary) {
+    Box(
+        modifier = Modifier
+            .size(72.dp)
+            .background(Color(0xFF080A0D).copy(alpha = .9f), RoundedCornerShape(22.dp))
+            .border(1.dp, Color(0xFF252830), RoundedCornerShape(22.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(painterResource(icon), contentDescription, tint = iconTint, modifier = Modifier.size(27.dp))
+    }
+}
+
+@Composable
+private fun LoginTermsText() {
+    Text(
+        text = buildAnnotatedString {
+            append(quickText("با ادامه دادن، شما با ", "By continuing, you agree to the "))
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Color(0xFF969AA4))) {
+                append(quickText("شرایط سرویس‌ها", "Terms of Service"))
+            }
+            append(quickText(" و ", " and "))
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Color(0xFF969AA4))) {
+                append(quickText("سیاست حفظ حریم خصوصی", "Privacy Policy"))
+            }
+            append(quickText(" موافقت می‌کنید", ""))
+        },
+        modifier = Modifier.padding(horizontal = 10.dp),
+        color = Color(0xFF70747E),
+        fontFamily = Peyda,
+        fontSize = 10.sp,
+        lineHeight = 15.sp,
+        textAlign = TextAlign.Center,
+    )
+}
+
+@Composable
+private fun LanguagePicker(current: AppLanguage, onSelect: (AppLanguage) -> Unit, onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(QuickPingColors.Scrim).clickable(onClick = onDismiss),
+            contentAlignment = Alignment.BottomCenter,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(QuickPingColors.SurfaceHigh, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                    .clickable { }
+                    .navigationBarsPadding()
+                    .padding(12.dp),
+            ) {
+                Text(
+                    quickText("انتخاب زبان برنامه", "Choose app language"),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    color = QuickPingColors.TextPrimary,
+                    fontFamily = Peyda,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                )
+                supportedLanguages.forEach { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(46.dp)
+                            .background(Color(0xFF101318), RoundedCornerShape(10.dp))
+                            .clickable { onSelect(item) }
+                            .padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(item.label, modifier = Modifier.weight(1f), color = QuickPingColors.TextPrimary, fontFamily = Peyda, textAlign = TextAlign.End)
+                        RadioButton(
+                            selected = current == item,
+                            onClick = null,
+                            colors = RadioButtonDefaults.colors(selectedColor = QuickPingColors.Primary, unselectedColor = QuickPingColors.TextMuted),
+                        )
+                    }
+                    Spacer(Modifier.height(5.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PasswordLoginDialog(
+    email: String,
+    password: String,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSubmit: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = QuickPingColors.SurfaceHigh,
+        shape = RoundedCornerShape(22.dp),
+        title = {
+            Text(
+                quickText("ورود با ایمیل", "Sign in with email"),
+                modifier = Modifier.fillMaxWidth(),
+                color = QuickPingColors.TextPrimary,
+                fontFamily = Peyda,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = onEmailChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(quickText("ایمیل", "Email")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    shape = RoundedCornerShape(13.dp),
+                    colors = loginFieldColors(),
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = onPasswordChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(quickText("رمز عبور", "Password")) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(13.dp),
+                    colors = loginFieldColors(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSubmit, enabled = email.contains("@") && password.isNotEmpty()) {
+                Text(quickText("ورود", "Sign in"), color = QuickPingColors.PrimaryLight)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary) }
+        },
+    )
+}
+
+@Composable
+private fun VerificationDialog(
+    value: String,
+    error: String?,
+    onValueChange: (String) -> Unit,
+    onVerify: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = QuickPingColors.SurfaceHigh,
+        shape = RoundedCornerShape(22.dp),
+        title = {
+            Text(
+                quickText("کد تأیید ایمیل", "Email verification code"),
+                modifier = Modifier.fillMaxWidth(),
+                color = QuickPingColors.TextPrimary,
+                textAlign = TextAlign.Center,
+            )
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    quickText("کد شش‌رقمی ارسال‌شده به ایمیل را وارد کنید.", "Enter the six-digit code sent to your email."),
+                    color = QuickPingColors.TextSecondary,
+                    fontFamily = Peyda,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    shape = RoundedCornerShape(13.dp),
+                    colors = loginFieldColors(),
+                )
+                if (!error.isNullOrBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(error, color = QuickPingColors.Danger, fontSize = 11.sp, textAlign = TextAlign.Center)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onVerify, enabled = value.length == 6) {
+                Text(quickText("تأیید و ورود", "Verify and sign in"), color = QuickPingColors.PrimaryLight)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary) }
+        },
+    )
+}
+
+@Composable
+private fun BusyLoginDialog(onCancel: () -> Unit) {
+    Dialog(onDismissRequest = {}) {
+        Column(
+            modifier = Modifier
+                .width(278.dp)
+                .background(QuickPingColors.SurfaceHigh, RoundedCornerShape(24.dp))
+                .border(1.dp, QuickPingColors.TextMuted, RoundedCornerShape(24.dp))
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp), color = QuickPingColors.TextPrimary, strokeWidth = 2.dp)
+            Spacer(Modifier.height(14.dp))
+            Text(
+                quickText("در حال دریافت سرویس‌های شما...", "Loading your services…"),
+                color = QuickPingColors.TextPrimary,
+                fontFamily = Peyda,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(18.dp))
+            TextButton(onClick = onCancel) { Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary) }
+        }
+    }
+}
+
+@Composable
+private fun loginFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = QuickPingColors.Primary,
+    unfocusedBorderColor = QuickPingColors.Border,
+    focusedTextColor = QuickPingColors.TextPrimary,
+    unfocusedTextColor = QuickPingColors.TextPrimary,
+    focusedLabelColor = QuickPingColors.TextSecondary,
+    unfocusedLabelColor = QuickPingColors.TextMuted,
+)
+
+private fun extractLicense(raw: String): String {
+    val value = raw.trim()
+    if (value.isBlank()) return ""
+    if (!value.contains("://")) return value
+    return runCatching {
+        val uri = Uri.parse(value)
+        listOf("license", "code", "key")
+            .firstNotNullOfOrNull { uri.getQueryParameter(it)?.trim()?.takeIf(String::isNotBlank) }
+            ?: uri.lastPathSegment?.trim()?.takeIf(String::isNotBlank)
+            ?: value
+    }.getOrDefault(value)
 }

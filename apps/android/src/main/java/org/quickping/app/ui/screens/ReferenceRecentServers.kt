@@ -38,54 +38,49 @@ internal fun ReferenceRecentServers(
     onSelectServer: (String) -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(140.dp),
+        modifier = Modifier.fillMaxWidth().height(149.dp),
     ) {
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(15.dp))
         Text(
             text = quickText("اخیراً متصل‌شده", "Recently connected"),
             modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF9B9EA7),
+            color = Color(0xFFA7AAB3),
             fontFamily = Peyda,
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.End,
         )
         Spacer(Modifier.height(9.dp))
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(98.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().height(104.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 state.servers.take(3).forEach { server ->
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(21.dp))
-                            .background(ReferenceCardColor.copy(alpha = 0.91f))
-                            .border(1.dp, ReferenceStrokeColor, RoundedCornerShape(21.dp))
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(ReferenceCardColor)
+                            .border(1.dp, ReferenceStrokeColor, RoundedCornerShape(22.dp))
                             .clickable { onSelectServer(server.id) }
-                            .padding(vertical = 10.dp, horizontal = 6.dp),
+                            .padding(vertical = 9.dp, horizontal = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
                         ReferenceFlag(
                             server = server,
-                            modifier = Modifier
-                                .size(width = 38.dp, height = 23.dp)
-                                .clip(RoundedCornerShape(5.dp)),
+                            modifier = Modifier.size(width = 44.dp, height = 27.dp).clip(RoundedCornerShape(6.dp)),
                         )
                         Spacer(Modifier.height(5.dp))
                         Text(
                             text = referenceServerTitle(server, state.servers),
                             color = QuickPingColors.TextPrimary,
                             fontFamily = Peyda,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )

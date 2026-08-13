@@ -19,6 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,6 +35,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import java.net.InetAddress
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
@@ -43,12 +55,12 @@ internal fun ReferenceConnectionPanel(
 ) {
     val server = state.servers.firstOrNull { it.id == state.selectedServerId }
     val connected = state.connectionStatus == ConnectionStatus.Connected
-    val panelShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+    val panelShape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(146.dp)
+            .height(151.dp)
             .clip(panelShape)
             .background(ReferencePanelColor),
     ) {
@@ -61,13 +73,13 @@ internal fun ReferenceConnectionPanel(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
-                        .clip(RoundedCornerShape(39.dp))
-                        .background(if (connected) Color(0xFFDDE5FA) else Color(0xFF8B90A3))
+                        .size(114.dp)
+                        .clip(RoundedCornerShape(40.dp))
+                        .background(if (connected) Color(0xFFE1E7F7) else Color(0xFF8B90A3))
                         .border(
                             1.dp,
-                            if (connected) Color(0xFFE9EEFC) else Color(0xFF9BA1B5),
-                            RoundedCornerShape(39.dp),
+                            if (connected) Color(0xFFF0F3FC) else Color(0xFF9BA1B5),
+                            RoundedCornerShape(40.dp),
                         )
                         .clickable(enabled = state.servers.isNotEmpty(), onClick = onToggleConnection),
                     contentAlignment = Alignment.Center,
@@ -79,7 +91,7 @@ internal fun ReferenceConnectionPanel(
                             ),
                             contentDescription = quickText("اتصال", "Connect"),
                             tint = if (status == ConnectionStatus.Connected) Color(0xFF242A36) else Color.White,
-                            modifier = Modifier.size(width = 45.dp, height = 48.dp),
+                            modifier = Modifier.size(width = 49.dp, height = 52.dp),
                         )
                     }
                 }
@@ -104,10 +116,10 @@ private fun ReferenceSelectedSummary(
     bestLocationSelected: Boolean,
 ) {
     if (bestLocationSelected && server != null) {
-        Column(Modifier.width(125.dp), horizontalAlignment = Alignment.End) {
+        Column(Modifier.width(135.dp), horizontalAlignment = Alignment.End) {
             Box(
                 modifier = Modifier
-                    .size(width = 86.dp, height = 53.dp)
+                    .size(width = 92.dp, height = 56.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(14.dp)),
                 contentAlignment = Alignment.Center,
@@ -116,7 +128,7 @@ private fun ReferenceSelectedSummary(
                     painter = painterResource(R.drawable.ic_rocket),
                     contentDescription = null,
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(47.dp),
                 )
             }
             Spacer(Modifier.height(5.dp))
@@ -141,21 +153,55 @@ private fun ReferenceSelectedSummary(
     if (server == null) {
         ReferenceRtlText(
             quickText("سروری در دسترس نیست", "No server is available"),
-            Modifier.width(155.dp),
-            13,
+            Modifier.width(165.dp),
+            14,
             FontWeight.SemiBold,
             QuickPingColors.TextPrimary,
         )
         return
     }
 
+    val connected = state.connectionStatus == ConnectionStatus.Connected
+    var connectedAt by rememberSaveable(server.id) { mutableLongStateOf(0L) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(state.connectionStatus, server.id) {
+        if (connected) {
+            if (connectedAt <= 0L) connectedAt = System.currentTimeMillis()
+            while (true) {
+                now = System.currentTimeMillis()
+                delay(1_000)
+            }
+        } else {
+            connectedAt = 0L
+            now = System.currentTimeMillis()
+        }
+    }
+    val connectedAddress by produceState(
+        initialValue = server.host.ifBlank { "—" },
+        key1 = state.connectionStatus,
+        key2 = server.host,
+    ) {
+        if (connected) {
+            value = withContext(Dispatchers.IO) {
+                runCatching { InetAddress.getByName(server.host).hostAddress }
+                    .getOrNull()
+                    ?.takeIf(String::isNotBlank)
+                    ?: server.host.ifBlank { "—" }
+            }
+        } else {
+            value = server.host.ifBlank { "—" }
+        }
+    }
+
     Row(verticalAlignment = Alignment.Top) {
         ReferencePingChip(server.pingMs)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.width(90.dp), horizontalAlignment = Alignment.End) {
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.width(112.dp), horizontalAlignment = Alignment.End) {
             ReferenceFlag(
                 server,
-                Modifier.size(width = 86.dp, height = 53.dp).clip(RoundedCornerShape(12.dp)),
+                Modifier
+                    .size(width = 92.dp, height = 56.dp)
+                    .clip(RoundedCornerShape(13.dp)),
             )
             Spacer(Modifier.height(6.dp))
             ReferenceRtlText(
@@ -165,24 +211,41 @@ private fun ReferenceSelectedSummary(
                 FontWeight.Bold,
                 QuickPingColors.TextPrimary,
             )
-            val info = if (state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank()) {
-                state.connectionErrorCode
-                    ?.takeIf(String::isNotBlank)
-                    ?.let { code -> "[$code] ${state.connectionError.orEmpty()}" }
-                    ?: state.connectionError.orEmpty()
-            } else {
-                quickText(
-                    "شبکهٔ ${server.countryName}  •  ------",
-                    "${server.countryName} network  •  ------",
+            val info = when {
+                state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank() -> {
+                    state.connectionErrorCode
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { code -> "[$code] ${state.connectionError.orEmpty()}" }
+                        ?: state.connectionError.orEmpty()
+                }
+                connected -> {
+                    val elapsed = (now - connectedAt).coerceAtLeast(0L)
+                    "${formatConnectionDuration(elapsed)}  •  $connectedAddress"
+                }
+                state.connectionStatus == ConnectionStatus.Connecting -> quickText(
+                    "در حال اتصال…",
+                    "Connecting…",
+                )
+                else -> quickText(
+                    "شبکهٔ ${referenceCountryName(server)}  •  ------",
+                    "${referenceCountryName(server)} network  •  ------",
                 )
             }
             ReferenceRtlText(
                 info,
-                Modifier.widthIn(max = 125.dp),
-                10,
-                FontWeight.Normal,
-                QuickPingColors.TextMuted,
+                Modifier.widthIn(max = 150.dp),
+                11,
+                FontWeight.Medium,
+                if (connected) Color(0xFF8F949F) else QuickPingColors.TextMuted,
             )
         }
     }
+}
+
+private fun formatConnectionDuration(elapsedMillis: Long): String {
+    val totalSeconds = elapsedMillis / 1_000L
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
 }
