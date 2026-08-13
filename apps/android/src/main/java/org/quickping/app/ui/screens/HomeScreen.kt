@@ -53,6 +53,7 @@ import org.quickping.app.core.design.Bitcount
 import org.quickping.app.core.design.MonaSans
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
+import org.quickping.app.core.design.quickText
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.Server
 import org.quickping.app.state.QuickPingUiState
@@ -189,10 +190,10 @@ private fun HomeHeader(
             }
             Text(
                 text = when (state.connectionStatus) {
-                    ConnectionStatus.Connected -> "is Connected"
-                    ConnectionStatus.Connecting -> "is Connecting"
-                    ConnectionStatus.Error -> "Connection Error"
-                    ConnectionStatus.Disconnected -> "is Disconnected"
+                    ConnectionStatus.Connected -> quickText("متصل است", "is Connected")
+                    ConnectionStatus.Connecting -> quickText("در حال اتصال", "is Connecting")
+                    ConnectionStatus.Error -> quickText("خطای اتصال", "Connection Error")
+                    ConnectionStatus.Disconnected -> quickText("قطع است", "is Disconnected")
                 },
                 color = Color(0xFF8B8D94),
                 fontFamily = Bitcount,
@@ -228,7 +229,7 @@ private fun HomePlanPill(isFree: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (isFree) "رایگان" else "ارتقا",
+            text = if (isFree) quickText("رایگان", "Free") else quickText("ارتقا", "Upgrade"),
             color = if (isFree) QuickPingColors.TextSecondary else Color.White,
             style = MaterialTheme.typography.labelMedium,
         )
@@ -297,7 +298,7 @@ private fun ConnectionPanel(
                             painter = painterResource(
                                 if (status == ConnectionStatus.Connecting) R.drawable.ic_reload else R.drawable.ic_power,
                             ),
-                            contentDescription = "اتصال",
+                            contentDescription = quickText("اتصال", "Connect"),
                             tint = Color.White,
                             modifier = Modifier.size(width = 42.dp, height = 45.dp),
                         )
@@ -348,14 +349,14 @@ private fun SelectedServerSummary(
             }
             Spacer(Modifier.height(5.dp))
             HomeRtlText(
-                text = "بهترین مکان",
+                text = quickText("بهترین مکان", "Best location"),
                 modifier = Modifier.fillMaxWidth(),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = QuickPingColors.TextPrimary,
             )
             HomeRtlText(
-                text = "شبکهٔ سریع‌تر  •  ------",
+                text = quickText("شبکهٔ سریع‌تر  •  ------", "Fastest network  •  ------"),
                 modifier = Modifier.fillMaxWidth(),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Normal,
@@ -386,7 +387,7 @@ private fun SelectedServerSummary(
             }
             Spacer(Modifier.height(7.dp))
             HomeRtlText(
-                text = "سروری در دسترس نیست",
+                text = quickText("سروری در دسترس نیست", "No server is available"),
                 modifier = Modifier.fillMaxWidth(),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -420,7 +421,7 @@ private fun SelectedServerSummary(
                 text = if (state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank()) {
                     state.connectionError
                 } else {
-                    "شبکهٔ ${server.countryName}  •  ------"
+                    quickText("شبکهٔ ${server.countryName}  •  ------", "${server.countryName} network  •  ------")
                 },
                 modifier = Modifier.widthIn(max = 110.dp),
                 fontSize = 10.sp,
@@ -518,7 +519,7 @@ private fun RecentlyConnectedServers(
     ) {
         Spacer(Modifier.height(14.dp))
         Text(
-            text = "اخیراً متصل‌شده",
+            text = quickText("اخیراً متصل‌شده", "Recently connected"),
             modifier = Modifier.fillMaxWidth(),
             color = QuickPingColors.TextSecondary,
             fontFamily = Peyda,
@@ -578,7 +579,7 @@ private fun HomeFilterRow() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "همه",
+            text = quickText("همه", "All"),
             color = QuickPingColors.TextPrimary,
             fontFamily = Peyda,
             fontSize = 12.sp,
@@ -586,16 +587,16 @@ private fun HomeFilterRow() {
         )
         Spacer(Modifier.width(14.dp))
         Text(
-            text = "کمپینگ",
+            text = quickText("کمپینگ", "Campaign"),
             color = QuickPingColors.TextMuted,
             fontFamily = Peyda,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
         Spacer(Modifier.weight(1f))
-        HomeRoundIconButton(R.drawable.ic_filter, "فیلتر")
+        HomeRoundIconButton(R.drawable.ic_filter, quickText("فیلتر", "Filter"))
         Spacer(Modifier.width(4.dp))
-        HomeRoundIconButton(R.drawable.ic_search, "جستجو")
+        HomeRoundIconButton(R.drawable.ic_search, quickText("جستجو", "Search"))
     }
 }
 
@@ -659,7 +660,7 @@ private fun BestLocationRow(selected: Boolean, onClick: () -> Unit) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = "بهترین مکان",
+            text = quickText("بهترین مکان", "Best location"),
             color = QuickPingColors.TextPrimary,
             fontFamily = Peyda,
             fontSize = 15.sp,

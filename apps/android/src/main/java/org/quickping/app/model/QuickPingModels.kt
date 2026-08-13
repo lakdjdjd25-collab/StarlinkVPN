@@ -99,8 +99,8 @@ enum class AppLanguage(
     Turkish("tr", "Türkçe"),
     Russian("ru", "Русский"),
     Hindi("hi", "हिन्दी"),
-    Chinese("zh", "中文"),
-    Urdu("ur", "اردو"),
+    Chinese("zh", "汉语"),
+    Urdu("ur", "اُردُو"),
     ;
 
     companion object {

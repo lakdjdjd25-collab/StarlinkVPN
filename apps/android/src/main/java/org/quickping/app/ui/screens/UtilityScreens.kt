@@ -45,7 +45,7 @@ import org.quickping.app.ui.components.StatusPill
 @Composable
 fun NotificationsScreen(notifications: List<NotificationItem>, onBack: () -> Unit) {
     QuickPingScreen {
-        QuickPingTopBar(title = "اعلان‌ها", onBack = onBack)
+        QuickPingTopBar(title = quickText("اعلان‌ها", "Notifications"), onBack = onBack)
         if (notifications.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -61,13 +61,16 @@ fun NotificationsScreen(notifications: List<NotificationItem>, onBack: () -> Uni
                 )
                 Spacer(Modifier.height(18.dp))
                 Text(
-                    "اعلانی وجود ندارد",
+                    quickText("اعلانی وجود ندارد", "No notifications"),
                     color = QuickPingColors.TextPrimary,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "وقتی خبر یا تغییر مهمی وجود داشته باشد، اینجا نمایش داده می‌شود.",
+                    quickText(
+                        "وقتی خبر یا تغییر مهمی وجود داشته باشد، اینجا نمایش داده می‌شود.",
+                        "Important news and changes will appear here.",
+                    ),
                     color = QuickPingColors.TextMuted,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
@@ -162,7 +165,7 @@ fun VersionScreen(release: AppRelease?, onBack: () -> Unit) {
 @Composable
 fun ServicesScreen(service: Service, onBack: () -> Unit) {
     QuickPingScreen {
-        QuickPingTopBar(title = "سرویس‌ها", onBack = onBack)
+        QuickPingTopBar(title = quickText("سرویس‌ها", "Services"), onBack = onBack)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -172,7 +175,7 @@ fun ServicesScreen(service: Service, onBack: () -> Unit) {
                 Column(Modifier.padding(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "سرویس فعال",
+                            quickText("سرویس فعال", "Active service"),
                             modifier = Modifier.weight(1f),
                             color = QuickPingColors.Success,
                             style = MaterialTheme.typography.labelSmall,
@@ -190,16 +193,16 @@ fun ServicesScreen(service: Service, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        ServiceMetric(Modifier.weight(1f), "${service.daysLeft} روز", "اعتبار")
-                        ServiceMetric(Modifier.weight(1f), "${bytesToGb(service.remainingBytes)}GB", "حجم باقی‌مانده")
+                        ServiceMetric(Modifier.weight(1f), "${service.daysLeft} ${quickText("روز", "days")}", quickText("اعتبار", "Validity"))
+                        ServiceMetric(Modifier.weight(1f), "${bytesToGb(service.remainingBytes)}GB", quickText("حجم باقی‌مانده", "Data remaining"))
                     }
                 }
             }
             Spacer(Modifier.height(10.dp))
             GlassCard(Modifier.fillMaxWidth()) {
                 SettingRow(
-                    title = "افزودن سرویس",
-                    subtitle = "کلید مجوز یا لینک اشتراک",
+                    title = quickText("افزودن سرویس", "Add service"),
+                    subtitle = quickText("کلید مجوز یا لینک اشتراک", "License key or subscription link"),
                     icon = R.drawable.ic_add,
                 )
             }

@@ -101,10 +101,15 @@ fun QuickPingApp(
                     }
                 }
                 LoginScreen(
+                    language = state.settings.language,
                     busy = state.busy,
                     challengeId = state.loginChallengeId,
                     debugCode = state.loginDebugCode,
                     error = state.loginError,
+                    onLanguageChange = { language ->
+                        quickPingViewModel.updateSetting { it.copy(language = language) }
+                    },
+                    onRequestEmailCode = quickPingViewModel::requestEmailCode,
                     onPasswordLogin = quickPingViewModel::loginWithPassword,
                     onVerifyCode = quickPingViewModel::verifyEmailCode,
                     onCancelChallenge = quickPingViewModel::cancelLoginChallenge,

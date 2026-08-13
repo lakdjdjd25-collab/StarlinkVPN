@@ -10,10 +10,13 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
@@ -40,6 +43,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     private var loginJob: Job? = null
     private var pingJob: Job? = null
     private var accountJob: Job? = null
+    private var restartJob: Job? = null
     private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load()))
     val state: StateFlow<QuickPingUiState> = _state.asStateFlow()
 
@@ -350,19 +354,20 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun updateSetting(transform: (org.quickping.app.model.AppSettings) -> org.quickping.app.model.AppSettings) {
-        _state.update {
-            val candidate = transform(it.settings)
-            val updated = if (!candidate.splitTunnelingEnabled && !candidate.rememberSplitTunnelSettings) {
-                candidate.copy(splitTunnelPackages = emptySet(), splitTunnelAddresses = emptyList())
-            } else {
-                candidate
-            }
-            settingsStore.save(updated)
-            it.copy(settings = updated)
+        val previous = _state.value.settings
+        val candidate = transform(previous)
+        val updated = if (!candidate.splitTunnelingEnabled && !candidate.rememberSplitTunnelSettings) {
+            candidate.copy(splitTunnelPackages = emptySet(), splitTunnelAddresses = emptyList())
+        } else {
+            candidate
         }
+        settingsStore.save(updated)
+        _state.update { it.copy(settings = updated) }
+        if (previous.vpnRuntimeFingerprint() != updated.vpnRuntimeFingerprint()) restartVpnIfActive()
     }
 
     fun resetSettings() {
+        val previous = _state.value.settings
         val reset = settingsStore.reset()
         _state.update { state ->
             val guardian = state.guardianCategories.map { category ->
@@ -371,6 +376,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             settingsStore.saveGuardian(guardian)
             state.copy(settings = reset, guardianCategories = guardian)
         }
+        if (previous.vpnRuntimeFingerprint() != reset.vpnRuntimeFingerprint()) restartVpnIfActive()
     }
 
     fun toggleGuardian(id: String) {
@@ -381,6 +387,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             settingsStore.saveGuardian(updated)
             state.copy(guardianCategories = updated)
         }
+        restartVpnIfActive()
     }
 
     fun loadInstalledApps() {
@@ -420,10 +427,41 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         return merged
     }
 
+    private fun restartVpnIfActive() {
+        if (_state.value.connectionStatus !in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) return
+        restartJob?.cancel()
+        restartJob = viewModelScope.launch {
+            disconnectVpn()
+            withTimeoutOrNull(5_000) {
+                QuickPingVpnService.status.first { status -> status.state == ServiceState.Disconnected }
+            }
+            delay(150)
+            connectVpn()
+        }
+    }
+
     private companion object {
         val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
     }
 }
+
+private fun org.quickping.app.model.AppSettings.vpnRuntimeFingerprint(): List<Any> = listOf(
+    shareHotspot,
+    proxyModeEnabled,
+    localProxyEnabled,
+    splitTunnelingEnabled,
+    splitTunnelMode,
+    splitTunnelPackages,
+    splitTunnelAddresses,
+    blockIrDomains,
+    guardianEnabled,
+    dnsProvider,
+    proxyPort,
+    reconnectOnNetworkChange,
+    strictRoute,
+    ipv6Enabled,
+    mtu,
+)
 
 private fun tcpPing(host: String, port: Int): Int? = runCatching {
     val started = System.nanoTime()

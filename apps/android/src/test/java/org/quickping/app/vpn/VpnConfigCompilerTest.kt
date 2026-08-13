@@ -68,6 +68,7 @@ class VpnConfigCompilerTest {
                 splitTunnelingEnabled = true,
                 splitTunnelMode = SplitTunnelMode.Include,
                 splitTunnelAddresses = listOf("example.com"),
+                blockIrDomains = false,
             ),
             enabledGuardianCategories = emptySet(),
             applicationPackage = "org.quickping",
