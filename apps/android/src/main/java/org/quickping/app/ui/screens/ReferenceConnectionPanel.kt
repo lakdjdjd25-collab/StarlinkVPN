@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -33,14 +34,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.net.InetAddress
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.quickping.app.R
+import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.quickping.app.model.ConnectionStatus
@@ -196,7 +200,10 @@ private fun ReferenceSelectedSummary(
     Row(verticalAlignment = Alignment.Top) {
         ReferencePingChip(server.pingMs)
         Spacer(Modifier.width(11.dp))
-        Column(Modifier.width(112.dp), horizontalAlignment = Alignment.End) {
+        Column(
+            modifier = Modifier.width(132.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             ReferenceFlag(
                 server,
                 Modifier
@@ -204,12 +211,16 @@ private fun ReferenceSelectedSummary(
                     .clip(RoundedCornerShape(13.dp)),
             )
             Spacer(Modifier.height(6.dp))
-            ReferenceRtlText(
-                referenceServerTitle(server, state.servers),
-                Modifier.fillMaxWidth(),
-                19,
-                FontWeight.Bold,
-                QuickPingColors.TextPrimary,
+            Text(
+                text = referenceCountryName(server),
+                modifier = Modifier.width(110.dp),
+                color = QuickPingColors.TextPrimary,
+                fontFamily = Peyda,
+                fontSize = 19.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
             )
             val info = when {
                 state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank() -> {
@@ -231,12 +242,16 @@ private fun ReferenceSelectedSummary(
                     "${referenceCountryName(server)} network  •  ------",
                 )
             }
-            ReferenceRtlText(
-                info,
-                Modifier.widthIn(max = 150.dp),
-                11,
-                FontWeight.Medium,
-                if (connected) Color(0xFF8F949F) else QuickPingColors.TextMuted,
+            Text(
+                text = info,
+                modifier = Modifier.widthIn(max = 132.dp),
+                color = if (connected) Color(0xFF8F949F) else QuickPingColors.TextMuted,
+                fontFamily = Peyda,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
             )
         }
     }
