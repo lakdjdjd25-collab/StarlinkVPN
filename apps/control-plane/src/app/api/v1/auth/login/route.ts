@@ -5,8 +5,8 @@ import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 
 const schema = z.object({
-  email: z.email().transform((value) => value.toLowerCase()),
-  password: z.string().min(1).max(256),
+  email: z.string().trim().min(1).max(320),
+  password: z.string().max(256).default(""),
   installationId: z.string().min(8).max(160),
   deviceName: z.string().min(1).max(120),
   appVersion: z.string().max(32).optional(),
@@ -15,13 +15,29 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "Login data is invalid");
-  const user = await db.user.findUnique({ where: { email: input.data.email } });
-  if (
-    !user?.passwordHash ||
-    user.status !== "ACTIVE" ||
-    !(await verifyPassword(input.data.password, user.passwordHash))
-  ) {
-    return fail(401, "invalid_credentials", "Email or password is incorrect");
+
+  const credential = input.data.email.trim();
+  const emailLogin = credential.includes("@");
+  const service = emailLogin
+    ? null
+    : await db.service.findFirst({
+        where: { license: { equals: credential, mode: "insensitive" } },
+        include: { user: true },
+      });
+  const user = emailLogin
+    ? await db.user.findUnique({ where: { email: credential.toLowerCase() } })
+    : service?.user ?? null;
+
+  if (!user || user.status !== "ACTIVE") {
+    return fail(401, emailLogin ? "invalid_credentials" : "invalid_license", emailLogin ? "Email or password is incorrect" : "License is invalid or inactive");
+  }
+
+  if (emailLogin) {
+    if (!user.passwordHash || !(await verifyPassword(input.data.password, user.passwordHash))) {
+      return fail(401, "invalid_credentials", "Email or password is incorrect");
+    }
+  } else if (!service || service.status !== "ACTIVE" || service.expiresAt.getTime() <= Date.now()) {
+    return fail(401, "invalid_license", "License is invalid or inactive");
   }
 
   const opaque = createOpaqueToken();

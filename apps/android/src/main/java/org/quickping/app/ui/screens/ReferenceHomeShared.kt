@@ -36,6 +36,7 @@ import org.quickping.app.R
 import org.quickping.app.core.design.MonaSans
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
+import org.quickping.app.core.design.quickText
 import org.quickping.app.model.Server
 
 internal val ReferencePanelColor = Color(0xFF080A0D)
@@ -58,6 +59,7 @@ internal fun ReferenceRtlText(
             color = color,
             fontFamily = Peyda,
             fontSize = size.sp,
+            lineHeight = (size + 4).sp,
             fontWeight = weight,
             textAlign = TextAlign.End,
             maxLines = 1,
@@ -82,8 +84,8 @@ internal fun ReferencePingChip(pingMs: Int?) {
     }
     Column(
         modifier = Modifier
-            .size(width = 58.dp, height = 36.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(width = 66.dp, height = 43.dp)
+            .clip(RoundedCornerShape(15.dp))
             .background(ReferenceChipColor),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -92,14 +94,14 @@ internal fun ReferencePingChip(pingMs: Int?) {
             painter = painterResource(icon),
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(12.dp),
+            modifier = Modifier.size(17.dp),
         )
         Text(
             text = pingMs?.let { "$it ms" } ?: "click",
             color = if (pingMs == null) Color(0xFF8B8F99) else QuickPingColors.TextSecondary,
             fontFamily = MonaSans,
-            fontSize = 10.sp,
-            lineHeight = 11.sp,
+            fontSize = 11.sp,
+            lineHeight = 12.sp,
         )
     }
 }
@@ -109,26 +111,26 @@ internal fun ReferenceMiniPingChip(pingMs: Int?) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
             modifier = Modifier
-                .height(22.dp)
-                .widthIn(min = 50.dp)
+                .height(27.dp)
+                .widthIn(min = 58.dp)
                 .clip(CircleShape)
                 .background(ReferenceChipColor)
-                .padding(horizontal = 7.dp),
+                .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = pingMs?.let { "$it ms" } ?: "retry",
-                color = Color(0xFF686D78),
+                color = Color(0xFF7A7F8A),
                 fontFamily = MonaSans,
-                fontSize = 9.sp,
+                fontSize = 10.sp,
             )
             Spacer(Modifier.width(5.dp))
             Icon(
                 painter = painterResource(if (pingMs == null) R.drawable.ic_ping_failed else R.drawable.ic_ping),
                 contentDescription = null,
                 tint = if (pingMs == null) Color.Unspecified else Color(0xFFE2C75C),
-                modifier = Modifier.size(11.dp),
+                modifier = Modifier.size(15.dp),
             )
         }
     }
@@ -138,7 +140,7 @@ internal fun ReferenceMiniPingChip(pingMs: Int?) {
 internal fun ReferenceFlag(server: Server, modifier: Modifier) {
     Image(
         painter = painterResource(referenceFlagResource(server.countryCode)),
-        contentDescription = server.countryName,
+        contentDescription = referenceCountryName(server),
         modifier = modifier,
         contentScale = ContentScale.FillBounds,
     )
@@ -148,7 +150,11 @@ internal fun ReferenceFlag(server: Server, modifier: Modifier) {
 @Composable
 private fun referenceFlagResource(countryCode: String): Int {
     val context = LocalContext.current
-    val code = countryCode.lowercase()
+    val rawCode = countryCode.lowercase()
+    val code = when (rawCode) {
+        "uk" -> "gb"
+        else -> rawCode
+    }
     val resourceName = when (code) {
         "ir" -> "flag_ir"
         "global" -> "flag_global"
@@ -158,12 +164,89 @@ private fun referenceFlagResource(countryCode: String): Int {
     return if (resolved != 0) resolved else R.drawable.flag_global
 }
 
+@Composable
+internal fun referenceCountryName(server: Server): String = when (server.countryCode.lowercase()) {
+    "ir" -> quickText("ایران", "Iran")
+    "de" -> quickText("آلمان", "Germany")
+    "gb", "uk" -> quickText("بریتانیا", "United Kingdom")
+    "fr" -> quickText("فرانسه", "France")
+    "it" -> quickText("ایتالیا", "Italy")
+    "fi" -> quickText("فنلاند", "Finland")
+    "nl" -> quickText("هلند", "Netherlands")
+    "us" -> quickText("آمریکا", "United States")
+    "ca" -> quickText("کانادا", "Canada")
+    "tr" -> quickText("ترکیه", "Turkey")
+    "ae" -> quickText("امارات", "United Arab Emirates")
+    "ru" -> quickText("روسیه", "Russia")
+    "jp" -> quickText("ژاپن", "Japan")
+    "sg" -> quickText("سنگاپور", "Singapore")
+    "ch" -> quickText("سوئیس", "Switzerland")
+    "se" -> quickText("سوئد", "Sweden")
+    "no" -> quickText("نروژ", "Norway")
+    "es" -> quickText("اسپانیا", "Spain")
+    "at" -> quickText("اتریش", "Austria")
+    "be" -> quickText("بلژیک", "Belgium")
+    "pl" -> quickText("لهستان", "Poland")
+    "cz" -> quickText("چک", "Czechia")
+    "ro" -> quickText("رومانی", "Romania")
+    "bg" -> quickText("بلغارستان", "Bulgaria")
+    "gr" -> quickText("یونان", "Greece")
+    "pt" -> quickText("پرتغال", "Portugal")
+    "dk" -> quickText("دانمارک", "Denmark")
+    "ie" -> quickText("ایرلند", "Ireland")
+    "in" -> quickText("هند", "India")
+    "hk" -> quickText("هنگ‌کنگ", "Hong Kong")
+    "au" -> quickText("استرالیا", "Australia")
+    "global" -> quickText("جهانی", "Global")
+    else -> server.countryName
+        .takeIf { it.isNotBlank() && !it.equals(server.countryCode, ignoreCase = true) }
+        ?: server.title.takeIf(String::isNotBlank)
+        ?: server.countryCode.uppercase()
+}
+
+internal fun referenceCountrySearchText(server: Server): String {
+    val aliases = when (server.countryCode.lowercase()) {
+        "ir" -> "ایران iran"
+        "de" -> "آلمان germany deutschland"
+        "gb", "uk" -> "بریتانیا انگلیس united kingdom uk england"
+        "fr" -> "فرانسه france"
+        "it" -> "ایتالیا italy italia"
+        "fi" -> "فنلاند finland"
+        "nl" -> "هلند netherlands holland"
+        "us" -> "آمریکا united states usa"
+        "ca" -> "کانادا canada"
+        "tr" -> "ترکیه turkey türkiye"
+        "ae" -> "امارات united arab emirates uae"
+        "ru" -> "روسیه russia"
+        "jp" -> "ژاپن japan"
+        "sg" -> "سنگاپور singapore"
+        "ch" -> "سوئیس switzerland"
+        "se" -> "سوئد sweden"
+        "no" -> "نروژ norway"
+        "es" -> "اسپانیا spain"
+        "at" -> "اتریش austria"
+        "be" -> "بلژیک belgium"
+        "pl" -> "لهستان poland"
+        else -> ""
+    }
+    return listOf(
+        server.countryCode,
+        server.countryName,
+        server.title,
+        server.remarks,
+        server.host,
+        aliases,
+    ).joinToString(" ").lowercase()
+}
+
+@Composable
 internal fun referenceServerTitle(server: Server, allServers: List<Server>): String {
     val sameCountry = allServers.filter { it.countryCode.equals(server.countryCode, ignoreCase = true) }
     val index = sameCountry.indexOfFirst { it.id == server.id }
+    val countryName = referenceCountryName(server)
     return if (sameCountry.size > 1 && index > 0) {
-        "${server.countryName} ${index + 1}"
+        "$countryName ${index + 1}"
     } else {
-        server.countryName.ifBlank { server.title }
+        countryName
     }
 }

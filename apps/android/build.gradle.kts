@@ -19,8 +19,8 @@ android {
         applicationId = "org.quickping"
         minSdk = 23
         targetSdk = 36
-        versionCode = 160164
-        versionName = "2.6.1"
+        versionCode = 160165
+        versionName = "2.6.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -59,9 +59,6 @@ android {
     sourceSets.getByName("main").assets.srcDir(generatedLicenseAssets)
 
     packaging {
-        // Match the reference APK's install packaging: compress the large
-        // native sing-box libraries in the APK and extract them on-device.
-        // This keeps direct downloads close to the original app's size.
         jniLibs.useLegacyPackaging = true
         resources.excludes += setOf(
             "/META-INF/{AL2.0,LGPL2.1}",
@@ -98,6 +95,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.google.code.scanner)
 
     testImplementation(libs.junit)
     testImplementation("org.json:json:20250517")

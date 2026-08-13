@@ -39,16 +39,16 @@ internal fun ReferenceBestLocationRow(selected: Boolean, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(ReferenceCardColor.copy(alpha = 0.93f))
+                .height(59.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(ReferenceCardColor)
                 .border(
                     if (selected) 2.dp else 1.dp,
                     if (selected) QuickPingColors.Primary else ReferenceStrokeColor,
-                    RoundedCornerShape(26.dp),
+                    RoundedCornerShape(28.dp),
                 )
                 .clickable(onClick = onClick)
-                .padding(horizontal = 15.dp),
+                .padding(horizontal = 17.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
@@ -56,16 +56,16 @@ internal fun ReferenceBestLocationRow(selected: Boolean, onClick: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 color = QuickPingColors.TextPrimary,
                 fontFamily = Peyda,
-                fontSize = 15.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End,
             )
-            Spacer(Modifier.width(9.dp))
+            Spacer(Modifier.width(10.dp))
             Icon(
                 painter = painterResource(R.drawable.ic_rocket),
                 contentDescription = null,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(25.dp),
+                modifier = Modifier.size(29.dp),
             )
         }
     }
@@ -82,31 +82,32 @@ internal fun ReferenceServerRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(ReferenceCardColor.copy(alpha = 0.93f))
+                .height(59.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(ReferenceCardColor)
                 .border(
                     if (selected) 2.dp else 1.dp,
                     if (selected) QuickPingColors.Primary else ReferenceStrokeColor,
-                    RoundedCornerShape(26.dp),
+                    RoundedCornerShape(28.dp),
                 )
                 .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 13.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ReferenceFlag(
                 server = server,
                 modifier = Modifier
-                    .size(width = 39.dp, height = 25.dp)
-                    .clip(RoundedCornerShape(6.dp)),
+                    .size(width = 45.dp, height = 29.dp)
+                    .clip(RoundedCornerShape(7.dp)),
             )
-            Spacer(Modifier.width(9.dp))
+            Spacer(Modifier.width(10.dp))
             Text(
                 text = title,
                 modifier = Modifier.weight(1f),
                 color = QuickPingColors.TextPrimary,
                 fontFamily = Peyda,
-                fontSize = 15.sp,
+                fontSize = 17.sp,
+                lineHeight = 22.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
