@@ -25,18 +25,22 @@ export function googleFreeUsername(googleSubject: string): string {
   return `g_${hash}`;
 }
 
-function assertFreeUser(user: PasarGuardUser): void {
+function assertFreeQuota(user: PasarGuardUser): void {
   if (user.dataLimit !== GOOGLE_FREE_QUOTA_BYTES) {
     throw new PasarGuardError(
       "invalid_response",
-      `قالب رایگان پاسارگارد باید دقیقاً ${GOOGLE_FREE_QUOTA_BYTES.toString()} بایت حجم داشته باشد`,
+      `سرویس رایگان پاسارگارد باید دقیقاً ${GOOGLE_FREE_QUOTA_BYTES.toString()} بایت حجم داشته باشد`,
     );
   }
+}
+
+function assertNewFreeUser(user: PasarGuardUser): void {
+  assertFreeQuota(user);
   if (user.status.toLowerCase() !== "active") {
-    throw new PasarGuardError("invalid_response", "سرویس رایگان ساخته‌شده در پاسارگارد فعال نیست");
+    throw new PasarGuardError("invalid_response", "سرویس رایگان تازه‌ساخته‌شده در پاسارگارد فعال نیست");
   }
   if (user.expiresAt && user.expiresAt.getTime() <= Date.now()) {
-    throw new PasarGuardError("invalid_response", "سرویس رایگان ساخته‌شده در پاسارگارد منقضی است");
+    throw new PasarGuardError("invalid_response", "سرویس رایگان تازه‌ساخته‌شده در پاسارگارد منقضی است");
   }
 }
 
@@ -68,8 +72,9 @@ export async function ensureGoogleFreeService(
     if (!Number.isSafeInteger(externalUserId)) {
       throw new PasarGuardError("invalid_response", "شناسه سرویس رایگان پاسارگارد معتبر نیست");
     }
+    // A one-time gift stays tied to the same remote account after quota exhaustion or expiry.
     const remote = await client.getUser(externalUserId);
-    assertFreeUser(remote);
+    assertFreeQuota(remote);
     return syncPasarGuardBinding(existing.id, client);
   }
 
@@ -87,7 +92,7 @@ export async function ensureGoogleFreeService(
       if (!remote) throw error;
     }
   }
-  assertFreeUser(remote);
+  assertNewFreeUser(remote);
 
   try {
     return await bindPasarGuardUser(quickPingUserId, remote.id, client, {
