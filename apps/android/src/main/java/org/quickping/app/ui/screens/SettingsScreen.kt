@@ -110,7 +110,7 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
                 SettingsGroup {
@@ -323,15 +323,15 @@ private fun SettingsTile(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(62.dp)
+            .height(52.dp)
             .clip(RoundedCornerShape(15.dp))
             .background(QuickPingColors.SurfaceHigh)
             .then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(icon), null, tint = QuickPingColors.TextSecondary, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.width(12.dp))
+        Icon(painterResource(icon), null, tint = QuickPingColors.TextSecondary, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(10.dp))
         Text(
             title,
             modifier = Modifier.weight(1f),

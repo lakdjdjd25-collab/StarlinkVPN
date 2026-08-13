@@ -35,6 +35,7 @@ import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.ui.components.DashedDivider
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.QuickSwitch
@@ -77,25 +78,25 @@ fun GuardianScreen(
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             item {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 22.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        modifier = Modifier.size(74.dp).border(1.dp, QuickPingColors.Border, CircleShape),
+                        modifier = Modifier.size(58.dp).border(1.dp, QuickPingColors.Border, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
                             painterResource(R.drawable.ic_shield),
                             contentDescription = null,
                             tint = QuickPingColors.TextPrimary,
-                            modifier = Modifier.size(40.dp),
+                            modifier = Modifier.size(32.dp),
                         )
                     }
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text(
                         quickText(
                             "گاردین موارد ناخواسته مانند تبلیغات و محتوای مضر را مسدود خواهد کرد.",
@@ -105,8 +106,8 @@ fun GuardianScreen(
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.height(20.dp))
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
+                    Spacer(Modifier.height(12.dp))
+                    DashedDivider()
                 }
             }
             items(categories, key = GuardianCategory::id) { category ->
@@ -137,7 +138,7 @@ private fun GuardianTile(category: GuardianCategory, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(68.dp)
+            .height(60.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(QuickPingColors.Surface.copy(alpha = 0.94f))
             .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(16.dp))
@@ -146,17 +147,17 @@ private fun GuardianTile(category: GuardianCategory, onToggle: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(46.dp).clip(RoundedCornerShape(13.dp)).background(QuickPingColors.SurfaceHigh),
+            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(QuickPingColors.SurfaceHigh),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painterResource(guardianIcon(category.iconName)),
                 contentDescription = null,
                 tint = QuickPingColors.TextSecondary,
-                modifier = Modifier.size(25.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
-        Spacer(Modifier.width(11.dp))
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(title, color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.height(3.dp))

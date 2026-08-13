@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,11 +39,10 @@ import org.quickping.app.model.AppRelease
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Service
 import org.quickping.app.ui.components.GlassCard
+import org.quickping.app.ui.components.DashedDivider
 import org.quickping.app.ui.components.PrimaryButton
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
-import org.quickping.app.ui.components.SettingRow
-import org.quickping.app.ui.components.StatusPill
 
 @Composable
 fun NotificationsScreen(notifications: List<NotificationItem>, onBack: () -> Unit) {
@@ -171,40 +173,46 @@ fun ServicesScreen(service: Service, onBack: () -> Unit) {
                 .weight(1f)
                 .padding(horizontal = 12.dp),
         ) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            quickText("سرویس فعال", "Active service"),
-                            modifier = Modifier.weight(1f),
-                            color = QuickPingColors.Success,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        StatusPill(service.license, QuickPingColors.PrimaryLight)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        service.name,
-                        color = QuickPingColors.TextPrimary,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, QuickPingColors.TextSecondary, RoundedCornerShape(22.dp)),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier.size(20.dp).border(2.dp, QuickPingColors.TextSecondary, CircleShape),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        ServiceMetric(Modifier.weight(1f), "${service.daysLeft} ${quickText("روز", "days")}", quickText("اعتبار", "Validity"))
-                        ServiceMetric(Modifier.weight(1f), "${bytesToGb(service.remainingBytes)}GB", quickText("حجم باقی‌مانده", "Data remaining"))
+                        Box(Modifier.size(12.dp).background(QuickPingColors.Primary, CircleShape))
                     }
+                    Spacer(Modifier.width(8.dp))
+                    Text(service.license, color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (service.isFree) quickText("رایگان", "Free") else service.plan,
+                        color = QuickPingColors.Success,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
-            }
-            Spacer(Modifier.height(10.dp))
-            GlassCard(Modifier.fillMaxWidth()) {
-                SettingRow(
-                    title = quickText("افزودن سرویس", "Add service"),
-                    subtitle = quickText("کلید مجوز یا لینک اشتراک", "License key or subscription link"),
-                    icon = R.drawable.ic_add,
-                )
+                DashedDivider()
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ServiceMetric(
+                        Modifier.weight(1f),
+                        "${bytesToGb(service.usedBytes)}GB از ${bytesToGb(service.totalBytes)}GB",
+                        quickText("دادهٔ استفاده‌شده", "Data used"),
+                    )
+                    ServiceMetric(
+                        Modifier.weight(1f),
+                        "${service.daysLeft} ${quickText("روز", "days")}",
+                        quickText("اعتبار", "Validity"),
+                    )
+                }
             }
         }
     }
@@ -214,7 +222,7 @@ fun ServicesScreen(service: Service, onBack: () -> Unit) {
 private fun ServiceMetric(modifier: Modifier, value: String, label: String) {
     Column(
         modifier = modifier
-            .height(64.dp)
+            .height(48.dp)
             .background(QuickPingColors.BackgroundRaised, androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,

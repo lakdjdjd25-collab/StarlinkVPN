@@ -49,6 +49,7 @@ import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.quickping.app.model.Service
 import org.quickping.app.model.UserInfo
+import org.quickping.app.ui.components.DashedDivider
 import org.quickping.app.ui.components.PrimaryButton
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
@@ -101,7 +102,7 @@ fun AccountScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ProfileCard(
                 user = user,
@@ -138,8 +139,8 @@ fun AccountScreen(
                 Spacer(Modifier.height(7.dp))
                 Text(
                     quickText(
-                        "حساب و سرویس‌ها از طریق ارتباط رمزگذاری‌شده همگام می‌شوند.",
-                        "Your account and services are synchronized over an encrypted connection.",
+                        "برای مثال، مصرف ۱۰ گیگابایت در سرورهای نامحدود فقط ۱ گیگابایت از حجم پلن VIP شما را کاهش می‌دهد.",
+                        "For example, 10GB on unlimited servers reduces your VIP allowance by only 1GB.",
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     color = QuickPingColors.TextSecondary,
@@ -187,28 +188,47 @@ fun AccountScreen(
                     colors = accountFieldColors(),
                 )
                 Spacer(Modifier.height(12.dp))
-                if (passwordChallengeId == null) {
-                    Text(
-                        quickText(
-                            "ما یک کد تأیید به ایمیلی که وارد کرده‌اید خواهیم فرستاد.",
-                            "We will send a verification code to your account email.",
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        color = QuickPingColors.TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                    )
-                } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = passwordCode,
                         onValueChange = { passwordCode = it.filter(Char::isDigit).take(6) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.weight(1f),
                         singleLine = true,
                         label = { Text(quickText("کد اعتبارسنجی", "Verification code")) },
                         leadingIcon = { Icon(painterResource(R.drawable.ic_otp), null) },
                         shape = RoundedCornerShape(16.dp),
                         colors = accountFieldColors(),
                     )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = onRequestPasswordCode,
+                        enabled = !busy && passwordChallengeId == null,
+                        modifier = Modifier.height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, QuickPingColors.Border),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = QuickPingColors.Surface,
+                            contentColor = QuickPingColors.TextPrimary,
+                        ),
+                    ) {
+                        Text(
+                            if (busy && passwordChallengeId == null) quickText("صبر کنید…", "Wait…")
+                            else quickText("فرستادن کد", "Send code"),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                Text(
+                    quickText(
+                        "ما یک کد تأیید به ایمیلی که وارد کرده‌اید خواهیم فرستاد.",
+                        "We will send a verification code to your account email.",
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    color = QuickPingColors.TextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                )
+                if (passwordChallengeId != null) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = newPassword,
@@ -231,17 +251,12 @@ fun AccountScreen(
                     Text(message, color = QuickPingColors.Danger, style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.height(28.dp))
-                PrimaryButton(
-                    text = when {
-                        busy -> quickText("لطفاً صبر کنید…", "Please wait…")
-                        passwordChallengeId == null -> quickText("فرستادن کد", "Send code")
-                        else -> quickText("تأیید", "Confirm")
-                    },
+                SheetConfirmButton(
+                    text = if (busy) quickText("لطفاً صبر کنید…", "Please wait…") else quickText("تأیید", "Confirm"),
                     onClick = {
-                        if (passwordChallengeId == null) onRequestPasswordCode()
-                        else onConfirmPasswordChange(passwordCode, newPassword)
+                        onConfirmPasswordChange(passwordCode, newPassword)
                     },
-                    enabled = !busy && (passwordChallengeId == null || passwordCode.length == 6 && newPassword.length >= 8),
+                    enabled = !busy && passwordChallengeId != null && passwordCode.length == 6 && newPassword.length >= 8,
                 )
                 Spacer(Modifier.height(10.dp))
                 SheetCancelButton {
@@ -334,14 +349,14 @@ private fun ProfileCard(
             .background(QuickPingColors.Surface.copy(alpha = 0.92f)),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 18.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier.size(70.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF284D85)),
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF284D85)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_avatar), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(46.dp))
+                Icon(painterResource(R.drawable.ic_avatar), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(32.dp))
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -360,7 +375,7 @@ private fun ProfileCard(
                 )
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
+        DashedDivider()
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             AccountAction(Modifier.weight(1f), quickText("تغییر گذرواژه", "Change password"), R.drawable.ic_key, false, onChangePassword)
             AccountAction(Modifier.weight(1f), quickText("حذف حساب کاربری", "Delete account"), R.drawable.ic_trash, true, onDelete)
@@ -401,16 +416,24 @@ private fun ReferenceServiceCard(service: Service, onServices: () -> Unit) {
                 MetricBox(Modifier.weight(1f), "${service.usersCount} ${quickText("کاربر", "users")}", quickText("کاربران مجاز", "Allowed users"))
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
-        SettingRow(
-            title = quickText("نمایش همه سرویس‌ها", "Show all services"),
-            icon = R.drawable.ic_ticket,
-            onClick = onServices,
-        )
-        SettingRow(
-            title = quickText("گزینه‌های بیشتر", "More options"),
-            icon = R.drawable.ic_open,
-        )
+        DashedDivider()
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SettingRow(
+                title = quickText("نمایش همه سرویس‌ها", "Show all services"),
+                modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
+                icon = R.drawable.ic_ticket,
+                onClick = onServices,
+            )
+            SettingRow(
+                title = quickText("گزینه‌های بیشتر", "More options"),
+                modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
+                icon = R.drawable.ic_open,
+                onClick = onServices,
+            )
+        }
     }
 }
 
@@ -435,7 +458,7 @@ private fun SegmentedQuota(progress: Float) {
 @Composable
 private fun MetricBox(modifier: Modifier, value: String, label: String) {
     Column(
-        modifier = modifier.height(68.dp).border(1.dp, QuickPingColors.Border, RoundedCornerShape(18.dp)).padding(8.dp),
+        modifier = modifier.height(50.dp).border(1.dp, QuickPingColors.Border, RoundedCornerShape(18.dp)).padding(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -454,7 +477,7 @@ private fun AccountAction(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(54.dp),
+        modifier = modifier.height(46.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = if (danger) QuickPingColors.Danger else QuickPingColors.TextPrimary),
         border = BorderStroke(1.dp, QuickPingColors.Border),
@@ -472,8 +495,8 @@ private fun AccountSheetHeader(title: String, icon: Int, iconColor: Color, onClo
             TextButton(onClick = onClose) { Text("×", color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.titleLarge) }
             Spacer(Modifier.weight(1f))
         }
-        Box(Modifier.size(64.dp).clip(CircleShape).background(iconColor), contentAlignment = Alignment.Center) {
-            Icon(painterResource(icon), null, tint = Color.White, modifier = Modifier.size(31.dp))
+        Box(Modifier.size(52.dp).clip(CircleShape).background(iconColor), contentAlignment = Alignment.Center) {
+            Icon(painterResource(icon), null, tint = Color.White, modifier = Modifier.size(27.dp))
         }
         Spacer(Modifier.height(9.dp))
         Text(title, color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.titleLarge)
@@ -489,6 +512,23 @@ private fun SheetCancelButton(onClick: () -> Unit) {
         border = null,
         colors = ButtonDefaults.outlinedButtonColors(containerColor = QuickPingColors.Surface, contentColor = QuickPingColors.TextPrimary),
     ) { Text(quickText("انصراف", "Cancel")) }
+}
+
+@Composable
+private fun SheetConfirmButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(54.dp),
+        shape = RoundedCornerShape(14.dp),
+        border = null,
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = Color(0xFFC4CCDD),
+            contentColor = Color(0xFF191C22),
+            disabledContainerColor = Color(0xFF6A7180),
+            disabledContentColor = Color(0xFF252932),
+        ),
+    ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
 @Composable

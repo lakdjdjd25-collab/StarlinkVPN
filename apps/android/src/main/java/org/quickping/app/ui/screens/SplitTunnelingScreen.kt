@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -47,6 +48,7 @@ import org.quickping.app.model.AppSettings
 import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.SplitTunnelMode
 import org.quickping.app.ui.components.GlassCard
+import org.quickping.app.ui.components.DashedDivider
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.QuickSwitch
@@ -65,7 +67,34 @@ fun SplitTunnelingScreen(
     var showAddressesDialog by remember { mutableStateOf(false) }
     var showModeDialog by remember { mutableStateOf(false) }
     QuickPingScreen {
-        QuickPingTopBar(title = quickText("تقسیم تونل", "Split tunneling"), onBack = onBack)
+        QuickPingTopBar(
+            title = quickText("تقسیم تونل", "Split tunneling"),
+            onBack = onBack,
+            action = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_settings_reset),
+                    contentDescription = quickText("بازنشانی تقسیم تونل", "Reset split tunneling"),
+                    tint = QuickPingColors.TextSecondary,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(QuickPingColors.Surface)
+                        .clickable {
+                            onUpdateSettings {
+                                it.copy(
+                                    splitTunnelingEnabled = false,
+                                    splitTunnelMode = SplitTunnelMode.Exclude,
+                                    splitTunnelPackages = emptySet(),
+                                    splitTunnelAddresses = emptyList(),
+                                    rememberSplitTunnelSettings = true,
+                                    blockIrDomains = true,
+                                )
+                            }
+                        }
+                        .padding(9.dp),
+                )
+            },
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -75,12 +104,12 @@ fun SplitTunnelingScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 22.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(74.dp)
+                        .size(58.dp)
                         .border(1.dp, QuickPingColors.Border, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -88,10 +117,10 @@ fun SplitTunnelingScreen(
                         painterResource(R.drawable.ic_split_tunneling),
                         contentDescription = null,
                         tint = QuickPingColors.TextPrimary,
-                        modifier = Modifier.size(39.dp),
+                        modifier = Modifier.size(32.dp),
                     )
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     quickText(
                         "تقسیم تونل به شما اجازه می‌دهد انتخاب کنید کدام برنامه‌ها از VPN استفاده کنند و کدام به‌صورت مستقیم به اینترنت متصل شوند.",
@@ -106,6 +135,7 @@ fun SplitTunnelingScreen(
                 SettingRow(
                     title = quickText("فعال‌سازی تقسیم تونل", "Enable split tunneling"),
                     icon = R.drawable.ic_split_tunneling,
+                    modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
                     trailing = {
                         QuickSwitch(
                             checked = settings.splitTunnelingEnabled,
@@ -131,7 +161,7 @@ fun SplitTunnelingScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
+                DashedDivider()
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -157,6 +187,7 @@ fun SplitTunnelingScreen(
                 SettingRow(
                     title = quickText("مسدود کردن اتصالات .ir", "Block .ir connections"),
                     icon = R.drawable.ic_lock,
+                    modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
                     trailing = {
                         QuickSwitch(
                             checked = settings.blockIrDomains,
@@ -251,7 +282,7 @@ private fun SplitSelectionCard(
 ) {
     Column(
         modifier = modifier
-            .height(110.dp)
+            .height(92.dp)
             .background(QuickPingColors.SurfaceHigh, RoundedCornerShape(17.dp))
             .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(17.dp))
             .clickable(onClick = onClick)
