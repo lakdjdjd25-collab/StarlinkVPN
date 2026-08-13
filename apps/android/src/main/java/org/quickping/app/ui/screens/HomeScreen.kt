@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import org.quickping.app.R
 import org.quickping.app.core.design.Bitcount
 import org.quickping.app.core.design.MonaSans
+import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.Server
@@ -439,6 +440,7 @@ private fun HomeRtlText(
             text = text,
             modifier = modifier,
             color = color,
+            fontFamily = Peyda,
             fontSize = fontSize,
             fontWeight = fontWeight,
             textAlign = TextAlign.End,
@@ -471,7 +473,12 @@ private fun HomeServerList(
             }
             item(key = "divider") {
                 DashedDivider(
-                    modifier = Modifier.padding(horizontal = 29.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(
+                        start = 29.dp,
+                        end = 29.dp,
+                        top = 18.dp,
+                        bottom = 2.dp,
+                    ),
                 )
             }
         }
@@ -503,13 +510,14 @@ private fun RecentlyConnectedServers(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(142.dp),
+            .height(132.dp),
     ) {
         Spacer(Modifier.height(14.dp))
         Text(
             text = "اخیراً متصل‌شده",
             modifier = Modifier.fillMaxWidth(),
             color = QuickPingColors.TextSecondary,
+            fontFamily = Peyda,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.End,
@@ -543,6 +551,7 @@ private fun RecentlyConnectedServers(
                     Text(
                         text = displayServerTitle(server, state.servers),
                         color = QuickPingColors.TextPrimary,
+                        fontFamily = Peyda,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -567,6 +576,7 @@ private fun HomeFilterRow() {
         Text(
             text = "همه",
             color = QuickPingColors.TextPrimary,
+            fontFamily = Peyda,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -574,6 +584,7 @@ private fun HomeFilterRow() {
         Text(
             text = "کمپینگ",
             color = QuickPingColors.TextMuted,
+            fontFamily = Peyda,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
         )
@@ -646,6 +657,7 @@ private fun BestLocationRow(selected: Boolean, onClick: () -> Unit) {
         Text(
             text = "بهترین مکان",
             color = QuickPingColors.TextPrimary,
+            fontFamily = Peyda,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -679,6 +691,7 @@ private fun ServerRow(server: Server, title: String, selected: Boolean, onClick:
             text = title,
             modifier = Modifier.weight(1f),
             color = QuickPingColors.TextPrimary,
+            fontFamily = Peyda,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
