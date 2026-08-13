@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import {
   createPasarGuardClient,
+  pasarGuardCredentialsFromEnv,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
@@ -11,6 +13,21 @@ import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync
 
 export const GOOGLE_FREE_QUOTA_BYTES = 10n * 1024n ** 3n;
 export const GOOGLE_FREE_PLAN_NAME = "Google Free 10GB";
+const GOOGLE_FREE_TEMPLATE_NAME = "QuickPing Google Free 10GB";
+
+const groupSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  name: z.string().min(1),
+  inbound_tags: z.array(z.string()).default([]),
+  is_disabled: z.boolean().nullable().optional(),
+});
+const groupsResponseSchema = z.object({
+  groups: z.array(groupSchema),
+  total: z.coerce.number().int().nonnegative(),
+});
+const tokenSchema = z.object({ access_token: z.string().min(1) });
+
+let templateProvisionPromise: Promise<number> | null = null;
 
 function configuredFreeTemplateId(): number | null {
   const raw = process.env.PASARGUARD_FREE_TEMPLATE_ID?.trim();
@@ -28,33 +45,133 @@ function templateNameScore(template: PasarGuardUserTemplate): number {
     .reduce((score, marker) => score + (value.includes(marker) ? 1 : 0), 0);
 }
 
-export async function resolveGoogleFreeTemplateId(client: PasarGuardClient): Promise<number> {
-  const configured = configuredFreeTemplateId();
-  if (configured) return configured;
-
-  const candidates = (await client.listUserTemplates()).filter((template) => (
+function eligibleTemplates(templates: PasarGuardUserTemplate[]) {
+  return templates.filter((template) => (
     template.dataLimit === GOOGLE_FREE_QUOTA_BYTES
     && !template.isDisabled
     && template.status === "active"
     && template.resetStrategy === "no_reset"
   ));
-  if (candidates.length === 0) {
-    throw new PasarGuardError(
-      "not_configured",
-      "هیچ قالب فعال 10GB بدون تمدید خودکار در پاسارگارد پیدا نشد",
-    );
-  }
+}
+
+function chooseEligibleTemplate(candidates: PasarGuardUserTemplate[]): number | null {
+  if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0].id;
+
+  const exact = candidates.filter((template) => template.name.trim().toLowerCase() === GOOGLE_FREE_TEMPLATE_NAME.toLowerCase());
+  if (exact.length > 0) return exact.sort((left, right) => left.id - right.id)[0].id;
 
   const ranked = candidates
     .map((template) => ({ template, score: templateNameScore(template) }))
-    .sort((left, right) => right.score - left.score);
+    .sort((left, right) => right.score - left.score || left.template.id - right.template.id);
   if (ranked[0].score > 0 && ranked[0].score > ranked[1].score) return ranked[0].template.id;
+  return null;
+}
 
-  throw new PasarGuardError(
-    "not_configured",
-    "چند قالب معتبر 10GB در پاسارگارد وجود دارد و انتخاب خودکار امن نیست",
-  );
+async function pasarGuardAdminRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  const { baseUrl, username, password } = pasarGuardCredentialsFromEnv();
+  const tokenResponse = await fetch(new URL("api/admin/token", baseUrl), {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "password", username, password }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (tokenResponse.status === 401) {
+    throw new PasarGuardError("unauthorized", "نام کاربری یا رمز پنل پاسارگارد پذیرفته نشد", 401);
+  }
+  if (!tokenResponse.ok) {
+    throw new PasarGuardError("upstream_error", "پنل پاسارگارد ورود API را نپذیرفت", tokenResponse.status);
+  }
+  const token = tokenSchema.safeParse(await tokenResponse.json().catch(() => null));
+  if (!token.success) {
+    throw new PasarGuardError("invalid_response", "پاسخ ورود پاسارگارد معتبر نیست");
+  }
+
+  const providedHeaders = init.headers && !Array.isArray(init.headers) && !(init.headers instanceof Headers)
+    ? init.headers as Record<string, string>
+    : Object.fromEntries(new Headers(init.headers).entries());
+  const response = await fetch(new URL(path.replace(/^\//, ""), baseUrl), {
+    ...init,
+    headers: {
+      ...providedHeaders,
+      authorization: `Bearer ${token.data.access_token}`,
+      accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (response.status === 401) throw new PasarGuardError("unauthorized", "نشست API پاسارگارد معتبر نیست", 401);
+  if (response.status === 403) throw new PasarGuardError("forbidden", "مدیر پاسارگارد مجوز ساخت قالب سرویس رایگان را ندارد", 403);
+  if (!response.ok) throw new PasarGuardError("upstream_error", "پنل پاسارگارد ساخت قالب سرویس رایگان را نپذیرفت", response.status);
+  return response;
+}
+
+async function provisionGoogleFreeTemplate(client: PasarGuardClient): Promise<number> {
+  const groupsResponse = await pasarGuardAdminRequest("api/groups");
+  const groups = groupsResponseSchema.safeParse(await groupsResponse.json().catch(() => null));
+  if (!groups.success) {
+    throw new PasarGuardError("invalid_response", "فهرست گروه‌های پاسارگارد ساختار معتبری ندارد");
+  }
+  const enabledGroupIds = groups.data.groups
+    .filter((group) => !group.is_disabled && group.inbound_tags.length > 0)
+    .map((group) => group.id)
+    .sort((left, right) => left - right);
+  if (enabledGroupIds.length === 0) {
+    throw new PasarGuardError("not_configured", "هیچ گروه فعال دارای سرور در پاسارگارد برای سرویس رایگان وجود ندارد");
+  }
+
+  try {
+    await pasarGuardAdminRequest("api/user_template", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: GOOGLE_FREE_TEMPLATE_NAME,
+        data_limit: Number(GOOGLE_FREE_QUOTA_BYTES),
+        hwid_limit: 1,
+        expire_duration: 0,
+        group_ids: enabledGroupIds,
+        status: "active",
+        reset_usages: false,
+        data_limit_reset_strategy: "no_reset",
+        is_disabled: false,
+      }),
+    });
+  } catch (error) {
+    const recovered = chooseEligibleTemplate(eligibleTemplates(await client.listUserTemplates()));
+    if (recovered) return recovered;
+    throw error;
+  }
+
+  const created = chooseEligibleTemplate(eligibleTemplates(await client.listUserTemplates()));
+  if (!created) {
+    throw new PasarGuardError("invalid_response", "قالب 10GB در پاسارگارد ساخته شد اما قابل تأیید نیست");
+  }
+  return created;
+}
+
+export async function resolveGoogleFreeTemplateId(client: PasarGuardClient): Promise<number> {
+  const configured = configuredFreeTemplateId();
+  if (configured) return configured;
+
+  const candidates = eligibleTemplates(await client.listUserTemplates());
+  const selected = chooseEligibleTemplate(candidates);
+  if (selected) return selected;
+  if (candidates.length > 1) {
+    throw new PasarGuardError(
+      "not_configured",
+      "چند قالب معتبر 10GB در پاسارگارد وجود دارد و انتخاب خودکار امن نیست",
+    );
+  }
+
+  if (!templateProvisionPromise) {
+    templateProvisionPromise = provisionGoogleFreeTemplate(client);
+  }
+  try {
+    return await templateProvisionPromise;
+  } finally {
+    templateProvisionPromise = null;
+  }
 }
 
 export function googleFreeUsername(googleSubject: string): string {
@@ -109,7 +226,6 @@ export async function ensureGoogleFreeService(
     if (!Number.isSafeInteger(externalUserId)) {
       throw new PasarGuardError("invalid_response", "شناسه سرویس رایگان پاسارگارد معتبر نیست");
     }
-    // A one-time gift stays tied to the same remote account after quota exhaustion or expiry.
     const remote = await client.getUser(externalUserId);
     assertFreeQuota(remote);
     return syncPasarGuardBinding(existing.id, client);
