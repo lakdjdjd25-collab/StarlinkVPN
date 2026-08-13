@@ -39,7 +39,18 @@ function chooseTemplate(templates: PasarGuardUserTemplate[]): number | null {
 }
 
 async function optionalTemplateId(client: PasarGuardClient): Promise<number | null> {
-  return configuredTemplateId() ?? chooseTemplate(await client.listUserTemplates());
+  const configured = configuredTemplateId();
+  if (configured) return configured;
+
+  try {
+    return chooseTemplate(await client.listUserTemplates());
+  } catch (error) {
+    // PasarGuard operators can have permission to list/create users while the
+    // user-template API is sudo-only. A missing template-list permission must
+    // not block the direct 10GB user provisioning path.
+    if (error instanceof PasarGuardError && error.code === "forbidden") return null;
+    throw error;
+  }
 }
 
 export async function resolveGoogleFreeTemplateId(client: PasarGuardClient): Promise<number> {
@@ -93,7 +104,15 @@ async function createRemote(
 ): Promise<PasarGuardUser> {
   const note = "QuickPing Google signup - one-time 10GB gift";
   const templateId = await optionalTemplateId(client);
-  if (templateId) return client.createUserFromTemplate(templateId, username, note);
+  if (templateId) {
+    try {
+      return await client.createUserFromTemplate(templateId, username, note);
+    } catch (error) {
+      // Some operator roles can see templates but cannot provision from them.
+      // Fall back to POST /api/user with the exact same one-time 10GB policy.
+      if (!(error instanceof PasarGuardError) || error.code !== "forbidden") throw error;
+    }
+  }
   return client.createUser(username, GOOGLE_FREE_QUOTA_BYTES, groupIdsFromVisibleUsers(visibleUsers), note, 1);
 }
 
