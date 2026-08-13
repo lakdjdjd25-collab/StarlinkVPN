@@ -51,6 +51,7 @@ import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.QuickSwitch
 import org.quickping.app.ui.components.SettingRow
+import org.quickping.app.vpn.normalizeSplitAddress
 
 @Composable
 fun SplitTunnelingScreen(
@@ -297,7 +298,7 @@ private fun SplitAppsDialog(
         onDismissRequest = onDismiss,
         containerColor = QuickPingColors.SurfaceHigh,
         shape = RoundedCornerShape(22.dp),
-        title = { Text("انتخاب برنامه‌ها", color = QuickPingColors.TextPrimary) },
+        title = { Text(quickText("انتخاب برنامه‌ها", "Select apps"), color = QuickPingColors.TextPrimary) },
         text = {
             Column {
                 OutlinedTextField(
@@ -305,14 +306,14 @@ private fun SplitAppsDialog(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("جستجوی برنامه") },
+                    placeholder = { Text(quickText("جستجوی برنامه", "Search apps")) },
                     shape = RoundedCornerShape(12.dp),
                     colors = quickPingFieldColors(),
                 )
                 Spacer(Modifier.height(8.dp))
                 if (loading) {
                     Text(
-                        "در حال خواندن فهرست برنامه‌های دستگاه…",
+                        quickText("در حال خواندن فهرست برنامه‌های دستگاه…", "Loading apps on this device…"),
                         color = QuickPingColors.TextSecondary,
                         modifier = Modifier.padding(vertical = 18.dp),
                     )
@@ -352,7 +353,7 @@ private fun SplitAppsDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("انجام شد") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(quickText("انجام شد", "Done")) } },
     )
 }
 
@@ -365,11 +366,15 @@ private fun SplitAddressesDialog(
 ) {
     var input by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val invalidAddressMessage = quickText(
+        "دامنه، IP یا CIDR معتبر وارد کنید",
+        "Enter a valid domain, IP address or CIDR",
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = QuickPingColors.SurfaceHigh,
         shape = RoundedCornerShape(22.dp),
-        title = { Text("نشانی‌های تقسیم تونل", color = QuickPingColors.TextPrimary) },
+        title = { Text(quickText("نشانی‌های تقسیم تونل", "Split-tunnel addresses"), color = QuickPingColors.TextPrimary) },
         text = {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -377,14 +382,14 @@ private fun SplitAddressesDialog(
                         onClick = {
                             val normalized = normalizeSplitAddress(input)
                             if (normalized == null) {
-                                error = "دامنه، IP یا CIDR معتبر وارد کنید"
+                                error = invalidAddressMessage
                             } else {
                                 onAdd(normalized)
                                 input = ""
                                 error = null
                             }
                         },
-                    ) { Text("افزودن") }
+                    ) { Text(quickText("افزودن", "Add")) }
                     Spacer(Modifier.width(6.dp))
                     OutlinedTextField(
                         value = input,
@@ -410,7 +415,7 @@ private fun SplitAddressesDialog(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TextButton(onClick = { onRemove(address) }) {
-                                Text("حذف", color = QuickPingColors.Danger)
+                                Text(quickText("حذف", "Remove"), color = QuickPingColors.Danger)
                             }
                             Text(
                                 address,
@@ -423,7 +428,7 @@ private fun SplitAddressesDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("انجام شد") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(quickText("انجام شد", "Done")) } },
     )
 }
 
@@ -436,13 +441,6 @@ private fun quickPingFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedPlaceholderColor = QuickPingColors.TextMuted,
     unfocusedPlaceholderColor = QuickPingColors.TextMuted,
 )
-
-private fun normalizeSplitAddress(raw: String): String? {
-    val value = raw.trim().lowercase().removePrefix("*.").removeSuffix(".")
-    if (value.matches(Regex("[0-9a-f:.]+(?:/\\d{1,3})?"))) return value
-    if (value.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)+"))) return value
-    return null
-}
 
 @Composable
 private fun ModeCard(

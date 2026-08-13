@@ -80,13 +80,13 @@ fun quickText(
     ur: String = en,
 ): String = when (LocalQuickPingLanguage.current.lowercase(Locale.US)) {
     "fa" -> fa
-    "nl" -> nl
-    "ar" -> ar
-    "tr" -> tr
-    "ru" -> ru
-    "hi" -> hi
-    "zh" -> zh
-    "ur" -> ur
+    "nl" -> nl.takeUnless { it == en } ?: QuickPingTranslations.translate("nl", en) ?: en
+    "ar" -> ar.takeUnless { it == en } ?: QuickPingTranslations.translate("ar", en) ?: en
+    "tr" -> tr.takeUnless { it == en } ?: QuickPingTranslations.translate("tr", en) ?: en
+    "ru" -> ru.takeUnless { it == en } ?: QuickPingTranslations.translate("ru", en) ?: en
+    "hi" -> hi.takeUnless { it == en } ?: QuickPingTranslations.translate("hi", en) ?: en
+    "zh" -> zh.takeUnless { it == en } ?: QuickPingTranslations.translate("zh", en) ?: en
+    "ur" -> ur.takeUnless { it == en } ?: QuickPingTranslations.translate("ur", en) ?: en
     else -> en
 }
 

@@ -122,7 +122,11 @@ fun GuardianScreen(
 @Composable
 private fun GuardianTile(category: GuardianCategory, onToggle: () -> Unit) {
     val title = when (category.id) {
+        "malware" -> quickText("بدافزارها", "Malware")
+        "ads" -> quickText("تبلیغات و ردیاب‌ها", "Ads and trackers")
+        "youtube" -> quickText("تبلیغات یوتیوب", "YouTube ads")
         "phishing" -> quickText("محتوای فریبنده", "Deceptive content")
+        "porn" -> quickText("محتوای بزرگسال", "Adult content")
         "government" -> quickText("دولتی", "Government websites")
         "payment" -> quickText("درگاه‌های پرداخت", "Payment gateways")
         "socials" -> quickText("شبکه‌های اجتماعی", "Social networks")

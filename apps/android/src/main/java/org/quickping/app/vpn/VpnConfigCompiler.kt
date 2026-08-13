@@ -182,11 +182,12 @@ internal object VpnConfigCompiler {
         val ipCidrs = mutableListOf<String>()
         val domainSuffixes = mutableListOf<String>()
         settings.splitTunnelAddresses.forEach { raw ->
-            val value = raw.trim().lowercase().removePrefix("*.").removeSuffix(".")
-            when {
-                value.isBlank() -> Unit
-                value.matches(Regex("[0-9a-f:.]+(?:/\\d{1,3})?")) -> ipCidrs += value
-                value.matches(Regex("[a-z0-9-]+(?:\\.[a-z0-9-]+)+")) -> domainSuffixes += value
+            when (val address = parseSplitAddress(raw)) {
+                null -> Unit
+                else -> when (address.kind) {
+                    SplitAddressKind.IpCidr -> ipCidrs += address.value
+                    SplitAddressKind.DomainSuffix -> domainSuffixes += address.value
+                }
             }
         }
         if (ipCidrs.isEmpty() && domainSuffixes.isEmpty()) return emptyList()
@@ -359,21 +360,79 @@ internal object VpnConfigCompiler {
     private const val DIRECT_OUTBOUND_TAG = "quickping-direct"
 
     private val GUARDIAN_DOMAINS = mapOf(
-        "malware" to listOf("malware.testcategory.com", "malware.wicar.org"),
+        "malware" to listOf(
+            "malware.testcategory.com",
+            "malware.wicar.org",
+            "malware.testing.google.test",
+        ),
         "ads" to listOf(
             "doubleclick.net",
             "googlesyndication.com",
             "googleadservices.com",
             "adservice.google.com",
             "app-measurement.com",
+            "adnxs.com",
+            "adsrvr.org",
+            "criteo.com",
+            "criteo.net",
+            "scorecardresearch.com",
+            "taboola.com",
+            "outbrain.com",
         ),
-        "youtube" to listOf("googleads.g.doubleclick.net", "pagead2.googlesyndication.com"),
-        "phishing" to listOf("phishing.testcategory.com"),
-        "porn" to listOf("adult.testcategory.com"),
+        "youtube" to listOf(
+            "googleads.g.doubleclick.net",
+            "pagead2.googlesyndication.com",
+            "youtubeads.googleapis.com",
+        ),
+        "phishing" to listOf(
+            "phishing.testcategory.com",
+            "testsafebrowsing.appspot.com",
+        ),
+        "porn" to listOf(
+            "adult.testcategory.com",
+            "pornhub.com",
+            "xvideos.com",
+            "xnxx.com",
+            "redtube.com",
+            "youporn.com",
+        ),
         "government" to listOf("gov.ir"),
-        "payment" to listOf("shaparak.ir"),
-        "socials" to listOf("facebook.com", "instagram.com", "tiktok.com", "x.com"),
-        "crypto" to listOf("binance.com", "coinbase.com"),
-        "fake-news" to emptyList(),
+        "payment" to listOf(
+            "shaparak.ir",
+            "behpardakht.com",
+            "pec.ir",
+            "sadadpsp.ir",
+            "asanpardakht.ir",
+            "sepehrpay.com",
+        ),
+        "socials" to listOf(
+            "facebook.com",
+            "fbcdn.net",
+            "instagram.com",
+            "whatsapp.com",
+            "tiktok.com",
+            "x.com",
+            "twitter.com",
+            "telegram.org",
+            "t.me",
+            "snapchat.com",
+        ),
+        "crypto" to listOf(
+            "binance.com",
+            "coinbase.com",
+            "kraken.com",
+            "kucoin.com",
+            "bybit.com",
+            "okx.com",
+            "crypto.com",
+            "metamask.io",
+        ),
+        "fake-news" to listOf(
+            "fake-news.testcategory.com",
+            "worldnewsdailyreport.com",
+            "empirenews.net",
+            "nationalreport.net",
+            "huzlers.com",
+        ),
     )
 }

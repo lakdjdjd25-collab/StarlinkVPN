@@ -153,6 +153,36 @@ class VpnConfigCompilerTest {
         })
     }
 
+    @Test
+    fun `every Guardian category produces an enforceable reject rule`() {
+        val categories = setOf(
+            "malware",
+            "ads",
+            "youtube",
+            "phishing",
+            "porn",
+            "government",
+            "payment",
+            "socials",
+            "crypto",
+            "fake-news",
+        )
+        categories.forEach { category ->
+            val rules = JSONObject(
+                VpnConfigCompiler.compile(
+                    rawConfigJson = providerConfig,
+                    settings = AppSettings(blockIrDomains = false, guardianEnabled = true),
+                    enabledGuardianCategories = setOf(category),
+                    applicationPackage = "org.quickping",
+                ).configJson,
+            ).getJSONObject("route").getJSONArray("rules")
+            assertTrue("Guardian category $category has no reject rule", (0 until rules.length()).any { index ->
+                val rule = rules.getJSONObject(index)
+                rule.optString("action") == "reject" && (rule.optJSONArray("domain_suffix")?.length() ?: 0) > 0
+            })
+        }
+    }
+
     private val providerConfig = """
         {
           "inbounds": [
