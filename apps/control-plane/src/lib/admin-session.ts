@@ -49,7 +49,11 @@ export function isSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return false;
   try {
-    return new URL(origin).origin === request.nextUrl.origin;
+    const requestOrigin = new URL(origin).origin;
+    if (requestOrigin === request.nextUrl.origin) return true;
+
+    const publicAppUrl = process.env.PUBLIC_APP_URL;
+    return Boolean(publicAppUrl && requestOrigin === new URL(publicAppUrl).origin);
   } catch {
     return false;
   }
