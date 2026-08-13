@@ -1,9 +1,11 @@
 package org.quickping.app.state
 
+import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Build
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.content.ContextCompat
@@ -27,6 +29,7 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.math.roundToInt
 import org.quickping.app.QuickPingApplication
+import org.quickping.app.data.auth.GoogleCredentialAuth
 import org.quickping.app.data.network.ApiException
 import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.settings.QuickPingSettingsStore
@@ -215,6 +218,45 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun loginWithGoogle(activity: Activity) {
+        loginJob?.cancel()
+        loginJob = viewModelScope.launch {
+            _state.update {
+                it.copy(
+                    busy = true,
+                    loginChallengeId = null,
+                    loginDebugCode = null,
+                    loginError = null,
+                )
+            }
+            try {
+                val challenge = repository.requestGoogleNonce()
+                val idToken = GoogleCredentialAuth(activity).getIdToken(challenge)
+                val bootstrap = repository.loginWithGoogle(
+                    challenge = challenge,
+                    idToken = idToken,
+                    language = _state.value.settings.language.code,
+                )
+                val guardian = mergeGuardian(bootstrap)
+                _state.update {
+                    it.withBootstrap(bootstrap, guardian).copy(
+                        signedIn = true,
+                        busy = false,
+                        loginChallengeId = null,
+                        loginDebugCode = null,
+                        loginError = null,
+                    )
+                }
+            } catch (error: GetCredentialCancellationException) {
+                _state.update { it.copy(busy = false, loginError = null) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                _state.update { it.copy(busy = false, loginError = error.loginMessage()) }
+            }
+        }
+    }
+
     fun verifyEmailCode(code: String) {
         val challengeId = _state.value.loginChallengeId ?: return
         loginJob?.cancel()
@@ -254,7 +296,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun notifyGoogleLoginRequiresConfiguration() = _state.update {
-        it.copy(loginError = "ورود گوگل پس از ثبت شناسهٔ رسمی OAuth فعال می‌شود؛ فعلاً از ایمیل و رمز عبور استفاده کنید")
+        it.copy(loginError = "ورود گوگل روی این دستگاه قابل اجرا نیست")
     }
 
     fun notifyLoginHelp() = _state.update {
@@ -491,7 +533,13 @@ private fun QuickPingUiState.withBootstrap(
 }
 
 private fun Throwable.loginMessage(): String = when (this) {
-    is ApiException -> message
+    is ApiException -> when (code) {
+        "free_service_provisioning_failed" -> "ساخت سرویس رایگان 10GB در پنل انجام نشد؛ دوباره تلاش کنید"
+        "google_login_unavailable" -> message
+        "invalid_google_token", "invalid_google_challenge" -> "ورود گوگل معتبر نبود؛ دوباره تلاش کنید"
+        else -> message
+    }
+    is androidx.credentials.exceptions.GetCredentialException -> "ورود با حساب گوگل انجام نشد"
     is java.net.SocketTimeoutException -> "پاسخی از سرور دریافت نشد؛ دوباره تلاش کنید"
     is java.io.IOException -> "اتصال به سرور برقرار نشد"
     else -> "خطای پیش‌بینی‌نشده‌ای رخ داد"
