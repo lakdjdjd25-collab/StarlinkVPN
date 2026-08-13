@@ -188,9 +188,14 @@ export class PasarGuardClient {
   }
 
   private async authorized(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
-    const headers = new Headers(init.headers);
-    headers.set("authorization", `Bearer ${await this.token()}`);
-    headers.set("accept", "application/json");
+    const providedHeaders = init.headers && !Array.isArray(init.headers) && !(init.headers instanceof Headers)
+      ? init.headers as Record<string, string>
+      : Object.fromEntries(new Headers(init.headers).entries());
+    const headers = {
+      ...providedHeaders,
+      authorization: `Bearer ${await this.token()}`,
+      accept: "application/json",
+    };
     const response = await this.fetchWithTimeout(path, { ...init, headers });
     if (response.status === 401 && retry) {
       this.tokenPromise = undefined;
