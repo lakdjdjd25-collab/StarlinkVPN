@@ -113,7 +113,14 @@ fun QuickPingApp(
                     onPasswordLogin = quickPingViewModel::loginWithPassword,
                     onVerifyCode = quickPingViewModel::verifyEmailCode,
                     onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
-                    onGoogleRequested = quickPingViewModel::notifyGoogleLoginRequiresConfiguration,
+                    onGoogleRequested = {
+                        val activity = context as? Activity
+                        if (activity != null) {
+                            quickPingViewModel.loginWithGoogle(activity)
+                        } else {
+                            quickPingViewModel.notifyGoogleLoginRequiresConfiguration()
+                        }
+                    },
                     onHelpRequested = quickPingViewModel::notifyLoginHelp,
                 )
             }
