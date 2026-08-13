@@ -5,19 +5,56 @@ import {
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
+  type PasarGuardUserTemplate,
 } from "@/lib/pasarguard/client";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 export const GOOGLE_FREE_QUOTA_BYTES = 10n * 1024n ** 3n;
 export const GOOGLE_FREE_PLAN_NAME = "Google Free 10GB";
 
-export function pasarGuardFreeTemplateId(): number {
+function configuredFreeTemplateId(): number | null {
   const raw = process.env.PASARGUARD_FREE_TEMPLATE_ID?.trim();
-  const value = raw ? Number(raw) : Number.NaN;
+  if (!raw) return null;
+  const value = Number(raw);
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new PasarGuardError("not_configured", "شناسه قالب سرویس رایگان 10GB پاسارگارد تنظیم نشده است");
+    throw new PasarGuardError("not_configured", "شناسه قالب سرویس رایگان پاسارگارد معتبر نیست");
   }
   return value;
+}
+
+function templateNameScore(template: PasarGuardUserTemplate): number {
+  const value = template.name.toLowerCase();
+  return ["google", "free", "10gb", "10 gb", "گوگل", "رایگان"]
+    .reduce((score, marker) => score + (value.includes(marker) ? 1 : 0), 0);
+}
+
+export async function resolveGoogleFreeTemplateId(client: PasarGuardClient): Promise<number> {
+  const configured = configuredFreeTemplateId();
+  if (configured) return configured;
+
+  const candidates = (await client.listUserTemplates()).filter((template) => (
+    template.dataLimit === GOOGLE_FREE_QUOTA_BYTES
+    && !template.isDisabled
+    && template.status === "active"
+    && template.resetStrategy === "no_reset"
+  ));
+  if (candidates.length === 0) {
+    throw new PasarGuardError(
+      "not_configured",
+      "هیچ قالب فعال 10GB بدون تمدید خودکار در پاسارگارد پیدا نشد",
+    );
+  }
+  if (candidates.length === 1) return candidates[0].id;
+
+  const ranked = candidates
+    .map((template) => ({ template, score: templateNameScore(template) }))
+    .sort((left, right) => right.score - left.score);
+  if (ranked[0].score > 0 && ranked[0].score > ranked[1].score) return ranked[0].template.id;
+
+  throw new PasarGuardError(
+    "not_configured",
+    "چند قالب معتبر 10GB در پاسارگارد وجود دارد و انتخاب خودکار امن نیست",
+  );
 }
 
 export function googleFreeUsername(googleSubject: string): string {
@@ -83,7 +120,7 @@ export async function ensureGoogleFreeService(
   if (!remote) {
     try {
       remote = await client.createUserFromTemplate(
-        pasarGuardFreeTemplateId(),
+        await resolveGoogleFreeTemplateId(client),
         stablePart,
         "QuickPing Google signup - one-time 10GB gift",
       );
