@@ -362,8 +362,8 @@ private fun ProfileCard(
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
         Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AccountAction(Modifier.weight(1f), quickText("حذف حساب کاربری", "Delete account"), R.drawable.ic_trash, true, onDelete)
             AccountAction(Modifier.weight(1f), quickText("تغییر گذرواژه", "Change password"), R.drawable.ic_key, false, onChangePassword)
+            AccountAction(Modifier.weight(1f), quickText("حذف حساب کاربری", "Delete account"), R.drawable.ic_trash, true, onDelete)
         }
     }
 }
@@ -379,12 +379,12 @@ private fun ReferenceServiceCard(service: Service, onServices: () -> Unit) {
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp)) {
             Row(verticalAlignment = Alignment.Top) {
-                StatusPill(service.plan, QuickPingColors.TextSecondary)
-                Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(quickText("سرویس فعلی", "Current service"), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.titleMedium)
                     Text(service.license, color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall)
                 }
+                Spacer(Modifier.weight(1f))
+                StatusPill(service.plan, QuickPingColors.TextSecondary)
             }
             Spacer(Modifier.height(8.dp))
             Text("$remainingPercent٪", modifier = Modifier.fillMaxWidth(), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)

@@ -155,7 +155,7 @@ fun SettingsScreen(
                         title = "DNS",
                         icon = R.drawable.ic_dns,
                         onClick = { showDnsDialog = true },
-                        trailing = { ValuePill(settings.dnsProvider.persianLabel, caret = true) },
+                        trailing = { ValuePill(dnsLabel(settings.dnsProvider), caret = true) },
                     )
                     SettingsTile(
                         title = quickText("پینگ گرفتن خودکار سرورها", "Automatically ping servers"),
@@ -243,7 +243,7 @@ fun SettingsScreen(
     if (showDnsDialog) {
         ChoiceDialog(
             title = "DNS",
-            options = DnsProvider.entries.map { it to it.persianLabel },
+            options = DnsProvider.entries.map { it to dnsLabel(it) },
             selected = settings.dnsProvider,
             onSelect = { provider ->
                 onUpdateSettings { it.copy(dnsProvider = provider) }
@@ -583,4 +583,11 @@ private fun localIpv4Address(): String = runCatching {
 
 private fun copyText(context: Context, label: String, value: String) {
     context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, value))
+}
+
+@Composable
+private fun dnsLabel(provider: DnsProvider): String = when (provider) {
+    DnsProvider.Default -> quickText("پیش‌فرض", "Default")
+    DnsProvider.Google -> quickText("گوگل", "Google")
+    DnsProvider.Cloudflare -> quickText("کلودفلر", "Cloudflare")
 }

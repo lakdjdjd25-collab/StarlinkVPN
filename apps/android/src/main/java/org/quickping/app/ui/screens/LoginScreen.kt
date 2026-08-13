@@ -117,7 +117,7 @@ private fun LoginEmailBar(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painterResource(R.drawable.ic_arrow_back),
+                painterResource(R.drawable.ic_chevron_end),
                 contentDescription = quickText("ادامه", "Continue"),
                 tint = if (email.contains("@")) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
                 modifier = Modifier.size(20.dp),

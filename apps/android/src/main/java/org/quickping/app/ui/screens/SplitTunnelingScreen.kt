@@ -116,6 +116,8 @@ fun SplitTunnelingScreen(
                     modifier = Modifier.fillMaxWidth().height(58.dp).clickable { showModeDialog = true }.padding(horizontal = 18.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Text(quickText("حالت", "Mode"), color = QuickPingColors.TextSecondary)
+                    Spacer(Modifier.weight(1f))
                     Text(
                         quickText(
                             if (settings.splitTunnelMode == SplitTunnelMode.Exclude) "انحصاری" else "شامل",
@@ -127,8 +129,6 @@ fun SplitTunnelingScreen(
                         color = QuickPingColors.TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Spacer(Modifier.weight(1f))
-                    Text(quickText("حالت", "Mode"), color = QuickPingColors.TextSecondary)
                 }
                 Box(Modifier.fillMaxWidth().height(1.dp).background(QuickPingColors.Border))
                 Row(
@@ -137,17 +137,17 @@ fun SplitTunnelingScreen(
                 ) {
                     SplitSelectionCard(
                         modifier = Modifier.weight(1f),
-                        title = quickText("نشانی‌ها", "Addresses"),
-                        count = quickText("${settings.splitTunnelAddresses.size} علامت‌گذاری شده", "${settings.splitTunnelAddresses.size} selected"),
-                        icon = R.drawable.ic_addresses,
-                        onClick = { showAddressesDialog = true },
-                    )
-                    SplitSelectionCard(
-                        modifier = Modifier.weight(1f),
                         title = quickText("برنامه‌ها", "Apps"),
                         count = quickText("${settings.splitTunnelPackages.size} علامت‌گذاری شده", "${settings.splitTunnelPackages.size} selected"),
                         icon = R.drawable.ic_apps,
                         onClick = { showAppsDialog = true },
+                    )
+                    SplitSelectionCard(
+                        modifier = Modifier.weight(1f),
+                        title = quickText("نشانی‌ها", "Addresses"),
+                        count = quickText("${settings.splitTunnelAddresses.size} علامت‌گذاری شده", "${settings.splitTunnelAddresses.size} selected"),
+                        icon = R.drawable.ic_addresses,
+                        onClick = { showAddressesDialog = true },
                     )
                 }
             }
@@ -164,13 +164,13 @@ fun SplitTunnelingScreen(
                     },
                 )
                 Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(quickText("وضعیت:", "Status:"), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.weight(1f))
                     Text(
                         if (settings.blockIrDomains) quickText("🔒 مسدود است", "🔒 Blocked") else quickText("🔓 مجاز است", "🔓 Allowed"),
                         color = if (settings.blockIrDomains) Color(0xFF59BFD8) else QuickPingColors.TextMuted,
                         style = MaterialTheme.typography.labelMedium,
                     )
-                    Spacer(Modifier.weight(1f))
-                    Text(quickText("وضعیت:", "Status:"), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.labelMedium)
                 }
             }
             Spacer(Modifier.height(24.dp))

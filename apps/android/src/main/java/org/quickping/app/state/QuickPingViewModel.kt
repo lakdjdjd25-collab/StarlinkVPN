@@ -127,7 +127,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    fun selectServer(id: String) = _state.update { it.copy(selectedServerId = id) }
+    fun selectServer(id: String) {
+        if (id.isBlank() || id == _state.value.selectedServerId) return
+        _state.update { it.copy(selectedServerId = id) }
+        restartVpnIfActive()
+    }
 
     fun refreshServerPings() {
         if (!_state.value.settings.autoPing || _state.value.servers.isEmpty() || pingJob?.isActive == true) return
