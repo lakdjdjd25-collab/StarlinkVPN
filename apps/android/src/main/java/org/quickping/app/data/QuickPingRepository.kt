@@ -11,12 +11,15 @@ import org.quickping.app.BuildConfig
 import org.quickping.app.data.network.ApiException
 import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.network.EmailChallenge
+import org.quickping.app.data.network.GoogleAuthApiClient
+import org.quickping.app.data.network.GoogleNonceChallenge
 import org.quickping.app.data.network.QuickPingApiClient
 import org.quickping.app.data.security.SecureTokenStore
 import org.quickping.app.data.security.StoredSession
 
 class QuickPingRepository(context: Context) {
     private val api = QuickPingApiClient(BuildConfig.API_BASE_URL)
+    private val googleApi = GoogleAuthApiClient(BuildConfig.API_BASE_URL)
     private val tokens = SecureTokenStore(context.applicationContext)
     private val refreshMutex = Mutex()
 
@@ -32,6 +35,26 @@ class QuickPingRepository(context: Context) {
         withContext(Dispatchers.IO) {
             api.requestEmailCode(email, tokens.installationId(), language)
         }
+
+    suspend fun requestGoogleNonce(): GoogleNonceChallenge = withContext(Dispatchers.IO) {
+        googleApi.requestNonce(tokens.installationId())
+    }
+
+    suspend fun loginWithGoogle(
+        challenge: GoogleNonceChallenge,
+        idToken: String,
+        language: String,
+    ): BootstrapPayload = withContext(Dispatchers.IO) {
+        val session = googleApi.login(
+            challenge = challenge,
+            idToken = idToken,
+            installationId = tokens.installationId(),
+            deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+            appVersion = BuildConfig.VERSION_NAME,
+            language = language,
+        )
+        saveAndBootstrap(session)
+    }
 
     suspend fun loginWithPassword(email: String, password: String): BootstrapPayload =
         withContext(Dispatchers.IO) {

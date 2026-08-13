@@ -17,6 +17,14 @@ const UNLIMITED_QUOTA_BYTES = 100n * 1024n ** 4n;
 const UNLIMITED_EXPIRY = new Date("2100-01-01T00:00:00.000Z");
 const STALE_AFTER_MS = 5 * 60 * 1000;
 
+export type BindPasarGuardOptions = {
+  isFree?: boolean;
+  planName?: string;
+  serviceName?: string;
+  allowAdditionalBinding?: boolean;
+  expectedQuotaBytes?: bigint;
+};
+
 function safeSyncError(error: unknown): string {
   if (error instanceof PasarGuardError) return error.message;
   return "همگام‌سازی پاسارگارد با خطای پیش‌بینی‌نشده متوقف شد";
@@ -65,7 +73,6 @@ async function applyPasarGuardSync(
         usedBytes: state.usedBytes,
         expiresAt: state.expiresAt,
         maxDevices: state.maxDevices,
-        isFree: false,
       },
     });
 
@@ -175,11 +182,19 @@ export async function bindPasarGuardUser(
   quickPingUserId: string,
   externalUserId: number,
   client: PasarGuardClient = createPasarGuardClient(),
+  options: BindPasarGuardOptions = {},
 ) {
   const [user, rawConfig] = await Promise.all([
     client.getUser(externalUserId),
     client.getSingBoxConfig(externalUserId),
   ]);
+  const state = serviceState(user);
+  if (options.expectedQuotaBytes !== undefined && state.quotaBytes !== options.expectedQuotaBytes) {
+    throw new PasarGuardError(
+      "invalid_response",
+      `حجم سرویس پاسارگارد باید دقیقاً ${options.expectedQuotaBytes.toString()} بایت باشد`,
+    );
+  }
   const normalized = normalizePasarGuardConfig(rawConfig);
   const quickPingUser = await db.user.findFirst({
     where: { id: quickPingUserId, status: "ACTIVE" },
@@ -194,21 +209,26 @@ export async function bindPasarGuardUser(
   if (existing && existing.service.userId !== quickPingUser.id) {
     throw new PasarGuardError("invalid_response", "این کاربر پاسارگارد قبلاً به حساب دیگری متصل شده است");
   }
-  const existingForQuickPingUser = await db.pasarGuardBinding.findFirst({
-    where: { service: { userId: quickPingUser.id } },
-    select: { id: true, externalUserId: true },
-  });
-  if (existingForQuickPingUser && existingForQuickPingUser.id !== existing?.id) {
-    throw new PasarGuardError("invalid_response", "این حساب QuickPing قبلاً به یک اشتراک پاسارگارد متصل شده است");
+  if (!options.allowAdditionalBinding) {
+    const existingForQuickPingUser = await db.pasarGuardBinding.findFirst({
+      where: { service: { userId: quickPingUser.id } },
+      select: { id: true, externalUserId: true },
+    });
+    if (existingForQuickPingUser && existingForQuickPingUser.id !== existing?.id) {
+      throw new PasarGuardError("invalid_response", "این حساب QuickPing قبلاً به یک اشتراک پاسارگارد متصل شده است");
+    }
   }
 
   let bindingId = existing?.id;
   if (!bindingId) {
-    const state = serviceState(user);
+    const isFree = options.isFree ?? false;
+    const planName = options.planName ?? "PasarGuard";
     const binding = await db.$transaction(async (tx) => {
       const plan = await tx.plan.upsert({
-        where: { name: "PasarGuard" },
+        where: { name: planName },
         update: {
+          interval: isFree ? "FREE" : "CUSTOM",
+          price: 0,
           dataLimitBytes: state.quotaBytes,
           durationDays: 3650,
           maxDevices: state.maxDevices,
@@ -216,8 +236,8 @@ export async function bindPasarGuardUser(
           isPublic: false,
         },
         create: {
-          name: "PasarGuard",
-          interval: "CUSTOM",
+          name: planName,
+          interval: isFree ? "FREE" : "CUSTOM",
           price: 0,
           durationDays: 3650,
           dataLimitBytes: state.quotaBytes,
@@ -230,14 +250,14 @@ export async function bindPasarGuardUser(
         data: {
           userId: quickPingUser.id,
           planId: plan.id,
-          name: user.username,
-          license: `PG-${randomBytes(12).toString("hex").toUpperCase()}`,
+          name: options.serviceName ?? user.username,
+          license: `${isFree ? "FREE" : "PG"}-${randomBytes(12).toString("hex").toUpperCase()}`,
           status: state.status,
           quotaBytes: state.quotaBytes,
           usedBytes: state.usedBytes,
           expiresAt: state.expiresAt,
           maxDevices: state.maxDevices,
-          isFree: false,
+          isFree,
           guardianProfile: {
             create: {
               rules: {
