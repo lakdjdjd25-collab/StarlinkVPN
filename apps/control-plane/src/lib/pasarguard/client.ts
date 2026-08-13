@@ -187,22 +187,20 @@ export class PasarGuardClient {
     }
   }
 
-  private async authorized(path: string, retry = true): Promise<Response> {
-    const response = await this.fetchWithTimeout(path, {
-      headers: {
-        authorization: `Bearer ${await this.token()}`,
-        accept: "application/json",
-      },
-    });
+  private async authorized(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${await this.token()}`);
+    headers.set("accept", "application/json");
+    const response = await this.fetchWithTimeout(path, { ...init, headers });
     if (response.status === 401 && retry) {
       this.tokenPromise = undefined;
-      return this.authorized(path, false);
+      return this.authorized(path, init, false);
     }
     if (response.status === 401) {
       throw new PasarGuardError("unauthorized", "نشست API پاسارگارد معتبر نیست", 401);
     }
     if (response.status === 403) {
-      throw new PasarGuardError("forbidden", "این مدیر پاسارگارد مجوز خواندن کاربران یا اشتراک‌ها را ندارد", 403);
+      throw new PasarGuardError("forbidden", "این مدیر پاسارگارد مجوز لازم برای این عملیات را ندارد", 403);
     }
     if (!response.ok) {
       throw new PasarGuardError("upstream_error", "پنل پاسارگارد پاسخ موفق نداد", response.status);
@@ -224,6 +222,23 @@ export class PasarGuardClient {
     const parsed = rawUserSchema.safeParse(await response.json().catch(() => null));
     if (!parsed.success) {
       throw new PasarGuardError("invalid_response", "اطلاعات کاربر پاسارگارد ساختار معتبری ندارد");
+    }
+    return mapUser(parsed.data);
+  }
+
+  async createUserFromTemplate(templateId: number, username: string, note: string): Promise<PasarGuardUser> {
+    const response = await this.authorized("api/user/from_template", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        user_template_id: templateId,
+        username,
+        note,
+      }),
+    });
+    const parsed = rawUserSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) {
+      throw new PasarGuardError("invalid_response", "کاربر ساخته‌شده در پاسارگارد ساختار معتبری ندارد");
     }
     return mapUser(parsed.data);
   }
