@@ -152,7 +152,20 @@ async function applyPasarGuardSync(
       },
       include: {
         service: { include: { user: { select: { id: true, email: true } } } },
-        nodes: { include: { region: true }, orderBy: { name: "asc" } },
+        nodes: {
+          select: {
+            id: true,
+            name: true,
+            host: true,
+            port: true,
+            protocol: true,
+            coreType: true,
+            status: true,
+            lastSeenAt: true,
+            region: { select: { id: true, code: true, name: true, countryCode: true } },
+          },
+          orderBy: { name: "asc" },
+        },
       },
     });
   });
