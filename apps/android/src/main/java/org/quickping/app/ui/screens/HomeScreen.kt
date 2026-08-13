@@ -419,7 +419,10 @@ private fun SelectedServerSummary(
             )
             HomeRtlText(
                 text = if (state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank()) {
-                    state.connectionError
+                    state.connectionErrorCode
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { code -> "[$code] ${state.connectionError.orEmpty()}" }
+                        ?: state.connectionError.orEmpty()
                 } else {
                     quickText("شبکهٔ ${server.countryName}  •  ------", "${server.countryName} network  •  ------")
                 },
