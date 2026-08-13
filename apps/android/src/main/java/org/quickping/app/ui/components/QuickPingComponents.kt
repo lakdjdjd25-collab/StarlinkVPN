@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.res.painterResource
@@ -133,9 +135,9 @@ fun GlassCard(
     val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(23.dp))
             .background(QuickPingColors.Surface.copy(alpha = 0.94f))
-            .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(14.dp))
+            .border(1.dp, QuickPingColors.BorderSoft, RoundedCornerShape(23.dp))
             .then(
                 if (onClick == null) Modifier else Modifier.clickable(
                     interactionSource = interaction,
@@ -145,6 +147,22 @@ fun GlassCard(
             ),
         content = content,
     )
+}
+
+@Composable
+fun DashedDivider(
+    modifier: Modifier = Modifier,
+    color: Color = QuickPingColors.TextMuted.copy(alpha = 0.65f),
+) {
+    Canvas(modifier = modifier.fillMaxWidth().height(1.dp)) {
+        drawLine(
+            color = color,
+            start = androidx.compose.ui.geometry.Offset(0f, size.height / 2f),
+            end = androidx.compose.ui.geometry.Offset(size.width, size.height / 2f),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
+        )
+    }
 }
 
 @Composable

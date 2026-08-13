@@ -67,6 +67,21 @@ class QuickPingRepository(context: Context) {
         }
     }
 
+    suspend fun requestPasswordChange(): EmailChallenge = withContext(Dispatchers.IO) {
+        authenticatedRequest(api::requestPasswordChange)
+    }
+
+    suspend fun confirmPasswordChange(challengeId: String, code: String, newPassword: String) =
+        withContext(Dispatchers.IO) {
+            authenticatedRequest { accessToken ->
+                api.confirmPasswordChange(accessToken, challengeId, code, newPassword)
+            }
+        }
+
+    suspend fun deleteAccount(password: String) = withContext(Dispatchers.IO) {
+        authenticatedRequest { accessToken -> api.deleteAccount(accessToken, password) }
+    }
+
     fun signOut() = tokens.clear()
 
     private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {
@@ -103,6 +118,16 @@ class QuickPingRepository(context: Context) {
         return refreshAccessToken(force = false)
     }
 
+    private suspend fun <T> authenticatedRequest(block: (String) -> T): T {
+        val accessToken = validAccessToken()
+        return try {
+            block(accessToken)
+        } catch (error: ApiException) {
+            if (error.status != 401 || error.code !in AUTH_TOKEN_ERRORS) throw error
+            block(refreshAccessToken(force = true))
+        }
+    }
+
     private suspend fun refreshAccessToken(force: Boolean): String = refreshMutex.withLock {
         val current = tokens.load() ?: throw ApiException(401, "signed_out", "ورود لازم است")
         if (!force && current.accessExpiresAtMillis > System.currentTimeMillis() + 30_000) {
@@ -121,4 +146,8 @@ class QuickPingRepository(context: Context) {
 
     private fun expiryFromNow(seconds: Long): Long =
         System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(seconds.coerceAtLeast(60))
+
+    private companion object {
+        val AUTH_TOKEN_ERRORS = setOf("missing_token", "invalid_token")
+    }
 }

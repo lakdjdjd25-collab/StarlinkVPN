@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 import org.json.JSONArray
 import org.json.JSONObject
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.model.AppRelease
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
@@ -38,6 +39,7 @@ data class BootstrapPayload(
     val serversByService: Map<String, List<Server>>,
     val guardianCategories: List<GuardianCategory>,
     val notifications: List<NotificationItem>,
+    val release: AppRelease?,
 )
 
 class ApiException(
@@ -158,6 +160,17 @@ class QuickPingApiClient(baseUrl: String) {
             serversByService = serversByService,
             guardianCategories = guardianCatalog(guardianStates),
             notifications = data.optJSONArray("notifications").toNotifications(),
+            release = data.optJSONObject("release")?.let { release ->
+                AppRelease(
+                    versionName = release.optString("versionName"),
+                    versionCode = release.optInt("versionCode"),
+                    minimumVersionCode = release.optInt("minimumVersionCode"),
+                    mandatory = release.optBoolean("mandatory"),
+                    changelog = release.optString("changelog"),
+                    downloadUrl = release.optString("downloadUrl"),
+                    sha256 = release.optString("sha256"),
+                )
+            },
         )
     }
 
@@ -177,6 +190,46 @@ class QuickPingApiClient(baseUrl: String) {
             }
             else -> throw ApiException(200, "invalid_config", "پیکربندی سرور موجود نیست")
         }
+    }
+
+    fun requestPasswordChange(accessToken: String): EmailChallenge {
+        val data = request(
+            method = "POST",
+            path = "/api/v1/client/account/password/request",
+            body = JSONObject(),
+            accessToken = accessToken,
+        )
+        return EmailChallenge(
+            id = data.getString("challengeId"),
+            expiresInSeconds = data.optLong("expiresInSeconds", 600),
+            debugCode = data.optNullableString("debugCode"),
+        )
+    }
+
+    fun confirmPasswordChange(
+        accessToken: String,
+        challengeId: String,
+        code: String,
+        newPassword: String,
+    ) {
+        request(
+            method = "POST",
+            path = "/api/v1/client/account/password/confirm",
+            body = JSONObject()
+                .put("challengeId", challengeId)
+                .put("code", code)
+                .put("newPassword", newPassword),
+            accessToken = accessToken,
+        )
+    }
+
+    fun deleteAccount(accessToken: String, password: String) {
+        request(
+            method = "DELETE",
+            path = "/api/v1/client/account",
+            body = JSONObject().put("password", password),
+            accessToken = accessToken,
+        )
     }
 
     private fun request(
@@ -268,6 +321,8 @@ private fun JSONArray?.toServers(): List<Server> {
             countryName = location,
             title = item.optString("remarks", location),
             remarks = item.optString("remarks"),
+            host = item.optString("host"),
+            port = item.optInt("port"),
             coreType = item.optString("coreType", "sing-box"),
             freeAllowed = item.optBoolean("freeAllowed"),
             unmetered = item.optBoolean("unmetered"),

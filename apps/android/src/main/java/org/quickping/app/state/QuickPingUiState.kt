@@ -1,8 +1,10 @@
 package org.quickping.app.state
 
 import org.quickping.app.model.AppSettings
+import org.quickping.app.model.AppRelease
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.NotificationItem
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
@@ -18,12 +20,21 @@ data class QuickPingUiState(
     val settings: AppSettings = AppSettings(),
     val guardianCategories: List<GuardianCategory> = defaultGuardian,
     val notifications: List<NotificationItem> = emptyList(),
+    val release: AppRelease? = null,
     val signedIn: Boolean = false,
     val busy: Boolean = false,
     val pendingEmail: String = "",
     val loginChallengeId: String? = null,
     val loginDebugCode: String? = null,
     val loginError: String? = null,
+    val connectionError: String? = null,
+    val connectionErrorCode: String? = null,
+    val installedApps: List<InstalledApp> = emptyList(),
+    val loadingInstalledApps: Boolean = false,
+    val accountActionBusy: Boolean = false,
+    val accountActionError: String? = null,
+    val passwordChangeChallengeId: String? = null,
+    val passwordChangeDebugCode: String? = null,
 )
 
 internal val emptyService = Service(

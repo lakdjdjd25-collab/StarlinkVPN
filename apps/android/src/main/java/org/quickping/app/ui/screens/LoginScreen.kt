@@ -55,19 +55,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
+import org.quickping.app.core.design.quickText
+import org.quickping.app.model.AppLanguage
 import org.quickping.app.ui.components.StatusPill
 
-private val supportedLanguages = listOf(
-    "English",
-    "Nederlands",
-    "فارسی",
-    "العربية",
-    "Türkçe",
-    "Русский",
-    "हिन्दी",
-    "汉语",
-    "اُردُو",
-)
+private val supportedLanguages = AppLanguage.entries
 
 @Composable
 private fun LoginEmailBar(
@@ -99,7 +91,7 @@ private fun LoginEmailBar(
         ) {
             if (email.isEmpty()) {
                 Text(
-                    "ایمیل خود را وارد کنید",
+                    quickText("ایمیل خود را وارد کنید", "Enter your email"),
                     color = QuickPingColors.TextMuted,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -125,8 +117,8 @@ private fun LoginEmailBar(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painterResource(R.drawable.ic_arrow_back),
-                contentDescription = "ادامه",
+                painterResource(R.drawable.ic_chevron_end),
+                contentDescription = quickText("ادامه", "Continue"),
                 tint = if (email.contains("@")) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
                 modifier = Modifier.size(20.dp),
             )
@@ -146,7 +138,7 @@ private fun OrDivider() {
             drawLine(QuickPingColors.Border, start = androidx.compose.ui.geometry.Offset.Zero, end = androidx.compose.ui.geometry.Offset(size.width, 0f))
         }
         Text(
-            "یا",
+            quickText("یا", "or"),
             modifier = Modifier.padding(horizontal = 9.dp),
             color = QuickPingColors.TextMuted,
             style = MaterialTheme.typography.labelSmall,
@@ -206,7 +198,7 @@ private fun BusyLoginDialog(onCancel: () -> Unit) {
             }
             Spacer(Modifier.height(14.dp))
             Text(
-                "در حال دریافت سرویس‌های شما...",
+                quickText("در حال دریافت سرویس‌های شما...", "Loading your services…"),
                 color = QuickPingColors.TextPrimary,
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.titleMedium,
@@ -221,7 +213,7 @@ private fun BusyLoginDialog(onCancel: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    "انصراف",
+                    quickText("انصراف", "Cancel"),
                     color = QuickPingColors.TextSecondary,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -232,17 +224,19 @@ private fun BusyLoginDialog(onCancel: () -> Unit) {
 
 @Composable
 fun LoginScreen(
+    language: AppLanguage,
     busy: Boolean,
     challengeId: String?,
     debugCode: String?,
     error: String?,
+    onLanguageChange: (AppLanguage) -> Unit,
+    onRequestEmailCode: (String) -> Unit,
     onPasswordLogin: (String, String) -> Unit,
     onVerifyCode: (String) -> Unit,
     onCancelChallenge: () -> Unit,
     onGoogleRequested: () -> Unit,
     onHelpRequested: () -> Unit,
 ) {
-    var language by remember { mutableStateOf("فارسی") }
     var showLanguages by remember { mutableStateOf(false) }
     var showPasswordLogin by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
@@ -282,7 +276,7 @@ fun LoginScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 StatusPill(
-                    text = language,
+                    text = language.label,
                     color = QuickPingColors.TextSecondary,
                     modifier = Modifier.clickable { showLanguages = true },
                 )
@@ -294,7 +288,7 @@ fun LoginScreen(
                 modifier = Modifier.size(172.dp),
             )
             Text(
-                text = "خوش‌آمدید!",
+                text = quickText("خوش‌آمدید!", "Welcome!"),
                 color = QuickPingColors.TextPrimary,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
@@ -305,9 +299,7 @@ fun LoginScreen(
                 onEmailChange = { email = it.trim() },
                 enabled = !busy,
                 onSubmit = {
-                    passwordEmail = email
-                    password = ""
-                    showPasswordLogin = true
+                    onRequestEmailCode(email)
                 },
             )
             if (error != null && challengeId == null) {
@@ -328,7 +320,7 @@ fun LoginScreen(
             ) {
                 LoginSquareButton(
                     icon = R.drawable.ic_password_biometric,
-                    contentDescription = "ورود با رمز عبور",
+                    contentDescription = quickText("ورود با رمز عبور", "Sign in with password"),
                     onClick = {
                         passwordEmail = email
                         password = ""
@@ -338,7 +330,7 @@ fun LoginScreen(
                 Box {
                     LoginSquareButton(
                         icon = R.drawable.logo_google,
-                        contentDescription = "ورود با گوگل",
+                        contentDescription = quickText("ورود با گوگل", "Sign in with Google"),
                         onClick = onGoogleRequested,
                         iconTint = Color.Unspecified,
                     )
@@ -379,14 +371,17 @@ fun LoginScreen(
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    "به کمک نیاز دارید؟",
+                    quickText("به کمک نیاز دارید؟", "Need help?"),
                     color = QuickPingColors.TextSecondary,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "با ادامه دادن، شما با شرایط سرویس‌ها و سیاست حفظ حریم خصوصی موافقت می‌کنید",
+                text = quickText(
+                    "با ادامه دادن، شما با شرایط سرویس‌ها و سیاست حفظ حریم خصوصی موافقت می‌کنید",
+                    "By continuing, you agree to the Terms of Service and Privacy Policy",
+                ),
                 modifier = Modifier.padding(horizontal = 12.dp),
                 color = QuickPingColors.TextMuted,
                 style = MaterialTheme.typography.bodySmall,
@@ -436,7 +431,7 @@ fun LoginScreen(
                         ) {
                             Icon(
                                 painterResource(R.drawable.ic_clear),
-                                contentDescription = "بستن",
+                                contentDescription = quickText("بستن", "Close"),
                                 tint = QuickPingColors.TextSecondary,
                                 modifier = Modifier.size(15.dp),
                             )
@@ -457,7 +452,7 @@ fun LoginScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "انتخاب زبان برنامه",
+                        quickText("انتخاب زبان برنامه", "Choose app language"),
                         color = QuickPingColors.TextPrimary,
                         style = MaterialTheme.typography.titleMedium,
                     )
@@ -475,14 +470,14 @@ fun LoginScreen(
                                         RoundedCornerShape(9.dp),
                                     )
                                     .clickable {
-                                        language = item
+                                        onLanguageChange(item)
                                         showLanguages = false
                                     }
                                     .padding(horizontal = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    item,
+                                    item.label,
                                     modifier = Modifier.weight(1f),
                                     color = QuickPingColors.TextPrimary,
                                     style = MaterialTheme.typography.bodySmall,
@@ -511,7 +506,7 @@ fun LoginScreen(
             shape = RoundedCornerShape(22.dp),
             title = {
                 Text(
-                    "ورود با ایمیل و رمز عبور",
+                    quickText("ورود با ایمیل و رمز عبور", "Sign in with email and password"),
                     modifier = Modifier.fillMaxWidth(),
                     color = QuickPingColors.TextPrimary,
                     textAlign = TextAlign.Center,
@@ -523,7 +518,7 @@ fun LoginScreen(
                         value = passwordEmail,
                         onValueChange = { passwordEmail = it.trim() },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("ایمیل") },
+                        label = { Text(quickText("ایمیل", "Email")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         shape = RoundedCornerShape(13.dp),
@@ -540,7 +535,7 @@ fun LoginScreen(
                         value = password,
                         onValueChange = { password = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("رمز عبور") },
+                        label = { Text(quickText("رمز عبور", "Password")) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = PasswordVisualTransformation(),
@@ -555,7 +550,10 @@ fun LoginScreen(
                         ),
                     )
                     Text(
-                        "از همان حسابی استفاده کنید که در پنل مدیریت ساخته شده است.",
+                        quickText(
+                            "از همان حسابی استفاده کنید که در پنل مدیریت ساخته شده است.",
+                            "Use the same account that was created in the management panel.",
+                        ),
                         color = QuickPingColors.TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
@@ -572,12 +570,12 @@ fun LoginScreen(
                     },
                     enabled = passwordEmail.contains("@") && password.isNotEmpty(),
                 ) {
-                    Text("ورود", color = QuickPingColors.PrimaryLight)
+                    Text(quickText("ورود", "Sign in"), color = QuickPingColors.PrimaryLight)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPasswordLogin = false }) {
-                    Text("انصراف", color = QuickPingColors.TextSecondary)
+                    Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary)
                 }
             },
         )
@@ -592,7 +590,7 @@ fun LoginScreen(
             shape = RoundedCornerShape(22.dp),
             title = {
                 Text(
-                    "کد تأیید ایمیل",
+                    quickText("کد تأیید ایمیل", "Email verification code"),
                     modifier = Modifier.fillMaxWidth(),
                     color = QuickPingColors.TextPrimary,
                     textAlign = TextAlign.Center,
@@ -601,7 +599,7 @@ fun LoginScreen(
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "کد شش‌رقمی ارسال‌شده به ایمیل را وارد کنید.",
+                        quickText("کد شش‌رقمی ارسال‌شده به ایمیل را وارد کنید.", "Enter the six-digit code sent to your email."),
                         color = QuickPingColors.TextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
@@ -639,12 +637,12 @@ fun LoginScreen(
                     onClick = { onVerifyCode(verificationCode) },
                     enabled = verificationCode.length == 6,
                 ) {
-                    Text("تأیید و ورود", color = QuickPingColors.PrimaryLight)
+                    Text(quickText("تأیید و ورود", "Verify and sign in"), color = QuickPingColors.PrimaryLight)
                 }
             },
             dismissButton = {
                 TextButton(onClick = onCancelChallenge) {
-                    Text("انصراف", color = QuickPingColors.TextSecondary)
+                    Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary)
                 }
             },
         )

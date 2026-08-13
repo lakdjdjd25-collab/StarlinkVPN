@@ -93,6 +93,8 @@ export async function GET(request: NextRequest) {
         location: node.region.name,
         countryCode: node.region.countryCode,
         remarks: node.name,
+        host: node.host,
+        port: node.port,
         coreType: node.coreType,
         freeAllowed: node.freeAllowed,
         unmetered: node.unmetered,

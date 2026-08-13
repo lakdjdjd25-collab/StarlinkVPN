@@ -53,11 +53,25 @@ fun QuickPingApp(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) quickPingViewModel.connectVpn()
     }
+    LaunchedEffect(state.initialized, state.signedIn) {
+        val currentRoute = navController.currentDestination?.route
+        if (
+            state.initialized &&
+            !state.signedIn &&
+            currentRoute != null &&
+            currentRoute !in setOf(Route.Splash, Route.Login)
+        ) {
+            navController.navigate(Route.Login) {
+                popUpTo(Route.Home) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
     val onToggleVpn = {
         if (state.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
             quickPingViewModel.disconnectVpn()
         } else {
-            val permissionIntent = VpnService.prepare(context)
+            val permissionIntent = if (state.settings.proxyModeEnabled) null else VpnService.prepare(context)
             if (permissionIntent == null) {
                 quickPingViewModel.connectVpn()
             } else {
@@ -66,7 +80,7 @@ fun QuickPingApp(
         }
     }
 
-    QuickPingTheme(languageCode = state.user.language) {
+    QuickPingTheme(languageCode = state.settings.language.code) {
         NavHost(
             navController = navController,
             startDestination = Route.Splash,
@@ -87,10 +101,15 @@ fun QuickPingApp(
                     }
                 }
                 LoginScreen(
+                    language = state.settings.language,
                     busy = state.busy,
                     challengeId = state.loginChallengeId,
                     debugCode = state.loginDebugCode,
                     error = state.loginError,
+                    onLanguageChange = { language ->
+                        quickPingViewModel.updateSetting { it.copy(language = language) }
+                    },
+                    onRequestEmailCode = quickPingViewModel::requestEmailCode,
                     onPasswordLogin = quickPingViewModel::loginWithPassword,
                     onVerifyCode = quickPingViewModel::verifyEmailCode,
                     onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
@@ -99,6 +118,12 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Home) {
+                LaunchedEffect(
+                    state.settings.autoPing,
+                    state.servers.joinToString(separator = ",", transform = { it.id }),
+                ) {
+                    quickPingViewModel.refreshServerPings()
+                }
                 HomeScreen(
                     state = state,
                     onToggleConnection = onToggleVpn,
@@ -112,6 +137,7 @@ fun QuickPingApp(
                 SettingsScreen(
                     settings = state.settings,
                     onUpdateSettings = quickPingViewModel::updateSetting,
+                    onResetSettings = quickPingViewModel::resetSettings,
                     onBack = navController::popBackStack,
                     onSplitTunneling = { navController.navigate(Route.SplitTunneling) },
                     onGuardian = { navController.navigate(Route.Guardian) },
@@ -132,11 +158,12 @@ fun QuickPingApp(
                 )
             }
             composable(Route.SplitTunneling) {
+                LaunchedEffect(Unit) { quickPingViewModel.loadInstalledApps() }
                 SplitTunnelingScreen(
-                    enabled = state.settings.splitTunnelingEnabled,
-                    onEnabledChange = { value ->
-                        quickPingViewModel.updateSetting { it.copy(splitTunnelingEnabled = value) }
-                    },
+                    settings = state.settings,
+                    installedApps = state.installedApps,
+                    loadingApps = state.loadingInstalledApps,
+                    onUpdateSettings = quickPingViewModel::updateSetting,
                     onBack = navController::popBackStack,
                 )
             }
@@ -144,7 +171,16 @@ fun QuickPingApp(
                 AccountScreen(
                     user = state.user,
                     service = state.service,
+                    busy = state.accountActionBusy,
+                    error = state.accountActionError,
+                    passwordChallengeId = state.passwordChangeChallengeId,
+                    passwordDebugCode = state.passwordChangeDebugCode,
+                    onRequestPasswordCode = quickPingViewModel::requestPasswordChange,
+                    onConfirmPasswordChange = quickPingViewModel::confirmPasswordChange,
+                    onDeleteAccount = quickPingViewModel::deleteAccount,
+                    onClearAction = quickPingViewModel::clearAccountAction,
                     onBack = navController::popBackStack,
+                    onSignOut = quickPingViewModel::signOut,
                     onServices = { navController.navigate(Route.Services) },
                 )
             }
@@ -161,7 +197,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Version) {
-                VersionScreen(onBack = navController::popBackStack)
+                VersionScreen(release = state.release, onBack = navController::popBackStack)
             }
         }
     }

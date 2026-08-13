@@ -49,7 +49,7 @@ internal class AndroidSingBoxPlatform(
     @Volatile
     private var tunInterface: ParcelFileDescriptor? = null
 
-    override fun localDNSTransport(): LocalDNSTransport? = null
+    override fun localDNSTransport(): LocalDNSTransport = AndroidLocalDnsTransport(networkMonitor)
 
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
 
@@ -158,7 +158,7 @@ internal class AndroidSingBoxPlatform(
         return ConnectionOwner().also { owner ->
             owner.userId = uid
             owner.userName = packages.firstOrNull().orEmpty()
-            owner.setAndroidPackageNames(StringArray(packages.iterator()))
+            owner.setAndroidPackageNames(StringArray(packages.toList()))
         }
     }
 
@@ -182,8 +182,8 @@ internal class AndroidSingBoxPlatform(
                 item.name = interfaceName
                 item.index = javaInterface.index
                 item.mtu = runCatching { javaInterface.mtu }.getOrDefault(1500)
-                item.addresses = StringArray(javaInterface.interfaceAddresses.map { it.toPrefix() }.iterator())
-                item.dnsServer = StringArray(linkProperties.dnsServers.mapNotNull { it.hostAddress }.iterator())
+                item.addresses = StringArray(javaInterface.interfaceAddresses.map { it.toPrefix() })
+                item.dnsServer = StringArray(linkProperties.dnsServers.mapNotNull { it.hostAddress })
                 item.type = when {
                     capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> Libbox.InterfaceTypeWIFI
                     capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> Libbox.InterfaceTypeCellular
@@ -211,7 +211,7 @@ internal class AndroidSingBoxPlatform(
         WIFIState(ssid, wifiInfo.bssid.orEmpty())
     }.getOrNull()
 
-    override fun systemCertificates(): StringIterator = StringArray(systemCertificatePem.iterator())
+    override fun systemCertificates(): StringIterator = StringArray(systemCertificatePem)
 
     override fun clearDNSCache() = Unit
 
@@ -232,12 +232,13 @@ internal class AndroidSingBoxPlatform(
         override fun next(): LibboxNetworkInterface = iterator.next()
     }
 
-    internal class StringArray(
-        private val iterator: Iterator<String>,
-    ) : StringIterator {
-        override fun len(): Int = 0
-        override fun hasNext(): Boolean = iterator.hasNext()
-        override fun next(): String = iterator.next()
+    internal class StringArray(values: Collection<String>) : StringIterator {
+        private val values = values.toList()
+        private var index = 0
+
+        override fun len(): Int = values.size - index
+        override fun hasNext(): Boolean = index < values.size
+        override fun next(): String = values[index++]
     }
 
     private fun InterfaceAddress.toPrefix(): String = if (address is Inet6Address) {

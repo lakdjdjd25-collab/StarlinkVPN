@@ -8,6 +8,8 @@ data class Server(
     val countryName: String,
     val title: String,
     val remarks: String = "",
+    val host: String = "",
+    val port: Int = 0,
     val pingMs: Int? = null,
     val coreType: String = "sing-box",
     val freeAllowed: Boolean = false,
@@ -47,6 +49,16 @@ data class NotificationItem(
     val read: Boolean,
 )
 
+data class AppRelease(
+    val versionName: String,
+    val versionCode: Int,
+    val minimumVersionCode: Int,
+    val mandatory: Boolean,
+    val changelog: String,
+    val downloadUrl: String,
+    val sha256: String,
+)
+
 data class GuardianCategory(
     val id: String,
     val title: String,
@@ -55,15 +67,74 @@ data class GuardianCategory(
     val enabled: Boolean,
 )
 
+enum class SplitTunnelMode {
+    Include,
+    Exclude,
+}
+
+enum class DnsProvider(
+    val storageValue: String,
+    val persianLabel: String,
+) {
+    Default("default", "پیش‌فرض"),
+    Cloudflare("cloudflare", "کلودفلر"),
+    Google("google", "گوگل"),
+    ;
+
+    companion object {
+        fun fromStorage(value: String?): DnsProvider = entries.firstOrNull {
+            it.storageValue == value || it.persianLabel == value
+        } ?: Default
+    }
+}
+
+enum class AppLanguage(
+    val code: String,
+    val label: String,
+) {
+    Persian("fa", "فارسی"),
+    English("en", "English"),
+    Dutch("nl", "Nederlands"),
+    Arabic("ar", "العربية"),
+    Turkish("tr", "Türkçe"),
+    Russian("ru", "Русский"),
+    Hindi("hi", "हिन्दी"),
+    Chinese("zh", "汉语"),
+    Urdu("ur", "اُردُو"),
+    ;
+
+    companion object {
+        fun fromCode(value: String?): AppLanguage = entries.firstOrNull {
+            it.code == value || it.label == value
+        } ?: Persian
+    }
+}
+
+data class InstalledApp(
+    val packageName: String,
+    val label: String,
+    val systemApp: Boolean,
+)
+
 data class AppSettings(
     val darkTheme: Boolean = true,
     val autoConnect: Boolean = false,
     val autoPing: Boolean = true,
     val shareHotspot: Boolean = false,
-    val proxyEnabled: Boolean = false,
+    val proxyModeEnabled: Boolean = false,
+    val localProxyEnabled: Boolean = true,
     val splitTunnelingEnabled: Boolean = false,
+    val splitTunnelMode: SplitTunnelMode = SplitTunnelMode.Exclude,
+    val splitTunnelPackages: Set<String> = emptySet(),
+    val splitTunnelAddresses: List<String> = emptyList(),
+    val rememberSplitTunnelSettings: Boolean = true,
+    val blockIrDomains: Boolean = true,
     val guardianEnabled: Boolean = true,
-    val dnsProvider: String = "پیش‌فرض",
+    val dnsProvider: DnsProvider = DnsProvider.Default,
     val proxyPort: Int = 10810,
-    val language: String = "فارسی",
+    val language: AppLanguage = AppLanguage.Persian,
+    val reconnectOnNetworkChange: Boolean = true,
+    val strictRoute: Boolean = true,
+    val ipv6Enabled: Boolean = true,
+    val mtu: Int = 1500,
 )

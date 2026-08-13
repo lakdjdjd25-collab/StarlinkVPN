@@ -36,7 +36,7 @@ internal class AndroidDefaultNetworkMonitor(
     private var listener: InterfaceUpdateListener? = null
 
     @Volatile
-    var defaultNetwork: Network? = null
+    var defaultNetwork: Network? = connectivity.activeNetwork
         private set
 
     private var registered = false
