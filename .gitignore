@@ -15,3 +15,5 @@ dist/
 *.keystore
 *.jks
 generated/
+apps/android/libs/*.aar
+!apps/android/libs/.gitkeep

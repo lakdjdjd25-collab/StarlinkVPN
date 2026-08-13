@@ -35,9 +35,14 @@ response when mail variables are absent; production never does so.
 
 ## Android release
 
-- Set `QUICKPING_API_BASE_URL` to the deployed HTTPS origin.
+- The checked-in default `QUICKPING_API_BASE_URL` points to the deployed Railway
+  origin; override it only when deploying another control plane.
+- Run `./scripts/build-sing-box-android.sh`. It verifies the pinned upstream
+  commit and produces the ignored `apps/android/libs/libbox.aar` file.
 - Create a new upload/signing key if the former key cannot be recovered.
 - Keep the package `org.quickping` only when the Play signing identity is under
   the owner's control. Otherwise use a new application id before publishing.
 - Runtime VPN node material is obtained through short-lived authenticated API
   calls; it must never be committed to the Android source.
+- Distribute the GPL source and notices with every APK distribution. CI artifacts
+  are reproducible from this repository and the pinned sing-box source commit.

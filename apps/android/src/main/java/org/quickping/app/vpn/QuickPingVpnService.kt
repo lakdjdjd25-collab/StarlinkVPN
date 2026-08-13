@@ -7,9 +7,10 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
-import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -17,17 +18,20 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.quickping.app.MainActivity
 import org.quickping.app.R
 
 class QuickPingVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val stopping = AtomicBoolean(false)
     private var tunnelJob: Job? = null
-    private var tunnelInterface: ParcelFileDescriptor? = null
-    private var core: TunnelCore = UnavailableTunnelCore()
+    private lateinit var core: TunnelCore
 
     override fun onCreate() {
         super.onCreate()
+        val platform = AndroidSingBoxPlatform(this)
+        core = SingBoxTunnelCore(platform) { disconnect() }
         createNotificationChannel()
     }
 
@@ -41,31 +45,21 @@ class QuickPingVpnService : VpnService() {
 
     private fun connect(configJson: String) {
         if (state.value == ServiceState.Connecting || state.value == ServiceState.Connected) return
+        stopping.set(false)
         startForeground(NOTIFICATION_ID, connectionNotification())
         state.value = ServiceState.Connecting
         tunnelJob = serviceScope.launch {
             runCatching {
                 require(configJson.isNotBlank()) { "Missing runtime configuration" }
-                val descriptor = Builder()
-                    .setSession("QuickPing")
-                    .setMtu(1500)
-                    .addAddress("10.64.0.2", 32)
-                    .addRoute("0.0.0.0", 0)
-                    .addRoute("::", 0)
-                    .addDnsServer("1.1.1.1")
-                    .setBlocking(false)
-                    .establish()
-                    ?: error("Android rejected the VPN interface")
-                tunnelInterface = descriptor
-                core.start(descriptor.fd, configJson)
+                core.start(configJson)
                 state.value = ServiceState.Connected
                 getSystemService<NotificationManager>()?.notify(
                     NOTIFICATION_ID,
                     connectionNotification(connected = true),
                 )
-            }.onFailure {
-                tunnelInterface?.close()
-                tunnelInterface = null
+            }.onFailure { error ->
+                if (error is CancellationException && stopping.get()) return@onFailure
+                runCatching { core.stop() }
                 state.value = ServiceState.Error
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -74,14 +68,12 @@ class QuickPingVpnService : VpnService() {
     }
 
     private fun disconnect() {
+        if (!stopping.compareAndSet(false, true)) return
         tunnelJob?.cancel()
-        tunnelJob = null
-        tunnelInterface?.close()
-        tunnelInterface = null
-        state.value = ServiceState.Disconnected
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        serviceScope.launch {
+        tunnelJob = serviceScope.launch {
             runCatching { core.stop() }
+            state.value = ServiceState.Disconnected
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
@@ -130,8 +122,9 @@ class QuickPingVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        tunnelInterface?.close()
-        tunnelInterface = null
+        if (::core.isInitialized && core.isRunning()) {
+            runCatching { runBlocking(Dispatchers.IO) { core.stop() } }
+        }
         serviceScope.cancel()
         super.onDestroy()
     }

@@ -136,11 +136,23 @@ class QuickPingApiClient(baseUrl: String) {
         )
     }
 
-    fun runtimeConfig(accessToken: String, serviceId: String, nodeId: String): String = request(
-        method = "GET",
-        path = "/api/v1/client/services/${serviceId.urlPathSegment()}/config?nodeId=${nodeId.urlQueryValue()}",
-        accessToken = accessToken,
-    ).toString()
+    fun runtimeConfig(accessToken: String, serviceId: String, nodeId: String): String {
+        val data = request(
+            method = "GET",
+            path = "/api/v1/client/services/${serviceId.urlPathSegment()}/config?nodeId=${nodeId.urlQueryValue()}",
+            accessToken = accessToken,
+        )
+        val node = data.optJSONObject("node")
+            ?: throw ApiException(200, "invalid_config", "پیکربندی سرور ناقص است")
+        val runtimeConfig = node.opt("runtimeConfig")
+        return when (runtimeConfig) {
+            is JSONObject -> runtimeConfig.toString()
+            is String -> runCatching { JSONObject(runtimeConfig).toString() }.getOrElse {
+                throw ApiException(200, "invalid_config", "پیکربندی سرور معتبر نیست")
+            }
+            else -> throw ApiException(200, "invalid_config", "پیکربندی سرور موجود نیست")
+        }
+    }
 
     private fun request(
         method: String,

@@ -1,9 +1,10 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
 
 permissions:
   contents: read
@@ -27,7 +28,7 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -37,4 +38,24 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: actions/cache@v4
+        id: libbox-cache
+        with:
+          path: apps/android/libs/libbox.aar
+          key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
+      - uses: actions/setup-go@v5
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          go-version: 1.24.7
+          cache: false
+      - if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: yes | sdkmanager "ndk;28.0.13004108"
+      - if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-sing-box-android.sh
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: QuickPing-debug
+          path: apps/android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

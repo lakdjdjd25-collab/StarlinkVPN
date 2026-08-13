@@ -1,0 +1,22 @@
+QuickPing 2.6
+Copyright (C) 2026 QuickPing contributors
+
+This repository is a clean-room reconstruction and is distributed under the
+GNU General Public License, version 3 or (at your option) any later version.
+
+The Android native packet engine is built from:
+
+  sing-box v1.13.18
+  Copyright (C) 2022 nekohasekai <contact-sagernet@sekai.icu>
+  https://github.com/SagerNet/sing-box
+  commit 45ca32dcb966f07f97fc888fe8586e359dbe8405
+
+Parts of the Android platform bridge follow the GPL-licensed implementation in:
+
+  sing-box for Android
+  Copyright (C) 2022 nekohasekai <contact-sagernet@sekai.icu>
+  https://github.com/SagerNet/sing-box-for-android
+
+QuickPing is not affiliated with or endorsed by SagerNet, sing-box, or the
+publisher of the reference APK. No signing key, private backend source, or
+unrecoverable native binary from that APK is included in this repository.

@@ -20,7 +20,7 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"${providers.gradleProperty("QUICKPING_API_BASE_URL").orNull ?: "http://10.0.2.2:3000"}\"",
+            "\"${providers.gradleProperty("QUICKPING_API_BASE_URL").orNull ?: "https://control-plane-production-a517.up.railway.app"}\"",
         )
     }
 
@@ -63,6 +63,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(files("libs/libbox.aar"))
+
     implementation(platform(libs.compose.bom))
     androidTestImplementation(platform(libs.compose.bom))
 

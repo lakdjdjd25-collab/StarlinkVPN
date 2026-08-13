@@ -15,8 +15,10 @@ and 24 reference captures; the server side is a new, auditable implementation.
 1. Copy `apps/control-plane/.env.example` to `.env` and set the values.
 2. Run `npm install`, `npm run db:generate`, then `npm run dev`.
 3. Open the root directory in Android Studio and run `apps:android`.
-4. For a physical device, set `QUICKPING_API_BASE_URL` in `gradle.properties`
-   to the reachable HTTPS control-plane URL.
+4. Install Go 1.24.7 and Android NDK `28.0.13004108`, then run
+   `./scripts/build-sing-box-android.sh` before the first Android build.
+5. The production client defaults to the deployed Railway control plane. Set
+   `QUICKPING_API_BASE_URL` in `gradle.properties` to override that origin.
 
 No original backend credentials, signing keys, or user data are stored here.
 
@@ -32,16 +34,22 @@ No original backend credentials, signing keys, or user data are stored here.
   storage, device-bound sessions, bootstrap sync and selected-node configuration
   retrieval are wired to the control plane. Empty accounts remain empty; demo
   services are not used as runtime fallbacks.
-- `TunnelCore` is an explicit native boundary. A new auditable sing-box/Xray
-  build must be integrated there before the client can carry VPN traffic; no
-  unrecoverable binary or signing secret is treated as source code.
+- The Android VPN service is connected to an auditable source build of official
+  sing-box `v1.13.18`. The version and upstream commit are pinned, Android owns
+  the TUN interface, and no unrecoverable native binary from the supplied APK is
+  treated as source code.
 
 ## Remaining before release
 
-- Integrate and test an auditable native sing-box/Xray tunnel core.
 - Run the Compose application on the target Android devices and complete
   screenshot-based pixel regression against all supplied captures.
 - Configure production email delivery, Google OAuth, signing keys and real VPN
   node credentials.
 - Complete the client write APIs for account changes, Guardian preferences,
   split tunneling, notification receipts and usage accounting.
+
+## License
+
+QuickPing is distributed under GPL-3.0-or-later. The native build uses official
+sing-box under the same license; attribution and reproducibility details are in
+[`NOTICE`](NOTICE) and [`docs/native-core.md`](docs/native-core.md).
