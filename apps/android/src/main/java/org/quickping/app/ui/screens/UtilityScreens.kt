@@ -191,3 +191,5 @@ private fun ServiceMetric(modifier: Modifier, value: String, label: String) {
         Text(label, color = QuickPingColors.TextMuted, style = MaterialTheme.typography.labelSmall)
     }
 }
+
+private fun bytesToGb(bytes: Long): String = "%.1f".format(bytes / 1024.0 / 1024.0 / 1024.0)

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { defaultSingBoxRuntimeConfig } from "@/lib/sing-box-config";
 
 function useMutation(endpoint: string, method: "POST" | "PATCH" = "POST") {
   const router = useRouter();
@@ -117,10 +118,10 @@ export function CreateNodeForm({ regions }: { regions: Option[] }) {
         <div className="field"><label>نام نود</label><input className="input" name="name" required /></div>
         <div className="field"><label>میزبان</label><input className="input" name="host" required dir="ltr" /></div>
         <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} required /></div>
-        <div className="field"><label>پروتکل</label><select className="select" name="protocol" defaultValue="VLESS"><option>VLESS</option><option>VMESS</option><option>TROJAN</option><option>WIREGUARD</option><option>HYSTERIA2</option><option>SINGBOX</option><option>XRAY</option></select></div>
+        <div className="field"><label>پروتکل</label><select className="select" name="protocol" defaultValue="SINGBOX"><option>VLESS</option><option>VMESS</option><option>TROJAN</option><option>WIREGUARD</option><option>HYSTERIA2</option><option>SINGBOX</option><option>XRAY</option></select></div>
         <div className="field"><label>ظرفیت</label><input className="input" name="capacity" type="number" min={1} defaultValue={1000} /></div>
       </div>
-      <div className="field"><label>پیکربندی JSON (رمزگذاری می‌شود)</label><textarea className="textarea" name="config" rows={6} defaultValue="{}" dir="ltr" required /></div>
+      <div className="field"><label>پیکربندی کامل sing-box (رمزگذاری می‌شود)</label><textarea className="textarea" name="config" rows={14} defaultValue={JSON.stringify(defaultSingBoxRuntimeConfig, null, 2)} dir="ltr" required /></div>
       <label style={{ display: "flex", gap: 8, marginTop: 12, color: "var(--muted)" }}><input type="checkbox" name="freeAllowed" /> قابل استفاده برای سرویس رایگان</label>
       {action.error ? <p className="error">{action.error}</p> : null}
       <button className="button" disabled={action.busy} style={{ marginTop: 14 }}>افزودن نود</button>

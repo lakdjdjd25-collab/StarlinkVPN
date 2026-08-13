@@ -6,7 +6,7 @@ source-built `libbox.aar`. The build is pinned to tag `v1.13.18`, commit
 
 ## Reproducible build
 
-Prerequisites are Java 17, Go 1.24.7, Android SDK 36, and Android NDK
+Prerequisites are Java 17, Go 1.25.12, Android SDK 36, and Android NDK
 `28.0.13004108`. With `ANDROID_HOME` configured, run:
 
 ```bash

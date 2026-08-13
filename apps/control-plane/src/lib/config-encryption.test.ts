@@ -15,7 +15,10 @@ describe("node configuration encryption", () => {
 
   it("rejects tampered ciphertext", () => {
     const encrypted = encryptConfig({ secret: "value" });
-    const tampered = `${encrypted.slice(0, -1)}A`;
-    expect(() => decryptConfig(tampered)).toThrow();
+    const parts = encrypted.split(".");
+    const ciphertext = Buffer.from(parts[3], "base64url");
+    ciphertext[0] ^= 1;
+    parts[3] = ciphertext.toString("base64url");
+    expect(() => decryptConfig(parts.join("."))).toThrow();
   });
 });

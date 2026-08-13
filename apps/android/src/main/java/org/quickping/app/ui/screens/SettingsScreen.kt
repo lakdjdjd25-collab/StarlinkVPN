@@ -90,18 +90,24 @@ fun SettingsScreen(
                         subtitle = "اتصال بدون ایجاد رابط VPN",
                         icon = R.drawable.ic_proxy,
                         trailing = {
-                            QuickSwitch(settings.proxyEnabled) {
-                                onUpdateSettings { current -> current.copy(proxyEnabled = it) }
-                            }
+                            QuickSwitch(
+                                checked = settings.proxyEnabled,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { current -> current.copy(proxyEnabled = enabled) }
+                                },
+                            )
                         },
                     )
                     SettingRow(
                         title = "اشتراک‌گذاری با نقطه اتصال",
                         icon = R.drawable.ic_hotspot,
                         trailing = {
-                            QuickSwitch(settings.shareHotspot) {
-                                onUpdateSettings { current -> current.copy(shareHotspot = it) }
-                            }
+                            QuickSwitch(
+                                checked = settings.shareHotspot,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { current -> current.copy(shareHotspot = enabled) }
+                                },
+                            )
                         },
                     )
                     SettingRow(
@@ -120,9 +126,12 @@ fun SettingsScreen(
                         title = "پینگ‌گرفتن خودکار سرورها",
                         icon = R.drawable.ic_ping_auto,
                         trailing = {
-                            QuickSwitch(settings.autoPing) {
-                                onUpdateSettings { current -> current.copy(autoPing = it) }
-                            }
+                            QuickSwitch(
+                                checked = settings.autoPing,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { current -> current.copy(autoPing = enabled) }
+                                },
+                            )
                         },
                     )
                     SettingRow(
@@ -213,9 +222,12 @@ fun SettingsScreen(
                         title = "اتصال خودکار",
                         icon = R.drawable.ic_reload,
                         trailing = {
-                            QuickSwitch(settings.autoConnect) {
-                                onUpdateSettings { current -> current.copy(autoConnect = it) }
-                            }
+                            QuickSwitch(
+                                checked = settings.autoConnect,
+                                onCheckedChange = { enabled ->
+                                    onUpdateSettings { current -> current.copy(autoConnect = enabled) }
+                                },
+                            )
                         },
                     )
                 }

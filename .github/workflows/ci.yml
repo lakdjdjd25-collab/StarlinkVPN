@@ -38,7 +38,7 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
         id: libbox-cache
         with:
           path: apps/android/libs/libbox.aar
@@ -46,12 +46,17 @@ jobs:
       - uses: actions/setup-go@v5
         if: steps.libbox-cache.outputs.cache-hit != 'true'
         with:
-          go-version: 1.24.7
+          go-version: 1.25.12
           cache: false
       - if: steps.libbox-cache.outputs.cache-hit != 'true'
         run: yes | sdkmanager "ndk;28.0.13004108"
       - if: steps.libbox-cache.outputs.cache-hit != 'true'
         run: ./scripts/build-sing-box-android.sh
+      - uses: actions/cache/save@v4
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          path: apps/android/libs/libbox.aar
+          key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
       - uses: actions/upload-artifact@v4
         if: success()

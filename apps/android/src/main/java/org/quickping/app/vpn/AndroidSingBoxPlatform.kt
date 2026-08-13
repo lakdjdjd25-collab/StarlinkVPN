@@ -32,6 +32,7 @@ import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
 import java.net.Inet6Address
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.InterfaceAddress
 import java.net.NetworkInterface
@@ -100,20 +101,24 @@ internal class AndroidSingBoxPlatform(
     private fun addModernRoutes(builder: VpnService.Builder, options: TunOptions) {
         val inet4Routes = options.inet4RouteAddress
         if (inet4Routes.hasNext()) {
-            inet4Routes.consume { builder.addRoute(IpPrefix("${it.address()}/${it.prefix()}")) }
+            inet4Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
         } else if (options.inet4Address.hasNext()) {
             builder.addRoute("0.0.0.0", 0)
         }
 
         val inet6Routes = options.inet6RouteAddress
         if (inet6Routes.hasNext()) {
-            inet6Routes.consume { builder.addRoute(IpPrefix("${it.address()}/${it.prefix()}")) }
+            inet6Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
         } else if (options.inet6Address.hasNext()) {
             builder.addRoute("::", 0)
         }
 
-        options.inet4RouteExcludeAddress.consume { builder.excludeRoute(IpPrefix("${it.address()}/${it.prefix()}")) }
-        options.inet6RouteExcludeAddress.consume { builder.excludeRoute(IpPrefix("${it.address()}/${it.prefix()}")) }
+        options.inet4RouteExcludeAddress.consume {
+            builder.excludeRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix()))
+        }
+        options.inet6RouteExcludeAddress.consume {
+            builder.excludeRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix()))
+        }
     }
 
     private fun applyPerAppRules(builder: VpnService.Builder, options: TunOptions) {

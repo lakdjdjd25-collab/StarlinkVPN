@@ -70,8 +70,8 @@ internal class AndroidDefaultNetworkMonitor(
     }
 
     @Synchronized
+    @Suppress("UNUSED_PARAMETER")
     fun stop(updateListener: InterfaceUpdateListener) {
-        if (listener !== updateListener) return
         listener = null
         defaultNetwork = null
         if (registered) {

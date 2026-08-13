@@ -4,6 +4,7 @@ import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { encryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
+import { singBoxRuntimeConfigSchema } from "@/lib/sing-box-config";
 
 const schema = z.object({
   regionId: z.string().min(1),
@@ -13,7 +14,7 @@ const schema = z.object({
   protocol: z.enum(["VLESS", "VMESS", "TROJAN", "WIREGUARD", "HYSTERIA2", "SOCKS5", "SINGBOX", "XRAY"]),
   capacity: z.number().int().min(1).max(1_000_000),
   freeAllowed: z.boolean().default(false),
-  config: z.record(z.string(), z.unknown()),
+  config: singBoxRuntimeConfigSchema,
 });
 
 const updateSchema = z.object({

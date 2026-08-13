@@ -15,7 +15,7 @@ and 24 reference captures; the server side is a new, auditable implementation.
 1. Copy `apps/control-plane/.env.example` to `.env` and set the values.
 2. Run `npm install`, `npm run db:generate`, then `npm run dev`.
 3. Open the root directory in Android Studio and run `apps:android`.
-4. Install Go 1.24.7 and Android NDK `28.0.13004108`, then run
+4. Install Go 1.25.12 and Android NDK `28.0.13004108`, then run
    `./scripts/build-sing-box-android.sh` before the first Android build.
 5. The production client defaults to the deployed Railway control plane. Set
    `QUICKPING_API_BASE_URL` in `gradle.properties` to override that origin.

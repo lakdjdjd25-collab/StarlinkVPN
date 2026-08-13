@@ -4,6 +4,7 @@ set -euo pipefail
 SING_BOX_VERSION="v1.13.18"
 SING_BOX_COMMIT="45ca32dcb966f07f97fc888fe8586e359dbe8405"
 GOMOBILE_VERSION="v0.1.12"
+RECOMMENDED_GO_VERSION="go1.25.12"
 
 script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd "${script_directory}/.." && pwd)"
@@ -19,6 +20,9 @@ command -v go >/dev/null || {
   echo "Go is required to build libbox." >&2
   exit 1
 }
+if [[ "$(go env GOVERSION)" != "${RECOMMENDED_GO_VERSION}" ]]; then
+  echo "Warning: official Android v1.13.18 uses ${RECOMMENDED_GO_VERSION}; found $(go env GOVERSION)." >&2
+fi
 command -v git >/dev/null || {
   echo "Git is required to fetch the pinned sing-box source." >&2
   exit 1

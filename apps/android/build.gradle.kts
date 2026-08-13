@@ -4,6 +4,13 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val generatedLicenseAssets = layout.buildDirectory.dir("generated/license-assets")
+val generateLicenseAssets = tasks.register<org.gradle.api.tasks.Sync>("generateLicenseAssets") {
+    from(rootProject.layout.projectDirectory.file("LICENSE"))
+    from(rootProject.layout.projectDirectory.file("NOTICE"))
+    into(generatedLicenseAssets.map { it.dir("licenses") })
+}
+
 android {
     namespace = "org.quickping.app"
     compileSdk = 36
@@ -49,6 +56,8 @@ android {
         compose = true
     }
 
+    sourceSets.getByName("main").assets.srcDir(generatedLicenseAssets)
+
     packaging {
         resources.excludes += setOf(
             "/META-INF/{AL2.0,LGPL2.1}",
@@ -56,6 +65,10 @@ android {
             "/META-INF/NOTICE*",
         )
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(generateLicenseAssets)
 }
 
 kotlin {
