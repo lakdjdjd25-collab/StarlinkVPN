@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -33,9 +33,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.platform.LocalLayoutDirection
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -100,22 +103,22 @@ fun ReferenceLoginScreen(
     }
 
     val logoWidth by animateDpAsState(
-        targetValue = if (keyboardVisible) 88.dp else 156.dp,
+        targetValue = if (keyboardVisible) 104.dp else 156.dp,
         animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
         label = "referenceLoginLogoWidth",
     )
     val logoHeight by animateDpAsState(
-        targetValue = if (keyboardVisible) 59.dp else 105.dp,
+        targetValue = if (keyboardVisible) 70.dp else 105.dp,
         animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
         label = "referenceLoginLogoHeight",
     )
     val heroTop by animateDpAsState(
-        targetValue = if (keyboardVisible) 0.dp else 50.dp,
+        targetValue = if (keyboardVisible) 5.dp else 50.dp,
         animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
         label = "referenceLoginHeroTop",
     )
     val headerHeight by animateDpAsState(
-        targetValue = if (keyboardVisible) 220.dp else 390.dp,
+        targetValue = if (keyboardVisible) 285.dp else 410.dp,
         animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
         label = "referenceLoginHeaderHeight",
     )
@@ -128,12 +131,28 @@ fun ReferenceLoginScreen(
     }
     val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }
 
-    Box(Modifier.fillMaxSize().background(QuickPingColors.Background)) {
+    Box(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
         Image(
             painter = painterResource(R.drawable.bg_login),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(headerHeight + 70.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color(0xFF0A244F).copy(alpha = 0.72f),
+                            0.42f to Color(0xFF081A35).copy(alpha = 0.48f),
+                            0.75f to Color(0xFF07101D).copy(alpha = 0.22f),
+                            1f to Color.Transparent,
+                        ),
+                    ),
+                ),
         )
         Image(
             painter = painterResource(R.drawable.header_login),
@@ -152,30 +171,30 @@ fun ReferenceLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().height(if (keyboardVisible) 38.dp else 48.dp),
+                modifier = Modifier.fillMaxWidth().height(if (keyboardVisible) 42.dp else 48.dp),
                 horizontalArrangement = Arrangement.Absolute.Right,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(
                     modifier = Modifier
-                        .background(Color(0xFF111318).copy(alpha = .92f), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFF22262D), RoundedCornerShape(16.dp))
+                        .background(Color(0xFF11151D).copy(alpha = .94f), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color(0xFF252B35), RoundedCornerShape(16.dp))
                         .clickable { showLanguageDialog = true }
                         .padding(
-                            horizontal = if (keyboardVisible) 10.dp else 12.dp,
-                            vertical = if (keyboardVisible) 6.dp else 8.dp,
+                            horizontal = if (keyboardVisible) 11.dp else 12.dp,
+                            vertical = if (keyboardVisible) 7.dp else 8.dp,
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         language.label,
-                        color = Color(0xFFB8BBC4),
+                        color = Color(0xFFBDC1CA),
                         fontFamily = Peyda,
-                        fontSize = if (keyboardVisible) 11.sp else 12.sp,
+                        fontSize = if (keyboardVisible) 11.5.sp else 12.sp,
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(Modifier.width(5.dp))
-                    Text("⌄", color = Color(0xFF8A8E98), fontSize = 13.sp)
+                    Text("⌄", color = Color(0xFF8F95A1), fontSize = 13.sp)
                 }
             }
 
@@ -186,34 +205,26 @@ fun ReferenceLoginScreen(
                 modifier = Modifier.size(logoWidth, logoHeight),
                 contentScale = ContentScale.Fit,
             )
-            Spacer(Modifier.height(if (keyboardVisible) 2.dp else 10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .width(2.dp)
-                        .height(if (keyboardVisible) 16.dp else 18.dp)
-                        .background(Color(0xFF347BFF), CircleShape),
-                )
-                Spacer(Modifier.width(7.dp))
-                Text(
-                    text = buildAnnotatedString {
-                        append(typedWelcome)
-                        withStyle(SpanStyle(color = Color(0xFF4A82FF), fontWeight = FontWeight.Normal)) {
-                            append(if (cursorVisible) "│" else " ")
-                        }
-                    },
-                    color = Color(0xFFCDD0D7),
-                    fontFamily = Peyda,
-                    fontSize = if (keyboardVisible) 16.sp else 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
-            }
+            Spacer(Modifier.height(if (keyboardVisible) 3.dp else 10.dp))
+            Text(
+                text = buildAnnotatedString {
+                    append(typedWelcome)
+                    withStyle(SpanStyle(color = Color(0xFF4A82FF), fontWeight = FontWeight.Normal)) {
+                        append(if (cursorVisible) "│" else " ")
+                    }
+                },
+                color = Color(0xFFD1D4DB),
+                fontFamily = Peyda,
+                fontSize = if (keyboardVisible) 16.sp else 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
 
             Spacer(Modifier.weight(1f))
             ReferenceLicenseBar(
                 value = license,
                 enabled = !busy,
+                compact = keyboardVisible,
                 onValueChange = {
                     license = it
                     scanError = null
@@ -252,60 +263,67 @@ fun ReferenceLoginScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     visibleError,
-                    color = QuickPingColors.Danger,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2A1116).copy(alpha = .72f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    color = Color(0xFFFF9AA8),
                     fontFamily = Peyda,
-                    fontSize = 10.sp,
+                    fontSize = 11.5.sp,
+                    lineHeight = 15.sp,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 3,
                 )
             }
 
-            Spacer(Modifier.height(if (keyboardVisible) 4.dp else 11.dp))
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 11.dp))
             ReferenceOrDivider()
-            Spacer(Modifier.height(if (keyboardVisible) 4.dp else 11.dp))
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 11.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(if (keyboardVisible) 12.dp else 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(if (keyboardVisible) 12.dp else 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box {
+                        ReferenceLoginSquareButton(
+                            icon = R.drawable.logo_google,
+                            contentDescription = quickText("ورود با گوگل", "Sign in with Google"),
+                            onClick = onGoogleRequested,
+                            iconTint = Color.Unspecified,
+                            compact = keyboardVisible,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .background(Color(0xFFE9EAED), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 5.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("10GB", color = Color(0xFF282B31), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(2.dp))
+                            Icon(
+                                painterResource(R.drawable.ic_gift),
+                                contentDescription = null,
+                                tint = Color(0xFF282B31),
+                                modifier = Modifier.size(11.dp),
+                            )
+                        }
+                    }
                     ReferenceLoginSquareButton(
-                        icon = R.drawable.logo_google,
-                        contentDescription = quickText("ورود با گوگل", "Sign in with Google"),
-                        onClick = onGoogleRequested,
-                        iconTint = Color.Unspecified,
+                        icon = R.drawable.ic_mail,
+                        contentDescription = quickText("ورود با ایمیل", "Sign in with email"),
+                        onClick = {
+                            email = ""
+                            password = ""
+                            showEmailDialog = true
+                        },
                         compact = keyboardVisible,
                     )
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .background(Color(0xFFE9EAED), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("10GB", color = Color(0xFF282B31), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(2.dp))
-                        Icon(
-                            painterResource(R.drawable.ic_gift),
-                            contentDescription = null,
-                            tint = Color(0xFF282B31),
-                            modifier = Modifier.size(11.dp),
-                        )
-                    }
                 }
-                ReferenceLoginSquareButton(
-                    icon = R.drawable.ic_mail,
-                    contentDescription = quickText("ورود با ایمیل", "Sign in with email"),
-                    onClick = {
-                        email = ""
-                        password = ""
-                        showEmailDialog = true
-                    },
-                    compact = keyboardVisible,
-                )
             }
 
-            Spacer(Modifier.height(if (keyboardVisible) 4.dp else 10.dp))
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 10.dp))
             Row(
                 modifier = Modifier.clickable(onClick = onHelpRequested),
                 verticalAlignment = Alignment.CenterVertically,
@@ -313,21 +331,21 @@ fun ReferenceLoginScreen(
                 Icon(
                     painterResource(R.drawable.ic_help_hexagon),
                     contentDescription = null,
-                    tint = Color(0xFF999DA7),
-                    modifier = Modifier.size(if (keyboardVisible) 13.dp else 15.dp),
+                    tint = Color(0xFFA6AAB4),
+                    modifier = Modifier.size(if (keyboardVisible) 14.dp else 15.dp),
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(
                     quickText("به کمک نیاز دارید؟", "Need help?"),
-                    color = Color(0xFF999DA7),
+                    color = Color(0xFFA6AAB4),
                     fontFamily = Peyda,
-                    fontSize = if (keyboardVisible) 10.sp else 11.sp,
+                    fontSize = if (keyboardVisible) 11.sp else 12.sp,
                 )
             }
 
-            Spacer(Modifier.height(if (keyboardVisible) 4.dp else 12.dp))
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 12.dp))
             ReferenceLoginTerms(compact = keyboardVisible)
-            Spacer(Modifier.height(if (keyboardVisible) 3.dp else 12.dp))
+            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 12.dp))
         }
     }
 
@@ -505,51 +523,54 @@ fun ReferenceLoginScreen(
 private fun ReferenceLicenseBar(
     value: String,
     enabled: Boolean,
+    compact: Boolean,
     onValueChange: (String) -> Unit,
     onBack: () -> Unit,
     onScan: () -> Unit,
     onSubmit: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(54.dp)
-            .background(Color(0xFF17191E), RoundedCornerShape(18.dp))
-            .border(1.dp, Color(0xFF23262D), RoundedCornerShape(18.dp))
-            .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onBack)
-        Spacer(Modifier.width(6.dp))
-        ReferenceLoginInnerButton(R.drawable.ic_scan, onScan)
-        Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterEnd) {
-            if (value.isEmpty()) {
-                Text(
-                    quickText("مجوز خود را وارد کنید", "Enter your license"),
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(if (compact) 52.dp else 54.dp)
+                .background(Color(0xFF17191E), RoundedCornerShape(18.dp))
+                .border(1.dp, Color(0xFF272C35), RoundedCornerShape(18.dp))
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onBack)
+            Spacer(Modifier.width(6.dp))
+            ReferenceLoginInnerButton(R.drawable.ic_scan, onScan)
+            Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterEnd) {
+                if (value.isEmpty()) {
+                    Text(
+                        quickText("مجوز خود را وارد کنید", "Enter your license"),
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFF777C87),
+                        fontFamily = Peyda,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.End,
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
                     modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF727680),
-                    fontFamily = Peyda,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.End,
+                    enabled = enabled,
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    textStyle = TextStyle(
+                        color = QuickPingColors.TextPrimary,
+                        fontFamily = Peyda,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.End,
+                    ),
+                    cursorBrush = SolidColor(Color(0xFF4A82FF)),
                 )
             }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = enabled,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-                textStyle = TextStyle(
-                    color = QuickPingColors.TextPrimary,
-                    fontFamily = Peyda,
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.End,
-                ),
-                cursorBrush = SolidColor(Color(0xFF4A82FF)),
-            )
+            ReferenceLoginInnerButton(R.drawable.ic_ticket, onSubmit, enabled && value.isNotBlank())
         }
-        ReferenceLoginInnerButton(R.drawable.ic_ticket, onSubmit, enabled && value.isNotBlank())
     }
 }
 
@@ -577,7 +598,7 @@ private fun ReferenceOrDivider() {
         Canvas(Modifier.weight(1f).height(1.dp)) {
             drawLine(Color(0xFF292C33), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset(size.width, 0f))
         }
-        Text(quickText("یا", "or"), modifier = Modifier.padding(horizontal = 11.dp), color = Color(0xFF7B7F89), fontFamily = Peyda, fontSize = 11.sp)
+        Text(quickText("یا", "or"), modifier = Modifier.padding(horizontal = 11.dp), color = Color(0xFF858A94), fontFamily = Peyda, fontSize = 11.sp)
         Canvas(Modifier.weight(1f).height(1.dp)) {
             drawLine(Color(0xFF292C33), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset(size.width, 0f))
         }
@@ -597,8 +618,8 @@ private fun ReferenceLoginSquareButton(
     Box(
         modifier = Modifier
             .size(size)
-            .background(Color(0xFF080A0D).copy(alpha = .9f), RoundedCornerShape(corner))
-            .border(1.dp, Color(0xFF252830), RoundedCornerShape(corner))
+            .background(Color(0xFF080A0D).copy(alpha = .94f), RoundedCornerShape(corner))
+            .border(1.dp, Color(0xFF2A2F39), RoundedCornerShape(corner))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -616,20 +637,21 @@ private fun ReferenceLoginTerms(compact: Boolean) {
     Text(
         text = buildAnnotatedString {
             append(quickText("با ادامه دادن، شما با ", "By continuing, you agree to the "))
-            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Color(0xFF969AA4))) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFFAEB2BC))) {
                 append(quickText("شرایط سرویس‌ها", "Terms of Service"))
             }
             append(quickText(" و ", " and "))
-            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = Color(0xFF969AA4))) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Color(0xFFAEB2BC))) {
                 append(quickText("سیاست حفظ حریم خصوصی", "Privacy Policy"))
             }
             append(quickText(" موافقت می‌کنید", ""))
         },
-        modifier = Modifier.padding(horizontal = 10.dp),
-        color = Color(0xFF70747E),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 4.dp else 8.dp),
+        color = Color(0xFF858A95),
         fontFamily = Peyda,
-        fontSize = if (compact) 9.sp else 10.sp,
-        lineHeight = if (compact) 13.sp else 15.sp,
+        fontSize = if (compact) 11.sp else 12.5.sp,
+        lineHeight = if (compact) 15.5.sp else 18.sp,
+        fontWeight = FontWeight.Medium,
         textAlign = TextAlign.Center,
     )
 }
