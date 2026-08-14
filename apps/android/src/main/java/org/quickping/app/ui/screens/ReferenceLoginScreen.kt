@@ -81,7 +81,7 @@ fun ReferenceLoginScreen(
     var password by remember { mutableStateOf("") }
     var verificationCode by remember { mutableStateOf("") }
 
-    val welcomeTarget = quickText("خوش اومدید", "Welcome")
+    val welcomeTarget = quickText("خوش آمدید", "Welcome")
     var typedWelcome by remember(welcomeTarget) { mutableStateOf("") }
     var cursorVisible by remember(welcomeTarget) { mutableStateOf(true) }
     LaunchedEffect(welcomeTarget) {
@@ -201,7 +201,7 @@ fun ReferenceLoginScreen(
             Spacer(Modifier.height(heroTop))
             Image(
                 painter = painterResource(R.drawable.ic_logo_welcome),
-                contentDescription = "QuickPing",
+                contentDescription = "nimHUB",
                 modifier = Modifier.size(logoWidth, logoHeight),
                 contentScale = ContentScale.Fit,
             )
