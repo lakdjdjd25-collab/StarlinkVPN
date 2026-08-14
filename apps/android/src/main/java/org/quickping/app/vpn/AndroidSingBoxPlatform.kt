@@ -49,6 +49,8 @@ internal class AndroidSingBoxPlatform(
     @Volatile
     private var tunInterface: ParcelFileDescriptor? = null
 
+    fun hasTunInterface(): Boolean = tunInterface?.fileDescriptor?.valid() == true
+
     override fun localDNSTransport(): LocalDNSTransport = AndroidLocalDnsTransport(networkMonitor)
 
     override fun usePlatformAutoDetectInterfaceControl(): Boolean = true
