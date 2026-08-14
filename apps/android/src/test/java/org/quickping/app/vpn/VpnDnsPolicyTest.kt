@@ -20,6 +20,7 @@ class VpnDnsPolicyTest {
                 "servers": [{"type":"local","tag":"quickping-dns"}],
                 "final": "quickping-dns"
             },
+            "outbounds": [{"type":"vless","tag":"proxy"}],
             "route": {"final":"proxy"}
         }"""
 
@@ -29,6 +30,53 @@ class VpnDnsPolicyTest {
         assertEquals("provider-dns", dns.getString("final"))
         assertEquals("https", dns.getJSONArray("servers").getJSONObject(0).getString("type"))
         assertEquals("proxy", JSONObject(result).getJSONObject("route").getString("final"))
+    }
+
+    @Test
+    fun providerDnsWithExistingProxyDetourIsPreserved() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"1.1.1.1","detour":"selected-node"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+        val server = JSONObject(result).getJSONObject("dns").getJSONArray("servers").getJSONObject(0)
+
+        assertEquals("selected-node", server.getString("detour"))
+        assertEquals("provider-dns", JSONObject(result).getJSONObject("dns").getString("final"))
+    }
+
+    @Test
+    fun providerDnsWithMissingDetourFallsBackToCompiledDns() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"1.1.1.1","detour":"missing-selector"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+
+        assertEquals("quickping-dns", JSONObject(result).getJSONObject("dns").getString("final"))
+    }
+
+    @Test
+    fun providerDnsWithMissingDomainResolverFallsBackToCompiledDns() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"dns.example","domain_resolver":"missing-resolver"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+
+        assertEquals("quickping-dns", JSONObject(result).getJSONObject("dns").getString("final"))
     }
 
     @Test
