@@ -11,7 +11,9 @@ const schema = z.object({
   minimumVersionCode: z.number().int().nonnegative(),
   mandatory: z.boolean().default(false),
   changelog: z.string().min(1).max(10_000),
-  downloadUrl: z.url(),
+  downloadUrl: z.url().refine((value) => new URL(value).protocol === "https:", {
+    message: "download_url_must_use_https",
+  }),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
   publishNow: z.boolean().default(true),
 });
@@ -22,8 +24,22 @@ export async function POST(request: NextRequest) {
   if (!admin || admin.role !== "ADMIN") return fail(403, "forbidden", "فقط مدیر اصلی مجاز است");
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success || input.data.minimumVersionCode > input.data.versionCode) {
-    return fail(400, "invalid_input", "اطلاعات نسخه معتبر نیست");
+    return fail(400, "invalid_input", "اطلاعات نسخه معتبر نیست؛ لینک دانلود باید HTTPS باشد");
   }
+
+  const latest = await db.appRelease.findFirst({
+    where: { platform: input.data.platform },
+    orderBy: { versionCode: "desc" },
+    select: { versionCode: true },
+  });
+  if (latest && input.data.versionCode <= latest.versionCode) {
+    return fail(
+      409,
+      "version_code_not_monotonic",
+      `کد نسخه باید از آخرین کد ثبت‌شده (${latest.versionCode}) بزرگ‌تر باشد`,
+    );
+  }
+
   const { publishNow, ...releaseData } = input.data;
   const release = await db.appRelease.create({
     data: {
