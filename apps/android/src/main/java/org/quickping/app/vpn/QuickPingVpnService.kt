@@ -28,11 +28,12 @@ class QuickPingVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val stopping = AtomicBoolean(false)
     private var tunnelJob: Job? = null
+    private lateinit var platform: AndroidSingBoxPlatform
     private lateinit var core: TunnelCore
 
     override fun onCreate() {
         super.onCreate()
-        val platform = AndroidSingBoxPlatform(this)
+        platform = AndroidSingBoxPlatform(this)
         core = SingBoxTunnelCore(platform) { disconnect() }
         // MutableStateFlow lives at process scope. If Android destroyed a previous
         // service instance unexpectedly, never let a stale Connected/Connecting
@@ -86,9 +87,16 @@ class QuickPingVpnService : VpnService() {
                 )
                 core.start(runtimeConfig, compiled.launchOptions)
 
-                // libbox start() only proves that the configuration parsed and
-                // its listeners started. TUN mode must prove Android VPN traffic;
-                // Proxy mode must prove HTTPS traffic through the local HTTP proxy.
+                // A running libbox process is not enough. In TUN mode, nimHUB's
+                // own VpnService must have successfully established and retained
+                // its ParcelFileDescriptor before any network probe can qualify
+                // the connection as healthy.
+                if (!settings.proxyModeEnabled) {
+                    check(platform.hasTunInterface()) { "nimhub tun interface missing" }
+                }
+
+                // TUN mode then proves Android VPN traffic with real HTTPS.
+                // Proxy mode proves HTTPS through nimHUB's local HTTP proxy.
                 val proxyVerificationPort = settings.proxyPort.takeIf { settings.proxyModeEnabled }
                 check(
                     VpnConnectionVerifier(this@QuickPingVpnService).awaitHealthy(
@@ -96,6 +104,11 @@ class QuickPingVpnService : VpnService() {
                     ),
                 ) {
                     if (settings.proxyModeEnabled) "proxy verification failed" else "tunnel verification failed"
+                }
+
+                check(core.isRunning()) { "native core stopped during verification" }
+                if (!settings.proxyModeEnabled) {
+                    check(platform.hasTunInterface()) { "nimhub tun interface closed during verification" }
                 }
 
                 publish(ServiceState.Connected)
@@ -224,6 +237,10 @@ private fun Throwable.toVpnFailure(): VpnFailure {
             "proxy_unhealthy" to "پروکسی محلی راه‌اندازی شد اما عبور واقعی اینترنت از آن تأیید نشد"
         "tunnel verification failed" in normalized ->
             "tunnel_unhealthy" to "تونل VPN ساخته شد اما عبور واقعی اینترنت تأیید نشد"
+        "tun interface" in normalized ->
+            "tun_unavailable" to "رابط VPN اندروید ساخته نشد یا پیش از تأیید اتصال بسته شد"
+        "native core stopped" in normalized ->
+            "core_stopped" to "هستهٔ VPN پیش از تکمیل بررسی اتصال متوقف شد"
         "vpn permission" in normalized -> "vpn_permission" to "مجوز VPN داده نشده است"
         "no saved vpn configuration" in normalized || "missing runtime" in normalized ->
             "missing_config" to "پیکربندی اتصال ذخیره نشده است"
