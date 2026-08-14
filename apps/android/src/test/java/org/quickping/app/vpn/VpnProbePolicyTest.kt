@@ -8,7 +8,10 @@ class VpnProbePolicyTest {
     fun normalConnectionRequiresAllReleaseDestinations() {
         assertEquals(
             setOf("web", "telegram", "youtube", "instagram"),
-            VpnProbePolicy.requiredGroupNames(emptySet()),
+            requiredConnectivityProbeNames(
+                guardianEnabled = false,
+                enabledGuardianCategories = emptySet(),
+            ),
         )
     }
 
@@ -16,7 +19,10 @@ class VpnProbePolicyTest {
     fun socialGuardianOnlyRemovesDestinationsItIntentionallyBlocks() {
         assertEquals(
             setOf("web", "youtube"),
-            VpnProbePolicy.requiredGroupNames(setOf("socials")),
+            requiredConnectivityProbeNames(
+                guardianEnabled = true,
+                enabledGuardianCategories = setOf("socials"),
+            ),
         )
     }
 
@@ -24,7 +30,21 @@ class VpnProbePolicyTest {
     fun unrelatedGuardianCategoriesDoNotWeakenConnectivityProof() {
         assertEquals(
             setOf("web", "telegram", "youtube", "instagram"),
-            VpnProbePolicy.requiredGroupNames(setOf("malware", "phishing", "ads")),
+            requiredConnectivityProbeNames(
+                guardianEnabled = true,
+                enabledGuardianCategories = setOf("malware", "phishing", "ads"),
+            ),
+        )
+    }
+
+    @Test
+    fun disabledGuardianNeverWeakensConnectivityProofEvenWithStoredSocials() {
+        assertEquals(
+            setOf("web", "telegram", "youtube", "instagram"),
+            requiredConnectivityProbeNames(
+                guardianEnabled = false,
+                enabledGuardianCategories = setOf("socials"),
+            ),
         )
     }
 }
