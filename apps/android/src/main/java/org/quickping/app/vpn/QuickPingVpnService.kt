@@ -7,9 +7,9 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
-import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +67,14 @@ class QuickPingVpnService : VpnService() {
                     provider = settings.dnsProvider,
                 )
                 core.start(runtimeConfig, compiled.launchOptions)
+
+                // libbox start() only proves that the configuration parsed and the
+                // TUN service started. Do not present a false Connected state until
+                // real HTTPS traffic succeeds while Android exposes a VPN network.
+                check(VpnConnectionVerifier(this@QuickPingVpnService).awaitHealthy()) {
+                    "tunnel verification failed"
+                }
+
                 publish(ServiceState.Connected)
                 getSystemService<NotificationManager>()?.notify(
                     NOTIFICATION_ID,
@@ -155,10 +163,10 @@ class QuickPingVpnService : VpnService() {
     companion object {
         const val ACTION_CONNECT = "org.quickping.action.CONNECT"
         const val ACTION_DISCONNECT = "org.quickping.action.DISCONNECT"
-        private const val CHANNEL_ID = "quickping_vpn"
+        private const val CHANNEL_ID = "nimhub_vpn"
         private const val NOTIFICATION_ID = 2401
         val status = MutableStateFlow(VpnServiceStatus(ServiceState.Disconnected))
-        private const val TAG = "QuickPingVpnService"
+        private const val TAG = "nimHUBVpnService"
     }
 }
 
@@ -180,6 +188,8 @@ private fun Throwable.toVpnFailure(): VpnFailure {
     val detail = source.mapNotNull { it.message }.firstOrNull { it.isNotBlank() }.orEmpty()
     val normalized = detail.lowercase()
     val (code, message) = when {
+        "tunnel verification failed" in normalized ->
+            "tunnel_unhealthy" to "تونل VPN ساخته شد اما عبور واقعی اینترنت تأیید نشد"
         "vpn permission" in normalized -> "vpn_permission" to "مجوز VPN داده نشده است"
         "no saved vpn configuration" in normalized || "missing runtime" in normalized ->
             "missing_config" to "پیکربندی اتصال ذخیره نشده است"
