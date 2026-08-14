@@ -1,10 +1,7 @@
 package org.quickping.app.vpn
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.SystemClock
-import androidx.core.content.getSystemService
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -40,10 +37,16 @@ internal fun requiredConnectivityProbeNames(
 /**
  * Starting libbox only proves that the configuration parsed and listeners were
  * created. Before the UI reports Connected, prove that real HTTPS traffic can
- * leave through the mode the user actually selected:
- *  - TUN mode requires Android to expose a VPN transport, then probes normally.
- *  - Proxy mode probes through nimHUB's local HTTP proxy and does not require a
- *    VPN transport because no TUN interface exists in that mode.
+ * leave through the mode the user actually selected.
+ *
+ * TUN ownership is verified directly by QuickPingVpnService before and after
+ * this verifier runs, and the exact probe traffic must subsequently increase
+ * sing-box's native uplink/downlink totals. Depending on activeNetwork here as
+ * an additional gate can create OEM/version-specific false negatives after a
+ * perfectly valid VpnService.establish(), while adding no proof beyond those
+ * stronger checks.
+ *
+ * Proxy mode probes explicitly through nimHUB's local HTTP proxy.
  *
  * A single generic health URL is not enough for this app. The release gate must
  * prove the destination classes the user explicitly relies on: ordinary Web,
@@ -67,19 +70,10 @@ internal class VpnConnectionVerifier(
         val groups = requiredProbeGroups()
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         do {
-            val transportReady = proxyPort != null || hasVpnTransport()
-            if (transportReady && probeRequiredGroups(groups, proxyPort)) return true
+            if (probeRequiredGroups(groups, proxyPort)) return true
             delay(RETRY_DELAY_MS)
         } while (SystemClock.elapsedRealtime() < deadline)
         return false
-    }
-
-    private fun hasVpnTransport(): Boolean {
-        val connectivity = context.getSystemService<ConnectivityManager>() ?: return false
-        val network = connectivity.activeNetwork ?: return false
-        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     private suspend fun probeRequiredGroups(
