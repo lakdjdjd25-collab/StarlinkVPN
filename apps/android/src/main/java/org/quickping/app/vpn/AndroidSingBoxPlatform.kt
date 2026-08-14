@@ -189,6 +189,17 @@ internal class AndroidSingBoxPlatform(
         for (network in connectivity.allNetworks) {
             val linkProperties = connectivity.getLinkProperties(network) ?: continue
             val capabilities = connectivity.getNetworkCapabilities(network) ?: continue
+
+            // Never expose nimHUB's own VPN (or another VPN transport) as an
+            // upstream candidate to sing-box. Outbound sockets are protected by
+            // VpnService.protect(), and interface discovery must agree with that
+            // policy or auto-detection can still point the core back at the TUN.
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
+                !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            ) {
+                continue
+            }
+
             val interfaceName = linkProperties.interfaceName ?: continue
             val javaInterface = javaInterfaces.firstOrNull { it.name == interfaceName } ?: continue
             result += LibboxNetworkInterface().also { item ->
