@@ -238,10 +238,35 @@ private fun Throwable.toVpnFailure(): VpnFailure {
             "network" to "ارتباط با سرور برقرار نشد"
         else -> "core_start" to "هستهٔ VPN راه‌اندازی نشد"
     }
-    val safeDetail = detail
-        .replace(Regex("https?://\\S+"), "[url]")
-        .replace(Regex("(?i)(password|token|uuid|secret)[=: ]+\\S+"), "$1=[redacted]")
+    return VpnFailure(
+        code = code,
+        userMessage = message,
+        safeDetail = sanitizeVpnFailureDetail(detail, this::class.java.simpleName),
+    )
+}
+
+internal fun sanitizeVpnFailureDetail(detail: String, fallback: String = "VPN error"): String {
+    var sanitized = detail
+        .replace(Regex("(?i)https?://\\S+"), "[url]")
+        .replace(Regex("(?i)bearer\\s+[A-Za-z0-9._~+/=-]+"), "Bearer [redacted]")
+        .replace(
+            Regex("(?i)(password|passwd|token|uuid|secret|authorization|private[_-]?key)[\\s\\\"']*[:=][\\s\\\"']*[^\\s,;\\\"'}]+"),
+            "$1=[redacted]",
+        )
+        .replace(
+            Regex("(?i)\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b"),
+            "[uuid]",
+        )
+        .replace(
+            Regex("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"),
+            "[email]",
+        )
+        .replace(
+            Regex("(?<![A-Za-z0-9])[A-Za-z0-9_+/=-]{40,}(?![A-Za-z0-9])"),
+            "[redacted]",
+        )
+        .trim()
         .take(240)
-        .ifBlank { this::class.java.simpleName }
-    return VpnFailure(code, message, safeDetail)
+    if (sanitized.isBlank()) sanitized = fallback.take(80).ifBlank { "VPN error" }
+    return sanitized
 }
