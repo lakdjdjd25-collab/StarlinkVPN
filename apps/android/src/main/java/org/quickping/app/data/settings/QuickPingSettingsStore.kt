@@ -99,6 +99,8 @@ class QuickPingSettingsStore(context: Context) {
             if (staleIncludeWhitelist) {
                 // Old builds could persist an Include-only list (for example only
                 // Telegram), making every other app bypass the VPN after upgrade.
+                // Schema v4 intentionally re-runs this migration for devices that
+                // already passed through the earlier v3 builds.
                 putBoolean(KEY_SPLIT_ENABLED, false)
             }
             if (currentVersion < 3) {
@@ -130,7 +132,7 @@ class QuickPingSettingsStore(context: Context) {
         const val PREFERENCES = "quickping"
         const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_SETTINGS_SCHEMA_VERSION = "settings_schema_version"
-        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 3
+        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 4
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_AUTO_PING = "auto_ping"
         private const val KEY_SHARE_HOTSPOT = "share_hotspot"
