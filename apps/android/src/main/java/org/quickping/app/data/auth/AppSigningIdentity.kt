@@ -19,11 +19,11 @@ fun currentAppSigningIdentity(context: Context): AppSigningIdentity? = runCatchi
             PackageManager.GET_SIGNING_CERTIFICATES,
         )
         val signingInfo = info.signingInfo ?: return@runCatching null
-        if (signingInfo.hasMultipleSigners()) {
-            signingInfo.apkContentsSigners.orEmpty().toList()
-        } else {
-            signingInfo.signingCertificateHistory.orEmpty().toList()
-        }
+        signingInfo.apkContentsSigners
+            .orEmpty()
+            .takeIf { it.isNotEmpty() }
+            ?.toList()
+            ?: signingInfo.signingCertificateHistory.orEmpty().toList()
     } else {
         @Suppress("DEPRECATION")
         packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
