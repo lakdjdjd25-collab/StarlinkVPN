@@ -17,7 +17,15 @@ export async function DELETE(request: NextRequest) {
     where: { id: auth.userId, status: "ACTIVE" },
     select: { id: true, passwordHash: true },
   });
-  if (!user?.passwordHash || !(await verifyPassword(input.data.password, user.passwordHash))) {
+  if (!user) return fail(403, "account_unavailable", "حساب کاربری در دسترس نیست");
+  if (!user.passwordHash) {
+    return fail(
+      409,
+      "password_not_set",
+      "برای حذف این حساب ابتدا از بخش تغییر گذرواژه یک رمز تعیین کنید",
+    );
+  }
+  if (!(await verifyPassword(input.data.password, user.passwordHash))) {
     return fail(401, "invalid_password", "گذرواژه صحیح نیست");
   }
 
