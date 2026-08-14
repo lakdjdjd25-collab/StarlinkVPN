@@ -17,6 +17,28 @@ import android.os.Looper
 import io.nekohasekai.libbox.InterfaceUpdateListener
 import java.net.NetworkInterface
 
+internal enum class NetworkRegistrationStrategy {
+    BEST_MATCHING_WITH_HANDLER,
+    REQUEST_WITH_HANDLER,
+    DEFAULT_WITH_HANDLER,
+    DEFAULT,
+    REQUEST,
+}
+
+/**
+ * Keep this aligned with sing-box-for-android's DefaultNetworkListener:
+ * Android P (API 28) and newer can report the VPN itself from default-network
+ * callbacks, so P-R use an explicit request and S+ uses best-matching. N/O keep
+ * the platform default-network callback; M falls back to requestNetwork.
+ */
+internal fun networkRegistrationStrategy(apiLevel: Int): NetworkRegistrationStrategy = when {
+    apiLevel >= 31 -> NetworkRegistrationStrategy.BEST_MATCHING_WITH_HANDLER
+    apiLevel >= 28 -> NetworkRegistrationStrategy.REQUEST_WITH_HANDLER
+    apiLevel >= 26 -> NetworkRegistrationStrategy.DEFAULT_WITH_HANDLER
+    apiLevel >= 24 -> NetworkRegistrationStrategy.DEFAULT
+    else -> NetworkRegistrationStrategy.REQUEST
+}
+
 internal class AndroidDefaultNetworkMonitor(
     private val connectivity: ConnectivityManager,
 ) {
@@ -96,20 +118,21 @@ internal class AndroidDefaultNetworkMonitor(
     }
 
     private fun registerCallback() {
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+        when (networkRegistrationStrategy(Build.VERSION.SDK_INT)) {
+            NetworkRegistrationStrategy.BEST_MATCHING_WITH_HANDLER ->
                 connectivity.registerBestMatchingNetworkCallback(request, callback, mainHandler)
 
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ->
+            NetworkRegistrationStrategy.REQUEST_WITH_HANDLER ->
                 connectivity.requestNetwork(request, callback, mainHandler)
 
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ->
+            NetworkRegistrationStrategy.DEFAULT_WITH_HANDLER ->
                 connectivity.registerDefaultNetworkCallback(callback, mainHandler)
 
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ->
+            NetworkRegistrationStrategy.DEFAULT ->
                 connectivity.registerDefaultNetworkCallback(callback)
 
-            else -> connectivity.requestNetwork(request, callback)
+            NetworkRegistrationStrategy.REQUEST ->
+                connectivity.requestNetwork(request, callback)
         }
     }
 
