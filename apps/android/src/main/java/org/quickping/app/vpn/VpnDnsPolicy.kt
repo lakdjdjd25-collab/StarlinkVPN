@@ -4,8 +4,7 @@ import org.json.JSONObject
 import org.quickping.app.model.DnsProvider
 
 /**
- * Default DNS follows the PasarGuard/provider policy only when the provider DNS
- * is self-contained after Android compilation.
+ * Applies provider DNS policy and the final Android-specific upstream policy.
  *
  * Provider subscriptions commonly attach their DNS server to the selected proxy
  * via `detour`. That is unsafe during Android bootstrap: the selected proxy can
@@ -13,14 +12,30 @@ import org.quickping.app.model.DnsProvider
  * Keep nimHUB's compiled local DNS in that case so the proxy endpoint can be
  * resolved on the physical network first. Explicit Google/Cloudflare choices
  * are compiled separately and never pass through this provider override.
+ *
+ * nimHUB itself owns the Android VpnService. `override_android_vpn` is intended
+ * for accepting an Android VPN as an upstream network; leaving it enabled here
+ * can make the newly-created nimHUB VPN eligible as its own upstream. Outbound
+ * sockets are already protected by AndroidSingBoxPlatform.autoDetectInterfaceControl,
+ * so the final runtime config must not enable that override.
  */
 internal fun applyProviderDnsPolicy(
     rawConfigJson: String,
     compiledConfigJson: String,
     provider: DnsProvider,
 ): String {
-    if (provider != DnsProvider.Default) return compiledConfigJson
+    val dnsAdjusted = if (provider == DnsProvider.Default) {
+        applyDefaultProviderDns(rawConfigJson, compiledConfigJson)
+    } else {
+        compiledConfigJson
+    }
+    return enforceAndroidPhysicalUpstream(dnsAdjusted)
+}
 
+private fun applyDefaultProviderDns(
+    rawConfigJson: String,
+    compiledConfigJson: String,
+): String {
     val providerDns = runCatching { JSONObject(rawConfigJson).optJSONObject("dns") }.getOrNull()
         ?: return compiledConfigJson
     val servers = providerDns.optJSONArray("servers") ?: return compiledConfigJson
@@ -48,3 +63,9 @@ internal fun applyProviderDnsPolicy(
         compiled.put("dns", JSONObject(providerDns.toString())).toString()
     }.getOrDefault(compiledConfigJson)
 }
+
+private fun enforceAndroidPhysicalUpstream(configJson: String): String = runCatching {
+    val config = JSONObject(configJson)
+    config.optJSONObject("route")?.remove("override_android_vpn")
+    config.toString()
+}.getOrDefault(configJson)
