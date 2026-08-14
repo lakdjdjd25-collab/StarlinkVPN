@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -31,7 +34,7 @@ val generateBrandingRes = tasks.register("generateBrandingRes") {
             "Expected 7 nimHUB logo chunks, found ${chunks.size}"
         }
         val encoded = chunks.joinToString(separator = "") { it.readText().trim() }
-        val bytes = java.util.Base64.getDecoder().decode(encoded)
+        val bytes = Base64.getDecoder().decode(encoded)
         require(bytes.size == 36_208) {
             "Unexpected nimHUB logo size: ${bytes.size}"
         }
@@ -41,9 +44,9 @@ val generateBrandingRes = tasks.register("generateBrandingRes") {
         require(bytes.copyOfRange(8, 12).decodeToString() == "WEBP") {
             "nimHUB logo has an invalid WebP header"
         }
-        val sha256 = java.security.MessageDigest.getInstance("SHA-256")
+        val sha256 = MessageDigest.getInstance("SHA-256")
             .digest(bytes)
-            .joinToString(separator = "") { byte -> "%02x".format(byte) }
+            .joinToString(separator = "") { byte: Byte -> "%02x".format(byte.toInt() and 0xff) }
         require(sha256 == "60d37f4e8b1984ad999f4b20e4459259810a60fb0fa7ee0d748b26c80ae3c039") {
             "nimHUB logo digest mismatch: $sha256"
         }
