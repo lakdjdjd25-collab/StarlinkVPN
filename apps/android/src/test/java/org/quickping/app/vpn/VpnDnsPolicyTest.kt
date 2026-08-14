@@ -121,4 +121,24 @@ class VpnDnsPolicyTest {
         assertEquals("quickping-dns", dns.getString("final"))
         assertTrue(dns.getJSONArray("servers").getJSONObject(0).has("type"))
     }
+
+    @Test
+    fun finalRuntimeConfigDoesNotAcceptAndroidVpnAsItsOwnUpstream() {
+        val raw = """{"dns":{"servers":[{"type":"local","tag":"provider"}],"final":"provider"}}"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "route":{
+                "auto_detect_interface":true,
+                "override_android_vpn":true,
+                "final":"selected"
+            }
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Google)
+        val route = JSONObject(result).getJSONObject("route")
+
+        assertTrue(route.getBoolean("auto_detect_interface"))
+        assertFalse(route.has("override_android_vpn"))
+        assertEquals("selected", route.getString("final"))
+    }
 }
