@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const apkDir = '/app/apk';
+const apkDir = process.env.APK_DIR || '/app/apk';
 const port = Number(process.env.PORT) || 3000;
 
 function listApks(callback) {
