@@ -60,8 +60,8 @@ private val guestUser = UserInfo(
 
 private val defaultGuardian = listOf(
     GuardianCategory("malware", "بدافزارها", "محافظت در برابر دامنه‌های مخرب", "malware", true),
-    GuardianCategory("ads", "تبلیغات و ردیاب‌ها", "مسدودکردن تبلیغات و ابزارهای ردیابی", "ads", true),
-    GuardianCategory("youtube", "تبلیغات یوتیوب", "کاهش تبلیغات و دامنه‌های مزاحم", "youtube", true),
+    GuardianCategory("ads", "تبلیغات و ردیاب‌ها", "مسدودکردن تبلیغات و ابزارهای ردیابی", "ads", false),
+    GuardianCategory("youtube", "تبلیغات یوتیوب", "کاهش تبلیغات و دامنه‌های مزاحم", "youtube", false),
     GuardianCategory("phishing", "فیشینگ", "جلوگیری از بازشدن صفحات جعل هویت", "phishing", true),
     GuardianCategory("porn", "محتوای بزرگسال", "فیلتر دامنه‌های نامناسب", "porn", false),
     GuardianCategory("government", "وب‌سایت‌های دولتی", "کنترل دسترسی به دامنه‌های دولتی", "government", false),
