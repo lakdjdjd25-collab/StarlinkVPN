@@ -24,6 +24,7 @@ internal class AndroidDefaultNetworkMonitor(
     private val request = NetworkRequest.Builder()
         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
         .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+        .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
         .apply {
             if (Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
                 removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -36,26 +37,26 @@ internal class AndroidDefaultNetworkMonitor(
     private var listener: InterfaceUpdateListener? = null
 
     @Volatile
-    var defaultNetwork: Network? = connectivity.activeNetwork
+    var defaultNetwork: Network? = selectPhysicalNetwork()
         private set
 
     private var registered = false
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = publish(network)
+        override fun onAvailable(network: Network) = publish(selectPhysicalNetwork(network))
 
         override fun onCapabilitiesChanged(
             network: Network,
             networkCapabilities: NetworkCapabilities,
-        ) = publish(network)
+        ) = publish(selectPhysicalNetwork(network))
 
         override fun onLinkPropertiesChanged(
             network: Network,
             linkProperties: android.net.LinkProperties,
-        ) = publish(network)
+        ) = publish(selectPhysicalNetwork(network))
 
         override fun onLost(network: Network) {
-            if (defaultNetwork == network) publish(null)
+            if (defaultNetwork == network) publish(selectPhysicalNetwork())
         }
     }
 
@@ -66,7 +67,11 @@ internal class AndroidDefaultNetworkMonitor(
             registerCallback()
             registered = true
         }
-        publish(connectivity.activeNetwork)
+        // Android's activeNetwork becomes the VPN after VpnService.establish().
+        // Never publish it as sing-box's outbound/default interface. Doing so can
+        // create a self-referential route where the proxy tries to reach itself
+        // through nimHUB's own TUN.
+        publish(selectPhysicalNetwork())
     }
 
     @Synchronized
@@ -108,19 +113,40 @@ internal class AndroidDefaultNetworkMonitor(
         }
     }
 
+    private fun selectPhysicalNetwork(preferred: Network? = null): Network? {
+        if (preferred != null && isUsablePhysicalNetwork(preferred)) return preferred
+
+        val active = connectivity.activeNetwork
+        if (active != null && isUsablePhysicalNetwork(active)) return active
+
+        return connectivity.allNetworks.firstOrNull(::isUsablePhysicalNetwork)
+    }
+
+    private fun isUsablePhysicalNetwork(network: Network): Boolean {
+        val capabilities = connectivity.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+            !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+    }
+
     private fun publish(network: Network?, attempt: Int = 0) {
-        defaultNetwork = network
+        // Callback APIs on Android N/O can still report the process default VPN.
+        // Re-resolve to a physical network instead of ever handing the VPN's own
+        // interface back to sing-box.
+        val physicalNetwork = network?.takeIf(::isUsablePhysicalNetwork) ?: selectPhysicalNetwork()
+        defaultNetwork = physicalNetwork
         val updateListener = listener ?: return
-        if (network == null) {
+        if (physicalNetwork == null) {
             updateListener.updateDefaultInterface("", -1, false, false)
             return
         }
 
-        val properties = connectivity.getLinkProperties(network)
+        val properties = connectivity.getLinkProperties(physicalNetwork)
         val interfaceName = properties?.interfaceName
         val networkInterface = interfaceName?.let { runCatching { NetworkInterface.getByName(it) }.getOrNull() }
         if ((properties == null || interfaceName == null || networkInterface == null) && attempt < 10) {
-            mainHandler.postDelayed({ publish(network, attempt + 1) }, 100L)
+            mainHandler.postDelayed({ publish(physicalNetwork, attempt + 1) }, 100L)
             return
         }
         if (interfaceName == null || networkInterface == null) {
@@ -128,7 +154,7 @@ internal class AndroidDefaultNetworkMonitor(
             return
         }
 
-        val capabilities = connectivity.getNetworkCapabilities(network)
+        val capabilities = connectivity.getNetworkCapabilities(physicalNetwork)
         val expensive = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
         updateListener.updateDefaultInterface(interfaceName, networkInterface.index, expensive, false)
     }
