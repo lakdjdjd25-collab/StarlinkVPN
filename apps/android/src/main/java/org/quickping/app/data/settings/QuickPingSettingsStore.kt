@@ -72,7 +72,11 @@ class QuickPingSettingsStore(context: Context) {
 
     fun mergeGuardian(categories: List<GuardianCategory>): List<GuardianCategory> = categories.map { category ->
         val key = guardianKey(category.id)
-        if (preferences.contains(key)) category.copy(enabled = preferences.getBoolean(key, category.enabled)) else category
+        when {
+            preferences.contains(key) -> category.copy(enabled = preferences.getBoolean(key, category.enabled))
+            category.id in CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES -> category.copy(enabled = false)
+            else -> category
+        }
     }
 
     fun saveGuardian(categories: List<GuardianCategory>) {
@@ -108,9 +112,7 @@ class QuickPingSettingsStore(context: Context) {
                 // Guardian is a security feature. It must not silently block normal
                 // VPN destinations such as YouTube/social networks/advertising CDNs.
                 // Users can explicitly re-enable these categories from settings.
-                putBoolean(guardianKey("ads"), false)
-                putBoolean(guardianKey("youtube"), false)
-                putBoolean(guardianKey("socials"), false)
+                CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES.forEach { id -> putBoolean(guardianKey(id), false) }
             }
             putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
         }.apply()
@@ -165,6 +167,7 @@ class QuickPingSettingsStore(context: Context) {
             "crypto",
             "fake-news",
         )
+        private val CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES = setOf("ads", "youtube", "socials")
         private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "phishing")
     }
 }
