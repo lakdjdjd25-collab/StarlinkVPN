@@ -18,6 +18,20 @@ import kotlinx.coroutines.withContext
 import org.quickping.app.BuildConfig
 import org.quickping.app.data.settings.QuickPingSettingsStore
 
+internal fun requiredConnectivityProbeNames(
+    guardianEnabled: Boolean,
+    enabledGuardianCategories: Set<String>,
+): Set<String> = buildSet {
+    add("web")
+    add("telegram")
+    add("youtube")
+    add("instagram")
+    if (guardianEnabled && "socials" in enabledGuardianCategories) {
+        remove("telegram")
+        remove("instagram")
+    }
+}
+
 /**
  * Starting libbox only proves that the configuration parsed and listeners were
  * created. Before the UI reports Connected, prove that real HTTPS traffic can
@@ -77,17 +91,11 @@ internal class VpnConnectionVerifier(
     private fun requiredProbeGroups(): List<ProbeGroup> {
         val settingsStore = QuickPingSettingsStore(context)
         val settings = settingsStore.load()
-        val enabledGuardian = if (settings.guardianEnabled) {
-            settingsStore.enabledGuardianCategoryIds()
-        } else {
-            emptySet()
-        }
-        val intentionallyBlockedGroups = buildSet {
-            if ("socials" in enabledGuardian) {
-                add("telegram")
-                add("instagram")
-            }
-        }
+        val enabledGuardian = settingsStore.enabledGuardianCategoryIds()
+        val requiredNames = requiredConnectivityProbeNames(
+            guardianEnabled = settings.guardianEnabled,
+            enabledGuardianCategories = enabledGuardian,
+        )
 
         return listOf(
             ProbeGroup(
@@ -101,7 +109,7 @@ internal class VpnConnectionVerifier(
             ProbeGroup("telegram", listOf("https://telegram.org/")),
             ProbeGroup("youtube", listOf("https://www.youtube.com/")),
             ProbeGroup("instagram", listOf("https://www.instagram.com/")),
-        ).filterNot { it.name in intentionallyBlockedGroups }
+        ).filter { it.name in requiredNames }
     }
 
     private suspend fun probeHttps(url: String, proxyPort: Int?): Boolean = withContext(Dispatchers.IO) {
