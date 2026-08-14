@@ -95,13 +95,20 @@ class QuickPingSettingsStore(context: Context) {
         val staleIncludeWhitelist = preferences.getBoolean(KEY_SPLIT_ENABLED, false) &&
             splitMode == SplitTunnelMode.Include
 
-        // Earlier builds could persist an Include-only app list indefinitely.
-        // After an upgrade that state can make the VPN appear connected while
-        // only one previously selected app (commonly Telegram) enters the TUN.
-        // Preserve the user's saved list, but require them to explicitly enable
-        // split tunneling again after this migration. Normal VPN mode is full tunnel.
         preferences.edit().apply {
-            if (staleIncludeWhitelist) putBoolean(KEY_SPLIT_ENABLED, false)
+            if (staleIncludeWhitelist) {
+                // Old builds could persist an Include-only list (for example only
+                // Telegram), making every other app bypass the VPN after upgrade.
+                putBoolean(KEY_SPLIT_ENABLED, false)
+            }
+            if (currentVersion < 3) {
+                // Guardian is a security feature. It must not silently block normal
+                // VPN destinations such as YouTube/social networks/advertising CDNs.
+                // Users can explicitly re-enable these categories from settings.
+                putBoolean(guardianKey("ads"), false)
+                putBoolean(guardianKey("youtube"), false)
+                putBoolean(guardianKey("socials"), false)
+            }
             putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
         }.apply()
     }
@@ -123,7 +130,7 @@ class QuickPingSettingsStore(context: Context) {
         const val PREFERENCES = "quickping"
         const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_SETTINGS_SCHEMA_VERSION = "settings_schema_version"
-        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 2
+        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 3
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_AUTO_PING = "auto_ping"
         private const val KEY_SHARE_HOTSPOT = "share_hotspot"
@@ -155,6 +162,6 @@ class QuickPingSettingsStore(context: Context) {
             "crypto",
             "fake-news",
         )
-        private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
+        private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "phishing")
     }
 }
