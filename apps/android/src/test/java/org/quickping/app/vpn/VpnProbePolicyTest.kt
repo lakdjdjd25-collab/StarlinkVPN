@@ -27,9 +27,9 @@ class VpnProbePolicyTest {
     }
 
     @Test
-    fun youtubeGuardianOnlyRemovesYouTubeProbe() {
+    fun youtubeAdBlockingDoesNotWeakenYouTubeReachabilityProof() {
         assertEquals(
-            setOf("web", "telegram", "instagram"),
+            setOf("web", "telegram", "youtube", "instagram"),
             requiredConnectivityProbeNames(
                 guardianEnabled = true,
                 enabledGuardianCategories = setOf("youtube"),
@@ -38,9 +38,9 @@ class VpnProbePolicyTest {
     }
 
     @Test
-    fun socialAndYouTubeGuardianKeepOnlyOrdinaryWebProbe() {
+    fun socialAndYouTubeAdBlockingStillRequireYouTube() {
         assertEquals(
-            setOf("web"),
+            setOf("web", "youtube"),
             requiredConnectivityProbeNames(
                 guardianEnabled = true,
                 enabledGuardianCategories = setOf("socials", "youtube"),
