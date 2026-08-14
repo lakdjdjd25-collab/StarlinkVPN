@@ -4,11 +4,13 @@ import android.app.Activity
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.quickping.app.data.network.ApiException
 import org.quickping.app.data.network.GoogleNonceChallenge
@@ -17,49 +19,104 @@ class GoogleCredentialAuth(private val activity: Activity) {
     private val credentialManager by lazy { CredentialManager.create(activity) }
 
     suspend fun getIdToken(challenge: GoogleNonceChallenge): String {
-        // Explicit button flow first. This remains the preferred path for the
-        // Google button and, unlike the bottom-sheet flow, is not affected by
-        // the account-level "Sign in prompts" preference.
-        val directAttempt = runCatching {
+        validateChallenge(challenge)
+
+        // Explicit Google button flow first. A genuine user cancellation must be
+        // propagated immediately; opening a second picker after the user pressed
+        // Back is both misleading and can look like an authentication loop.
+        val directAttempt = tryCredentialAttempt {
             delay(250)
             requestDirectGoogleSignIn(challenge)
         }
-        directAttempt.getOrNull()?.let { return it }
+        directAttempt.token?.let { return it }
+        directAttempt.error.throwIfCancellation()
 
-        // Official Credential Manager fallback for NoCredentialException:
-        // request every Google account on the device, including accounts that
-        // have never authorized this application. A small delay avoids racing
-        // the provider immediately after the explicit button flow is dismissed.
-        val pickerAttempt = runCatching {
+        // Official Credential Manager account-picker fallback. This includes
+        // accounts that have never authorized nimHUB and covers devices where the
+        // explicit Sign in with Google option cannot surface a usable credential.
+        val pickerAttempt = tryCredentialAttempt {
             delay(300)
             requestGoogleAccountPicker(challenge)
         }
-        pickerAttempt.getOrNull()?.let { return it }
+        pickerAttempt.token?.let { return it }
+        pickerAttempt.error.throwIfCancellation()
 
-        val directError = directAttempt.exceptionOrNull()
-        val pickerError = pickerAttempt.exceptionOrNull()
-        val error = pickerError ?: directError
-        if (error is ApiException) throw error
+        val directError = directAttempt.error
+        val pickerError = pickerAttempt.error
+        val preferredError = pickerError ?: directError
+        if (preferredError is ApiException) throw preferredError
 
         if (directError is NoCredentialException && pickerError is NoCredentialException) {
             throw ApiException(
                 status = 0,
                 code = "google_no_credential",
-                message = "هیچ حساب Google قابل استفاده‌ای برای این امضای برنامه پیدا نشد. حساب Google دستگاه، Android OAuth و SHA-1 امضای همین نسخه باید با هم تطابق داشته باشند.",
+                message = "هیچ حساب Google قابل استفاده‌ای برای این نسخه پیدا نشد. حساب Google دستگاه و تنظیمات OAuth امضای برنامه را بررسی کنید.",
             )
         }
-        if (error is GetCredentialException) {
-            throw ApiException(
+
+        val credentialErrors = listOfNotNull(directError, pickerError)
+            .filterIsInstance<GetCredentialException>()
+        val diagnostic = credentialErrors
+            .map { it.javaClass.simpleName }
+            .distinct()
+            .joinToString("/")
+            .ifBlank { preferredError?.javaClass?.simpleName ?: "unknown" }
+
+        when {
+            credentialErrors.any { it.javaClass.simpleName.contains("ProviderConfiguration", ignoreCase = true) } -> {
+                throw ApiException(
+                    status = 0,
+                    code = "google_provider_config",
+                    message = "Google Credential Provider تنظیمات این نسخه را نپذیرفت ($diagnostic). package و SHA امضای نسخه باید در Android OAuth ثبت شده باشند.",
+                )
+            }
+            credentialErrors.any { it.javaClass.simpleName.contains("Unsupported", ignoreCase = true) } -> {
+                throw ApiException(
+                    status = 0,
+                    code = "google_unsupported",
+                    message = "ورود Google روی Credential Provider این دستگاه پشتیبانی نمی‌شود ($diagnostic). Google Play services و سیستم را به‌روز کنید.",
+                )
+            }
+            credentialErrors.isNotEmpty() -> {
+                throw ApiException(
+                    status = 0,
+                    code = "google_credential_failed",
+                    message = "ورود Google توسط Credential Manager کامل نشد ($diagnostic)",
+                )
+            }
+            else -> throw ApiException(
                 status = 0,
                 code = "google_credential_failed",
-                message = "ورود Google توسط Credential Manager کامل نشد (${error.javaClass.simpleName})",
+                message = "ورود Google کامل نشد ($diagnostic)",
             )
         }
-        throw ApiException(
-            status = 0,
-            code = "google_credential_failed",
-            message = "ورود Google کامل نشد (${error?.javaClass?.simpleName ?: "unknown"})",
-        )
+    }
+
+    private suspend fun tryCredentialAttempt(block: suspend () -> String): CredentialAttempt = try {
+        CredentialAttempt(token = block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        CredentialAttempt(error = error)
+    }
+
+    private fun Throwable?.throwIfCancellation() {
+        if (this is GetCredentialCancellationException) throw this
+    }
+
+    private fun validateChallenge(challenge: GoogleNonceChallenge) {
+        val clientId = challenge.serverClientId.trim()
+        if (
+            clientId.length !in 20..512 ||
+            !clientId.endsWith(".apps.googleusercontent.com", ignoreCase = true) ||
+            challenge.nonce.length !in 32..256
+        ) {
+            throw ApiException(
+                status = 0,
+                code = "google_oauth_config",
+                message = "تنظیمات OAuth دریافت‌شده از سرور معتبر نیست",
+            )
+        }
     }
 
     private suspend fun requestDirectGoogleSignIn(challenge: GoogleNonceChallenge): String {
@@ -102,4 +159,9 @@ class GoogleCredentialAuth(private val activity: Activity) {
                 )
             }
     }
+
+    private data class CredentialAttempt(
+        val token: String? = null,
+        val error: Throwable? = null,
+    )
 }
