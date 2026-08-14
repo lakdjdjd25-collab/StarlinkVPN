@@ -15,8 +15,8 @@ val generateLicenseAssets = tasks.register<org.gradle.api.tasks.Sync>("generateL
 }
 
 // GitHub text-only file mutations can corrupt binary resources if a WebP is
-// written as ordinary UTF-8 content. Keep the approved nimHUB artwork as
-// deterministic Base64 chunks and reconstruct the exact verified WebP before
+// written as ordinary UTF-8 content. Keep the approved icon-only nimHUB artwork
+// as deterministic Base64 chunks and reconstruct the exact verified WebP before
 // Android resource merging. The size + digest assertions make a truncated logo
 // a hard build failure instead of a broken launcher/login image in production.
 val generatedBrandingRes = layout.buildDirectory.dir("generated/branding-res")
@@ -30,12 +30,12 @@ val generateBrandingRes = tasks.register("generateBrandingRes") {
 
     doLast {
         val chunks = nimHubLogoChunks.files.sortedBy { it.name }
-        require(chunks.size == 7) {
-            "Expected 7 nimHUB logo chunks, found ${chunks.size}"
+        require(chunks.size == 3) {
+            "Expected 3 nimHUB logo chunks, found ${chunks.size}"
         }
         val encoded = chunks.joinToString(separator = "") { it.readText().trim() }
         val bytes = Base64.getDecoder().decode(encoded)
-        require(bytes.size == 36_208) {
+        require(bytes.size == 21_044) {
             "Unexpected nimHUB logo size: ${bytes.size}"
         }
         require(bytes.copyOfRange(0, 4).decodeToString() == "RIFF") {
@@ -47,7 +47,7 @@ val generateBrandingRes = tasks.register("generateBrandingRes") {
         val sha256 = MessageDigest.getInstance("SHA-256")
             .digest(bytes)
             .joinToString(separator = "") { byte: Byte -> "%02x".format(byte.toInt() and 0xff) }
-        require(sha256 == "60d37f4e8b1984ad999f4b20e4459259810a60fb0fa7ee0d748b26c80ae3c039") {
+        require(sha256 == "fa703c95f1c477c3da788634506995f05306172200a4185d29f1d0103c4787cc") {
             "nimHUB logo digest mismatch: $sha256"
         }
 
