@@ -62,7 +62,7 @@ fun SplashScreen(ready: Boolean, onFinished: () -> Unit) {
         )
         Image(
             painter = painterResource(R.drawable.ic_logo),
-            contentDescription = "QuickPing",
+            contentDescription = "nimHUB",
             modifier = Modifier
                 .align(Alignment.Center)
                 .size(width = 138.dp, height = 96.dp),

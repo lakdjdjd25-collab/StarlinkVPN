@@ -1,0 +1,109 @@
+name: Verify production signing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-signed-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANDROID_RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+      ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+      ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+      ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Validate production signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            ANDROID_RELEASE_KEYSTORE_B64 \
+            ANDROID_RELEASE_STORE_PASSWORD \
+            ANDROID_RELEASE_KEY_ALIAS \
+            ANDROID_RELEASE_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Required GitHub Actions secret is missing: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Materialize temporary release keystore
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/nimhub-release.jks"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          echo "ANDROID_RELEASE_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+
+      - name: Print stable Google OAuth signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          keytool -list -v \
+            -keystore "$ANDROID_RELEASE_KEYSTORE_PATH" \
+            -storepass "$ANDROID_RELEASE_STORE_PASSWORD" \
+            -alias "$ANDROID_RELEASE_KEY_ALIAS" \
+            | grep -E 'Alias name:|SHA1:|SHA256:'
+          echo "Expected Google Android OAuth package: org.quickping"
+
+      - uses: actions/cache/restore@v4
+        id: libbox-cache
+        with:
+          path: apps/android/libs/libbox.aar
+          key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
+      - uses: actions/setup-go@v5
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          go-version: 1.25.12
+          cache: false
+      - if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: yes | sdkmanager "ndk;28.0.13004108"
+      - if: steps.libbox-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build-sing-box-android.sh
+      - uses: actions/cache/save@v4
+        if: steps.libbox-cache.outputs.cache-hit != 'true'
+        with:
+          path: apps/android/libs/libbox.aar
+          key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
+
+      - name: Build signed minified release and tests
+        run: ./gradlew :apps:android:assembleRelease :apps:android:testDebugUnitTest --stacktrace
+
+      - name: Verify exact production OAuth identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find apps/android/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -s "$APK"
+
+          BADGING="$($ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK")"
+          printf '%s\n' "$BADGING" | grep -F "package: name='org.quickping'"
+          if printf '%s\n' "$BADGING" | grep -Fq "package: name='org.quickping.debug'"; then
+            echo "Production artifact unexpectedly contains the debug application ID." >&2
+            exit 1
+          fi
+
+          echo "Signed APK certificate:"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          echo "Google Android OAuth must use package org.quickping with the SHA-1 printed above."
+          echo "Signed APK verified locally on the runner. It is intentionally not uploaded or published."
+
+      - name: Remove temporary keystore
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/nimhub-release.jks"

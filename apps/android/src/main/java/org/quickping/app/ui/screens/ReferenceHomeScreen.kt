@@ -123,7 +123,7 @@ private fun ReferenceHomeHeader(
                     Image(painterResource(R.drawable.home_title_start), null, Modifier.size(33.dp, 15.dp))
                     Spacer(Modifier.width(3.dp))
                     Text(
-                        "QUICKPING",
+                        "NIMHUBPING",
                         color = Color.White,
                         fontFamily = MonaSans,
                         fontWeight = FontWeight.SemiBold,

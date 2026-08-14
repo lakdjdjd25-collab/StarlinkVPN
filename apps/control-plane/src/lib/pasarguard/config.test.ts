@@ -29,10 +29,43 @@ describe("PasarGuard sing-box normalization", () => {
       expect.objectContaining({ type: "tun", auto_route: true, strict_route: true }),
     ]);
     expect(normalized.nodes[0].runtimeConfig.route).toMatchObject({ final: "🇩🇪 DE-1" });
+    expect(normalized.nodes[0].runtimeConfig.route).not.toHaveProperty("override_android_vpn");
     expect(normalized.nodes[0].runtimeConfig.dns).toMatchObject({
       servers: [expect.objectContaining({ detour: "🇩🇪 DE-1" })],
     });
     expect(normalized.nodes[1]).toMatchObject({ countryCode: "nl", protocol: "TROJAN" });
+  });
+
+  it("rewrites selector and alternate-node route targets to the chosen node", () => {
+    const normalized = normalizePasarGuardConfig({
+      outbounds: [
+        { type: "selector", tag: "proxy", outbounds: ["DE", "NL"] },
+        { type: "vless", tag: "DE", server: "de.example.com", server_port: 443, uuid: "de-id" },
+        { type: "vless", tag: "NL", server: "nl.example.com", server_port: 443, uuid: "nl-id" },
+        { type: "direct", tag: "direct" },
+      ],
+      route: {
+        final: "proxy",
+        rules: [
+          { domain_suffix: ["one.example"], outbound: "proxy" },
+          { domain_suffix: ["two.example"], outbound: "NL" },
+          {
+            type: "logical",
+            mode: "or",
+            rules: [{ domain_suffix: ["nested.example"], outbound: "NL" }],
+          },
+          { ip_is_private: true, outbound: "direct" },
+        ],
+      },
+    });
+
+    const de = normalized.nodes.find((node) => node.tag === "DE")!;
+    const rules = de.runtimeConfig.route as { rules: Array<Record<string, unknown>> };
+
+    expect(rules.rules[0].outbound).toBe("DE");
+    expect(rules.rules[1].outbound).toBe("DE");
+    expect((rules.rules[2].rules as Array<Record<string, unknown>>)[0].outbound).toBe("DE");
+    expect(rules.rules[3].outbound).toBe("direct");
   });
 
   it("supports modern sing-box WireGuard endpoints", () => {

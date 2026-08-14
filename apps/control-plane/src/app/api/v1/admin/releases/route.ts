@@ -6,12 +6,17 @@ import { db } from "@/lib/db";
 
 const schema = z.object({
   platform: z.enum(["ANDROID", "WINDOWS"]),
-  versionName: z.string().min(1).max(32),
+  versionName: z.string().trim().min(1).max(32),
   versionCode: z.number().int().positive(),
   minimumVersionCode: z.number().int().nonnegative(),
   mandatory: z.boolean().default(false),
-  changelog: z.string().min(1).max(10_000),
-  downloadUrl: z.url(),
+  changelog: z.string().trim().min(1).max(10_000),
+  downloadUrl: z.url().refine((value) => {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  }, {
+    message: "download_url_must_use_https_without_credentials",
+  }),
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
   publishNow: z.boolean().default(true),
 });
@@ -22,8 +27,29 @@ export async function POST(request: NextRequest) {
   if (!admin || admin.role !== "ADMIN") return fail(403, "forbidden", "فقط مدیر اصلی مجاز است");
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success || input.data.minimumVersionCode > input.data.versionCode) {
-    return fail(400, "invalid_input", "اطلاعات نسخه معتبر نیست");
+    return fail(400, "invalid_input", "اطلاعات نسخه معتبر نیست؛ لینک دانلود باید HTTPS باشد");
   }
+
+  const latest = await db.appRelease.findFirst({
+    where: { platform: input.data.platform },
+    orderBy: { versionCode: "desc" },
+    select: { versionCode: true, minimumVersionCode: true },
+  });
+  if (latest && input.data.versionCode <= latest.versionCode) {
+    return fail(
+      409,
+      "version_code_not_monotonic",
+      `کد نسخه باید از آخرین کد ثبت‌شده (${latest.versionCode}) بزرگ‌تر باشد`,
+    );
+  }
+  if (latest && input.data.minimumVersionCode < latest.minimumVersionCode) {
+    return fail(
+      409,
+      "minimum_version_not_monotonic",
+      `حداقل کد مجاز نمی‌تواند از مقدار قبلی (${latest.minimumVersionCode}) کمتر باشد`,
+    );
+  }
+
   const { publishNow, ...releaseData } = input.data;
   const release = await db.appRelease.create({
     data: {
@@ -42,6 +68,7 @@ export async function POST(request: NextRequest) {
         platform: release.platform,
         versionName: release.versionName,
         versionCode: release.versionCode,
+        minimumVersionCode: release.minimumVersionCode,
         mandatory: release.mandatory,
       },
     },

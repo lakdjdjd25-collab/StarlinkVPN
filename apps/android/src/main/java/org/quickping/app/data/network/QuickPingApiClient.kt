@@ -240,7 +240,7 @@ class QuickPingApiClient(baseUrl: String) {
     ): JSONObject {
         val endpoint = URL(origin)
         require(endpoint.protocol == "https" || (endpoint.protocol == "http" && endpoint.host == "10.0.2.2")) {
-            "QuickPing API must use HTTPS outside the Android emulator"
+            "nimHUB API must use HTTPS outside the Android emulator"
         }
         val connection = (URL(origin + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
@@ -248,7 +248,7 @@ class QuickPingApiClient(baseUrl: String) {
             readTimeout = 20_000
             useCaches = false
             setRequestProperty("accept", "application/json")
-            setRequestProperty("user-agent", "QuickPing-Android/2.6")
+            setRequestProperty("user-agent", "nimHUB-Android/2.6")
             if (accessToken != null) setRequestProperty("authorization", "Bearer $accessToken")
             if (body != null) {
                 doOutput = true
@@ -299,7 +299,7 @@ private fun JSONObject.toService(): Service {
     return Service(
         id = getString("id"),
         name = optString("name", "سرویس شخصی"),
-        plan = optString("plan", "QuickPing"),
+        plan = optString("plan", "nimHUB"),
         license = optString("license"),
         totalBytes = optLongFlexible("size"),
         usedBytes = optLongFlexible("usedSize"),
@@ -346,7 +346,7 @@ private fun JSONArray?.toNotifications(): List<NotificationItem> {
 
 private fun guardianCatalog(values: Map<String, Boolean>) = listOf(
     GuardianCategory("malware", "بدافزارها", "محافظت در برابر دامنه‌های مخرب", "malware", values["malware"] ?: true),
-    GuardianCategory("ads", "تبلیغات و ردیاب‌ها", "مسدودکردن تبلیغات و ابزارهای ردیابی", "ads", values["ads"] ?: true),
+    GuardianCategory("ads", "تبلیغات و ردیاب‌ها", "مسدودکردن تبلیغات و ابزارهای ردیابی", "ads", values["ads"] ?: false),
     GuardianCategory("youtube", "تبلیغات یوتیوب", "کاهش تبلیغات و دامنه‌های مزاحم", "youtube", values["youtube"] ?: false),
     GuardianCategory("phishing", "فیشینگ", "جلوگیری از صفحات جعل هویت", "phishing", values["phishing"] ?: true),
     GuardianCategory("porn", "محتوای بزرگسال", "فیلتر دامنه‌های نامناسب", "porn", values["porn"] ?: false),

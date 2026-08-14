@@ -72,7 +72,11 @@ class QuickPingSettingsStore(context: Context) {
 
     fun mergeGuardian(categories: List<GuardianCategory>): List<GuardianCategory> = categories.map { category ->
         val key = guardianKey(category.id)
-        if (preferences.contains(key)) category.copy(enabled = preferences.getBoolean(key, category.enabled)) else category
+        when {
+            preferences.contains(key) -> category.copy(enabled = preferences.getBoolean(key, category.enabled))
+            category.id in CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES -> category.copy(enabled = false)
+            else -> category
+        }
     }
 
     fun saveGuardian(categories: List<GuardianCategory>) {
@@ -97,17 +101,18 @@ class QuickPingSettingsStore(context: Context) {
 
         preferences.edit().apply {
             if (staleIncludeWhitelist) {
-                // Old builds could persist an Include-only list (for example only
-                // Telegram), making every other app bypass the VPN after upgrade.
+                // Several historical builds could persist an Include-only list
+                // (commonly Telegram). That makes every non-selected app bypass
+                // the VPN and exactly matches the old "Telegram only" symptom.
+                // Schema v5 re-runs the safety migration for devices which have
+                // already executed the v4 build before the final release.
                 putBoolean(KEY_SPLIT_ENABLED, false)
             }
             if (currentVersion < 3) {
                 // Guardian is a security feature. It must not silently block normal
                 // VPN destinations such as YouTube/social networks/advertising CDNs.
                 // Users can explicitly re-enable these categories from settings.
-                putBoolean(guardianKey("ads"), false)
-                putBoolean(guardianKey("youtube"), false)
-                putBoolean(guardianKey("socials"), false)
+                CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES.forEach { id -> putBoolean(guardianKey(id), false) }
             }
             putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
         }.apply()
@@ -130,7 +135,7 @@ class QuickPingSettingsStore(context: Context) {
         const val PREFERENCES = "quickping"
         const val KEY_AUTO_CONNECT = "auto_connect"
         private const val KEY_SETTINGS_SCHEMA_VERSION = "settings_schema_version"
-        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 3
+        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 5
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_AUTO_PING = "auto_ping"
         private const val KEY_SHARE_HOTSPOT = "share_hotspot"
@@ -162,6 +167,7 @@ class QuickPingSettingsStore(context: Context) {
             "crypto",
             "fake-news",
         )
+        private val CONNECTIVITY_SENSITIVE_GUARDIAN_CATEGORIES = setOf("ads", "youtube", "socials")
         private val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "phishing")
     }
 }

@@ -33,6 +33,8 @@ import org.quickping.app.data.auth.GoogleCredentialAuth
 import org.quickping.app.data.network.ApiException
 import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.settings.QuickPingSettingsStore
+import org.quickping.app.data.settings.SelectedServiceStore
+import org.quickping.app.data.settings.resolveSelectedServiceId
 import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.vpn.QuickPingVpnService
@@ -42,6 +44,7 @@ import org.quickping.app.vpn.VpnRuntimeStore
 class QuickPingViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = (application as QuickPingApplication).repository
     private val settingsStore = QuickPingSettingsStore(application)
+    private val selectedServiceStore = SelectedServiceStore(application)
     private val runtimeStore = VpnRuntimeStore(application)
     private var loginJob: Job? = null
     private var pingJob: Job? = null
@@ -55,7 +58,13 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             _state.update { it.copy(busy = true) }
             val bootstrap = repository.restoreSession()
             _state.update { current ->
-                val restored = bootstrap?.let { current.withBootstrap(it, mergeGuardian(it)) } ?: current
+                val restored = bootstrap?.let {
+                    current.withBootstrap(
+                        payload = it,
+                        guardian = mergeGuardian(it),
+                        preferredServiceId = selectedServiceStore.load(it.user.id),
+                    )
+                } ?: current
                 restored.copy(
                     initialized = true,
                     signedIn = bootstrap != null,
@@ -136,6 +145,24 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         restartVpnIfActive()
     }
 
+    fun selectService(id: String) {
+        val current = _state.value
+        if (id.isBlank() || id == current.service.id) return
+        val selectedService = current.services.firstOrNull { it.id == id } ?: return
+        val selectedServers = current.serversByService[id].orEmpty()
+        selectedServiceStore.save(current.user.id, id)
+        _state.update {
+            it.copy(
+                service = selectedService,
+                servers = selectedServers,
+                selectedServerId = selectedServers.firstOrNull()?.id.orEmpty(),
+                connectionError = null,
+                connectionErrorCode = null,
+            )
+        }
+        restartVpnIfActive()
+    }
+
     fun refreshServerPings() {
         if (!_state.value.settings.autoPing || _state.value.servers.isEmpty() || pingJob?.isActive == true) return
         val targets = _state.value.servers.filter { it.host.isNotBlank() && it.port in 1..65535 }
@@ -202,7 +229,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { bootstrap ->
                     val guardian = mergeGuardian(bootstrap)
                     _state.update {
-                        it.withBootstrap(bootstrap, guardian).copy(
+                        it.withBootstrap(
+                            payload = bootstrap,
+                            guardian = guardian,
+                            preferredServiceId = selectedServiceStore.load(bootstrap.user.id),
+                        ).copy(
                             signedIn = true,
                             busy = false,
                             loginChallengeId = null,
@@ -239,7 +270,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 val guardian = mergeGuardian(bootstrap)
                 _state.update {
-                    it.withBootstrap(bootstrap, guardian).copy(
+                    it.withBootstrap(
+                        payload = bootstrap,
+                        guardian = guardian,
+                        preferredServiceId = selectedServiceStore.load(bootstrap.user.id),
+                    ).copy(
                         signedIn = true,
                         busy = false,
                         loginChallengeId = null,
@@ -266,7 +301,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                 .onSuccess { bootstrap ->
                     val guardian = mergeGuardian(bootstrap)
                     _state.update {
-                        it.withBootstrap(bootstrap, guardian).copy(
+                        it.withBootstrap(
+                            payload = bootstrap,
+                            guardian = guardian,
+                            preferredServiceId = selectedServiceStore.load(bootstrap.user.id),
+                        ).copy(
                             signedIn = true,
                             busy = false,
                             loginChallengeId = null,
@@ -487,7 +526,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private companion object {
-        val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
+        val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "phishing")
     }
 }
 
@@ -518,12 +557,21 @@ private fun tcpPing(host: String, port: Int): Int? = runCatching {
 private fun QuickPingUiState.withBootstrap(
     payload: BootstrapPayload,
     guardian: List<org.quickping.app.model.GuardianCategory>,
+    preferredServiceId: String?,
 ): QuickPingUiState {
-    val service = payload.services.firstOrNull() ?: emptyService
+    val selectedServiceId = resolveSelectedServiceId(
+        preferredId = preferredServiceId,
+        availableIds = payload.services.map { it.id },
+    )
+    val service = payload.services.firstOrNull { it.id == selectedServiceId }
+        ?: payload.services.firstOrNull()
+        ?: emptyService
     val servers = payload.serversByService[service.id].orEmpty()
     return copy(
         user = payload.user,
+        services = payload.services,
         service = service,
+        serversByService = payload.serversByService,
         servers = servers,
         selectedServerId = servers.firstOrNull()?.id.orEmpty(),
         guardianCategories = guardian,

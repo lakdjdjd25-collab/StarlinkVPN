@@ -3,7 +3,11 @@ package org.quickping.app.data
 import android.content.Context
 import android.os.Build
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,6 +17,7 @@ import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.network.EmailChallenge
 import org.quickping.app.data.network.GoogleAuthApiClient
 import org.quickping.app.data.network.GoogleNonceChallenge
+import org.quickping.app.data.network.LogoutApiClient
 import org.quickping.app.data.network.QuickPingApiClient
 import org.quickping.app.data.security.SecureTokenStore
 import org.quickping.app.data.security.StoredSession
@@ -20,8 +25,11 @@ import org.quickping.app.data.security.StoredSession
 class QuickPingRepository(context: Context) {
     private val api = QuickPingApiClient(BuildConfig.API_BASE_URL)
     private val googleApi = GoogleAuthApiClient(BuildConfig.API_BASE_URL)
+    private val logoutApi = LogoutApiClient(BuildConfig.API_BASE_URL)
     private val tokens = SecureTokenStore(context.applicationContext)
     private val refreshMutex = Mutex()
+    private val explicitlySignedOut = AtomicBoolean(false)
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     suspend fun restoreSession(): BootstrapPayload? = withContext(Dispatchers.IO) {
         if (tokens.load() == null) return@withContext null
@@ -105,9 +113,20 @@ class QuickPingRepository(context: Context) {
         authenticatedRequest { accessToken -> api.deleteAccount(accessToken, password) }
     }
 
-    fun signOut() = tokens.clear()
+    fun signOut() {
+        explicitlySignedOut.set(true)
+        val session = tokens.load()
+        val installationId = tokens.installationId()
+        tokens.clear()
+        if (session != null) {
+            backgroundScope.launch {
+                runCatching { logoutApi.revoke(session.refreshToken, installationId) }
+            }
+        }
+    }
 
     private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {
+        explicitlySignedOut.set(false)
         tokens.save(
             StoredSession(
                 accessToken = session.accessToken,
@@ -134,6 +153,7 @@ class QuickPingRepository(context: Context) {
     }
 
     private suspend fun validAccessToken(): String {
+        if (explicitlySignedOut.get()) throw ApiException(401, "signed_out", "ورود لازم است")
         val session = tokens.load() ?: throw ApiException(401, "signed_out", "ورود لازم است")
         if (session.accessExpiresAtMillis > System.currentTimeMillis() + 30_000) {
             return session.accessToken
@@ -152,11 +172,15 @@ class QuickPingRepository(context: Context) {
     }
 
     private suspend fun refreshAccessToken(force: Boolean): String = refreshMutex.withLock {
+        if (explicitlySignedOut.get()) throw ApiException(401, "signed_out", "ورود لازم است")
         val current = tokens.load() ?: throw ApiException(401, "signed_out", "ورود لازم است")
         if (!force && current.accessExpiresAtMillis > System.currentTimeMillis() + 30_000) {
             return@withLock current.accessToken
         }
         val refreshed = api.refresh(current.refreshToken, tokens.installationId())
+        if (explicitlySignedOut.get()) {
+            throw ApiException(401, "signed_out", "ورود لازم است")
+        }
         tokens.save(
             StoredSession(
                 accessToken = refreshed.accessToken,

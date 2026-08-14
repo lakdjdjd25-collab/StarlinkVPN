@@ -17,8 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-shell">
       <aside className="sidebar">
         <Link className="brand-mark" href="/admin">
-          <span className="brand-q">Q</span>
-          <span>QUICKPING</span>
+          <span className="brand-q">N</span>
+          <span>nimHUB</span>
         </Link>
         <nav className="nav-list" aria-label="ناوبری مدیریت">
           {navigation.map(([label, href]) => (

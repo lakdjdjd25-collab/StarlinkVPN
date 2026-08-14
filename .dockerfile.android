@@ -1,0 +1,82 @@
+FROM golang:1.25.12-bookworm AS android-build
+
+ARG ANDROID_RELEASE_KEYSTORE_B64
+ARG ANDROID_RELEASE_STORE_PASSWORD
+ARG ANDROID_RELEASE_KEY_ALIAS
+ARG ANDROID_RELEASE_KEY_PASSWORD
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    GRADLE_OPTS=-Xmx4g
+ENV PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        openjdk-17-jdk \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin the Android command-line tools so Railway builds are reproducible.
+RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" /tmp/android-cli \
+    && curl -fsSL \
+        https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+        -o /tmp/android-cli/tools.zip \
+    && unzip -q /tmp/android-cli/tools.zip -d /tmp/android-cli \
+    && mkdir -p "${ANDROID_HOME}/cmdline-tools/latest" \
+    && mv /tmp/android-cli/cmdline-tools/* "${ANDROID_HOME}/cmdline-tools/latest/" \
+    && rm -rf /tmp/android-cli \
+    && yes | sdkmanager --licenses >/dev/null \
+    && sdkmanager \
+        "platform-tools" \
+        "platforms;android-36" \
+        "build-tools;36.0.0" \
+        "ndk;28.0.13004108"
+
+WORKDIR /workspace
+COPY . .
+
+RUN chmod +x gradlew scripts/build-sing-box-android.sh \
+    && ./scripts/build-sing-box-android.sh
+
+# Railway Docker builds expose opted-in variables as ARG. Decode the release
+# key, build/sign/verify, copy the distributable artifact and delete the key in
+# the same RUN so no committed filesystem layer contains the keystore.
+RUN test -n "${ANDROID_RELEASE_KEYSTORE_B64}" \
+    && test -n "${ANDROID_RELEASE_STORE_PASSWORD}" \
+    && test -n "${ANDROID_RELEASE_KEY_ALIAS}" \
+    && test -n "${ANDROID_RELEASE_KEY_PASSWORD}" \
+    && umask 077 \
+    && printf '%s' "${ANDROID_RELEASE_KEYSTORE_B64}" | base64 --decode > /tmp/nimhub-release.jks \
+    && keytool -list \
+        -keystore /tmp/nimhub-release.jks \
+        -storepass "${ANDROID_RELEASE_STORE_PASSWORD}" \
+        -alias "${ANDROID_RELEASE_KEY_ALIAS}" >/dev/null \
+    && ANDROID_RELEASE_KEYSTORE_PATH=/tmp/nimhub-release.jks \
+       ANDROID_RELEASE_STORE_PASSWORD="${ANDROID_RELEASE_STORE_PASSWORD}" \
+       ANDROID_RELEASE_KEY_ALIAS="${ANDROID_RELEASE_KEY_ALIAS}" \
+       ANDROID_RELEASE_KEY_PASSWORD="${ANDROID_RELEASE_KEY_PASSWORD}" \
+       ./gradlew :apps:android:assembleRelease --stacktrace \
+    && APK="$(find apps/android/build/outputs/apk/release -name '*.apk' -type f | head -n 1)" \
+    && test -s "${APK}" \
+    && "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "${APK}" \
+    && mkdir -p /workspace/release-apk \
+    && cp "${APK}" /workspace/release-apk/nimHUB-2.6.7.apk \
+    && rm -f /tmp/nimhub-release.jks
+
+FROM node:24-bookworm-slim AS runtime
+
+ENV NODE_ENV=production \
+    PORT=3000
+
+WORKDIR /app
+COPY --from=android-build /workspace/release-apk /app/apk
+COPY scripts/android-artifact-server.js /app/server.js
+
+EXPOSE 3000
+
+CMD ["node", "/app/server.js"]

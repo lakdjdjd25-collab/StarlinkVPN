@@ -7,9 +7,9 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
-import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -28,12 +29,27 @@ class QuickPingVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val stopping = AtomicBoolean(false)
     private var tunnelJob: Job? = null
+    private lateinit var platform: AndroidSingBoxPlatform
     private lateinit var core: TunnelCore
+    private lateinit var trafficMonitor: VpnTrafficMonitor
 
     override fun onCreate() {
         super.onCreate()
-        val platform = AndroidSingBoxPlatform(this)
+        platform = AndroidSingBoxPlatform(this)
         core = SingBoxTunnelCore(platform) { disconnect() }
+        trafficMonitor = VpnTrafficMonitor()
+        serviceScope.launch {
+            trafficMonitor.stats.collect { traffic ->
+                val current = status.value
+                if (current.traffic != traffic) status.value = current.copy(traffic = traffic)
+            }
+        }
+        // MutableStateFlow lives at process scope. If Android destroyed a previous
+        // service instance unexpectedly, never let a stale Connected/Connecting
+        // value survive into a fresh service that has no running native core.
+        if (status.value.state == ServiceState.Connected || status.value.state == ServiceState.Connecting) {
+            publish(ServiceState.Disconnected)
+        }
         createNotificationChannel()
     }
 
@@ -46,7 +62,15 @@ class QuickPingVpnService : VpnService() {
     }
 
     private fun connect() {
-        if (status.value.state == ServiceState.Connecting || status.value.state == ServiceState.Connected) return
+        val currentState = status.value.state
+        if (currentState == ServiceState.Connecting && tunnelJob?.isActive == true) return
+        if (currentState == ServiceState.Connected && core.isRunning()) return
+        if (currentState == ServiceState.Connecting || currentState == ServiceState.Connected) {
+            // State without an active job/core is stale; recover instead of
+            // short-circuiting and leaving a visual-only Connected state.
+            publish(ServiceState.Disconnected)
+        }
+
         stopping.set(false)
         startForeground(NOTIFICATION_ID, connectionNotification())
         publish(ServiceState.Connecting)
@@ -55,18 +79,63 @@ class QuickPingVpnService : VpnService() {
                 val rawConfig = VpnRuntimeStore(this@QuickPingVpnService).read()
                 val settingsStore = QuickPingSettingsStore(this@QuickPingVpnService)
                 val settings = settingsStore.load()
-                val compiled = VpnConfigCompiler.compile(
+                val sanitizedConfig = VpnRuntimeSanitizer.sanitize(
                     rawConfigJson = rawConfig,
+                    settings = settings,
+                )
+                val compiled = VpnConfigCompiler.compile(
+                    rawConfigJson = sanitizedConfig,
                     settings = settings,
                     enabledGuardianCategories = settingsStore.enabledGuardianCategoryIds(),
                     applicationPackage = packageName,
                 )
                 val runtimeConfig = applyProviderDnsPolicy(
-                    rawConfigJson = rawConfig,
+                    rawConfigJson = sanitizedConfig,
                     compiledConfigJson = compiled.configJson,
                     provider = settings.dnsProvider,
                 )
                 core.start(runtimeConfig, compiled.launchOptions)
+                startTrafficMonitorWithRetry()
+
+                // A running libbox process is not enough. In TUN mode, nimHUB's
+                // own VpnService must have successfully established and retained
+                // its ParcelFileDescriptor before any network probe can qualify
+                // the connection as healthy.
+                if (!settings.proxyModeEnabled) {
+                    check(platform.hasTunInterface()) { "nimhub tun interface missing" }
+                }
+
+                // Wait for a native status sample first. Taking a zero baseline
+                // before CommandStatus reports could accidentally count startup
+                // DNS/core traffic as proof that the later HTTPS probe crossed
+                // the tunnel.
+                val trafficBaseline = trafficMonitor.awaitInitialSample()
+                    ?: error("native traffic monitor produced no baseline sample")
+
+                // TUN mode then proves Android VPN traffic with real HTTPS.
+                // Proxy mode proves HTTPS through nimHUB's local HTTP proxy.
+                val proxyVerificationPort = settings.proxyPort.takeIf { settings.proxyModeEnabled }
+                check(
+                    VpnConnectionVerifier(this@QuickPingVpnService).awaitHealthy(
+                        proxyPort = proxyVerificationPort,
+                    ),
+                ) {
+                    if (settings.proxyModeEnabled) "proxy verification failed" else "tunnel verification failed"
+                }
+
+                // The exact HTTPS verification traffic above must also be visible
+                // in a *newer* sing-box status sample and increase both upload and
+                // download totals. This closes the old false-positive path where
+                // the app itself had internet but the native tunnel carried zero.
+                check(trafficMonitor.awaitTrafficAfter(trafficBaseline)) {
+                    "native traffic not observed after verification"
+                }
+
+                check(core.isRunning()) { "native core stopped during verification" }
+                if (!settings.proxyModeEnabled) {
+                    check(platform.hasTunInterface()) { "nimhub tun interface closed during verification" }
+                }
+
                 publish(ServiceState.Connected)
                 getSystemService<NotificationManager>()?.notify(
                     NOTIFICATION_ID,
@@ -74,6 +143,11 @@ class QuickPingVpnService : VpnService() {
                 )
             }.onFailure { error ->
                 if (error is CancellationException && stopping.get()) return@onFailure
+                // Suppress the native serviceStop callback while we intentionally
+                // tear a failed startup down; otherwise it can race this path and
+                // overwrite Error with Disconnected.
+                stopping.set(true)
+                trafficMonitor.stop()
                 runCatching { core.stop() }
                 val failure = error.toVpnFailure()
                 Log.e(TAG, "VPN startup failed [${failure.code}]: ${failure.safeDetail}")
@@ -84,10 +158,23 @@ class QuickPingVpnService : VpnService() {
         }
     }
 
+    private suspend fun startTrafficMonitorWithRetry() {
+        var lastError: Throwable? = null
+        repeat(4) { attempt ->
+            val result = runCatching { trafficMonitor.start() }
+            if (result.isSuccess) return
+            lastError = result.exceptionOrNull()
+            trafficMonitor.stop()
+            if (attempt < 3) delay(175L * (attempt + 1))
+        }
+        throw IllegalStateException("native traffic monitor unavailable", lastError)
+    }
+
     private fun disconnect() {
         if (!stopping.compareAndSet(false, true)) return
         tunnelJob?.cancel()
         tunnelJob = serviceScope.launch {
+            trafficMonitor.stop()
             runCatching { core.stop() }
             publish(ServiceState.Disconnected)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -139,8 +226,14 @@ class QuickPingVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        stopping.set(true)
+        tunnelJob?.cancel()
+        if (::trafficMonitor.isInitialized) trafficMonitor.stop()
         if (::core.isInitialized && core.isRunning()) {
             runCatching { runBlocking(Dispatchers.IO) { core.stop() } }
+        }
+        if (status.value.state == ServiceState.Connected || status.value.state == ServiceState.Connecting) {
+            publish(ServiceState.Disconnected)
         }
         serviceScope.cancel()
         super.onDestroy()
@@ -149,16 +242,20 @@ class QuickPingVpnService : VpnService() {
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     private fun publish(state: ServiceState, failure: VpnFailure? = null) {
-        status.value = VpnServiceStatus(state = state, failure = failure)
+        status.value = VpnServiceStatus(
+            state = state,
+            failure = failure,
+            traffic = if (::trafficMonitor.isInitialized) trafficMonitor.stats.value else VpnTrafficStats(),
+        )
     }
 
     companion object {
         const val ACTION_CONNECT = "org.quickping.action.CONNECT"
         const val ACTION_DISCONNECT = "org.quickping.action.DISCONNECT"
-        private const val CHANNEL_ID = "quickping_vpn"
+        private const val CHANNEL_ID = "nimhub_vpn"
         private const val NOTIFICATION_ID = 2401
         val status = MutableStateFlow(VpnServiceStatus(ServiceState.Disconnected))
-        private const val TAG = "QuickPingVpnService"
+        private const val TAG = "nimHUBVpnService"
     }
 }
 
@@ -173,6 +270,7 @@ data class VpnFailure(
 data class VpnServiceStatus(
     val state: ServiceState,
     val failure: VpnFailure? = null,
+    val traffic: VpnTrafficStats = VpnTrafficStats(),
 )
 
 private fun Throwable.toVpnFailure(): VpnFailure {
@@ -180,6 +278,18 @@ private fun Throwable.toVpnFailure(): VpnFailure {
     val detail = source.mapNotNull { it.message }.firstOrNull { it.isNotBlank() }.orEmpty()
     val normalized = detail.lowercase()
     val (code, message) = when {
+        "native traffic not observed" in normalized ->
+            "traffic_unverified" to "تونل ساخته شد اما هستهٔ VPN هیچ عبور واقعی داده‌ای ثبت نکرد"
+        "native traffic monitor" in normalized ->
+            "traffic_monitor" to "بررسی آمار واقعی هستهٔ VPN راه‌اندازی نشد"
+        "proxy verification failed" in normalized ->
+            "proxy_unhealthy" to "پروکسی محلی راه‌اندازی شد اما عبور واقعی اینترنت از آن تأیید نشد"
+        "tunnel verification failed" in normalized ->
+            "tunnel_unhealthy" to "تونل VPN ساخته شد اما عبور واقعی اینترنت تأیید نشد"
+        "tun interface" in normalized ->
+            "tun_unavailable" to "رابط VPN اندروید ساخته نشد یا پیش از تأیید اتصال بسته شد"
+        "native core stopped" in normalized ->
+            "core_stopped" to "هستهٔ VPN پیش از تکمیل بررسی اتصال متوقف شد"
         "vpn permission" in normalized -> "vpn_permission" to "مجوز VPN داده نشده است"
         "no saved vpn configuration" in normalized || "missing runtime" in normalized ->
             "missing_config" to "پیکربندی اتصال ذخیره نشده است"
@@ -194,10 +304,35 @@ private fun Throwable.toVpnFailure(): VpnFailure {
             "network" to "ارتباط با سرور برقرار نشد"
         else -> "core_start" to "هستهٔ VPN راه‌اندازی نشد"
     }
-    val safeDetail = detail
-        .replace(Regex("https?://\\S+"), "[url]")
-        .replace(Regex("(?i)(password|token|uuid|secret)[=: ]+\\S+"), "$1=[redacted]")
+    return VpnFailure(
+        code = code,
+        userMessage = message,
+        safeDetail = sanitizeVpnFailureDetail(detail, this::class.java.simpleName),
+    )
+}
+
+internal fun sanitizeVpnFailureDetail(detail: String, fallback: String = "VPN error"): String {
+    var sanitized = detail
+        .replace(Regex("(?i)https?://\\S+"), "[url]")
+        .replace(Regex("(?i)bearer\\s+[A-Za-z0-9._~+/=-]+"), "Bearer [redacted]")
+        .replace(
+            Regex("(?i)(password|passwd|token|uuid|secret|authorization|private[_-]?key)[\\s\\\"']*[:=][\\s\\\"']*[^\\s,;\\\"'}]+"),
+            "$1=[redacted]",
+        )
+        .replace(
+            Regex("(?i)\\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\b"),
+            "[uuid]",
+        )
+        .replace(
+            Regex("(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"),
+            "[email]",
+        )
+        .replace(
+            Regex("(?<![A-Za-z0-9])[A-Za-z0-9_+/=-]{40,}(?![A-Za-z0-9])"),
+            "[redacted]",
+        )
+        .trim()
         .take(240)
-        .ifBlank { this::class.java.simpleName }
-    return VpnFailure(code, message, safeDetail)
+    if (sanitized.isBlank()) sanitized = fallback.take(80).ifBlank { "VPN error" }
+    return sanitized
 }

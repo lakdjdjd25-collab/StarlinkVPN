@@ -2,6 +2,7 @@ package org.quickping.app.vpn
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.quickping.app.model.DnsProvider
@@ -20,6 +21,7 @@ class VpnDnsPolicyTest {
                 "servers": [{"type":"local","tag":"quickping-dns"}],
                 "final": "quickping-dns"
             },
+            "outbounds": [{"type":"vless","tag":"proxy"}],
             "route": {"final":"proxy"}
         }"""
 
@@ -29,6 +31,73 @@ class VpnDnsPolicyTest {
         assertEquals("provider-dns", dns.getString("final"))
         assertEquals("https", dns.getJSONArray("servers").getJSONObject(0).getString("type"))
         assertEquals("proxy", JSONObject(result).getJSONObject("route").getString("final"))
+    }
+
+    @Test
+    fun providerDnsDetouredThroughProxyFallsBackToLocalBootstrapDns() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"1.1.1.1","detour":"selected-node"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node","server":"vpn.example.com","server_port":443}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+        val dns = JSONObject(result).getJSONObject("dns")
+        val server = dns.getJSONArray("servers").getJSONObject(0)
+
+        assertEquals("quickping-dns", dns.getString("final"))
+        assertEquals("local", server.getString("type"))
+        assertFalse(server.has("detour"))
+    }
+
+    @Test
+    fun providerDnsWithMissingDetourFallsBackToCompiledDns() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"1.1.1.1","detour":"missing-selector"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+
+        assertEquals("quickping-dns", JSONObject(result).getJSONObject("dns").getString("final"))
+    }
+
+    @Test
+    fun providerDnsWithMissingDomainResolverFallsBackToCompiledDns() {
+        val raw = """{
+            "dns":{"servers":[{"type":"https","tag":"provider-dns","server":"dns.example","domain_resolver":"missing-resolver"}],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+
+        assertEquals("quickping-dns", JSONObject(result).getJSONObject("dns").getString("final"))
+    }
+
+    @Test
+    fun providerDnsWithSelfContainedDomainResolverIsPreserved() {
+        val raw = """{
+            "dns":{"servers":[
+                {"type":"local","tag":"bootstrap"},
+                {"type":"https","tag":"provider-dns","server":"dns.example","domain_resolver":"bootstrap"}
+            ],"final":"provider-dns"}
+        }"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "outbounds":[{"type":"vless","tag":"selected-node"}]
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
+
+        assertEquals("provider-dns", JSONObject(result).getJSONObject("dns").getString("final"))
     }
 
     @Test
@@ -51,5 +120,25 @@ class VpnDnsPolicyTest {
 
         assertEquals("quickping-dns", dns.getString("final"))
         assertTrue(dns.getJSONArray("servers").getJSONObject(0).has("type"))
+    }
+
+    @Test
+    fun finalRuntimeConfigDoesNotAcceptAndroidVpnAsItsOwnUpstream() {
+        val raw = """{"dns":{"servers":[{"type":"local","tag":"provider"}],"final":"provider"}}"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"},
+            "route":{
+                "auto_detect_interface":true,
+                "override_android_vpn":true,
+                "final":"selected"
+            }
+        }"""
+
+        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Google)
+        val route = JSONObject(result).getJSONObject("route")
+
+        assertTrue(route.getBoolean("auto_detect_interface"))
+        assertFalse(route.has("override_android_vpn"))
+        assertEquals("selected", route.getString("final"))
     }
 }

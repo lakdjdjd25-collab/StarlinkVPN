@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.util.Base64
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -11,9 +14,75 @@ val generateLicenseAssets = tasks.register<org.gradle.api.tasks.Sync>("generateL
     into(generatedLicenseAssets.map { it.dir("licenses") })
 }
 
+// GitHub text-only file mutations can corrupt binary resources if a WebP is
+// written as ordinary UTF-8 content. Keep the approved icon-only nimHUB artwork
+// as deterministic Base64 chunks and reconstruct the exact verified WebP before
+// Android resource merging. The size + digest assertions make a truncated logo
+// a hard build failure instead of a broken launcher/login image in production.
+val generatedBrandingRes = layout.buildDirectory.dir("generated/branding-res")
+val nimHubLogoChunks = fileTree(layout.projectDirectory.dir("src/main/branding")) {
+    include("nimhub_logo.*.b64")
+}
+val generateBrandingRes = tasks.register("generateBrandingRes") {
+    val outputFile = generatedBrandingRes.map { it.file("drawable/nimhub_logo.webp") }
+    inputs.files(nimHubLogoChunks)
+    outputs.file(outputFile)
+
+    doLast {
+        val chunks = nimHubLogoChunks.files.sortedBy { it.name }
+        require(chunks.size == 3) {
+            "Expected 3 nimHUB logo chunks, found ${chunks.size}"
+        }
+        val encoded = chunks.joinToString(separator = "") { it.readText().trim() }
+        val bytes = Base64.getDecoder().decode(encoded)
+        require(bytes.size == 21_044) {
+            "Unexpected nimHUB logo size: ${bytes.size}"
+        }
+        require(bytes.copyOfRange(0, 4).decodeToString() == "RIFF") {
+            "nimHUB logo is not a RIFF WebP"
+        }
+        require(bytes.copyOfRange(8, 12).decodeToString() == "WEBP") {
+            "nimHUB logo has an invalid WebP header"
+        }
+        val sha256 = MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString(separator = "") { byte: Byte -> "%02x".format(byte.toInt() and 0xff) }
+        require(sha256 == "fa703c95f1c477c3da788634506995f05306172200a4185d29f1d0103c4787cc") {
+            "nimHUB logo digest mismatch: $sha256"
+        }
+
+        outputFile.get().asFile.apply {
+            parentFile.mkdirs()
+            writeBytes(bytes)
+        }
+    }
+}
+
+val releaseKeystorePath = providers.environmentVariable("ANDROID_RELEASE_KEYSTORE_PATH").orNull
+val releaseStorePassword = providers.environmentVariable("ANDROID_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("ANDROID_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("ANDROID_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningConfigured = listOf(
+    releaseKeystorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "org.quickping.app"
     compileSdk = 36
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("nimhubRelease") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "org.quickping"
@@ -39,6 +108,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.findByName("nimhubRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -57,6 +127,7 @@ android {
     }
 
     sourceSets.getByName("main").assets.srcDir(generatedLicenseAssets)
+    sourceSets.getByName("main").res.srcDir(generatedBrandingRes)
 
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -70,6 +141,7 @@ android {
 
 tasks.named("preBuild").configure {
     dependsOn(generateLicenseAssets)
+    dependsOn(generateBrandingRes)
 }
 
 kotlin {

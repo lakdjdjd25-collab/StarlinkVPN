@@ -139,27 +139,39 @@ function ensureTun(config: JsonObject): void {
   config.inbounds = inbounds;
 }
 
-function configForTag(baseConfig: JsonObject, tag: string, selectorTags: Set<string>): JsonObject {
+function rewriteRouteTargets(value: unknown, selectedTag: string, proxyTags: Set<string>): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteRouteTargets(item, selectedTag, proxyTags));
+  }
+  if (!isObject(value)) return value;
+
+  const rewritten: JsonObject = { ...value };
+  if (typeof rewritten.outbound === "string" && proxyTags.has(rewritten.outbound)) {
+    rewritten.outbound = selectedTag;
+  }
+  if (Array.isArray(rewritten.rules)) {
+    rewritten.rules = rewritten.rules.map((item) => rewriteRouteTargets(item, selectedTag, proxyTags));
+  }
+  return rewritten;
+}
+
+function configForTag(baseConfig: JsonObject, tag: string, proxyTags: Set<string>): JsonObject {
   const config = cloneObject(baseConfig);
   ensureTun(config);
   const route = isObject(config.route) ? config.route : {};
   route.final = tag;
   route.auto_detect_interface = true;
-  route.override_android_vpn = true;
+  // nimHUB is the Android VPN itself. Do not allow that VPN transport to become
+  // the upstream network; Android protects sing-box outbound sockets separately.
+  delete route.override_android_vpn;
   if (Array.isArray(route.rules)) {
-    route.rules = route.rules.map((value) => {
-      if (!isObject(value)) return value;
-      if (typeof value.outbound === "string" && selectorTags.has(value.outbound)) {
-        return { ...value, outbound: tag };
-      }
-      return value;
-    });
+    route.rules = route.rules.map((value) => rewriteRouteTargets(value, tag, proxyTags));
   }
   config.route = route;
   if (isObject(config.dns) && Array.isArray(config.dns.servers)) {
     config.dns.servers = config.dns.servers.map((value) => {
       if (!isObject(value)) return value;
-      if (typeof value.detour === "string" && selectorTags.has(value.detour)) {
+      if (typeof value.detour === "string" && proxyTags.has(value.detour)) {
         return { ...value, detour: tag };
       }
       return value;
@@ -191,6 +203,12 @@ export function normalizePasarGuardConfig(value: unknown): NormalizedPasarGuardC
     ...outbounds.filter((entry) => typeof entry.type === "string" && remoteOutboundTypes.has(entry.type)),
     ...endpoints.filter((entry) => entry.type === "wireguard"),
   ];
+  const proxyTags = new Set<string>([
+    ...selectorTags,
+    ...remoteEntries
+      .map((entry) => entry.tag)
+      .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0),
+  ]);
   const seenTags = new Set<string>();
   const nodes = remoteEntries.flatMap((entry): PasarGuardRuntimeNode[] => {
     const tag = typeof entry.tag === "string" ? entry.tag.trim() : "";
@@ -207,7 +225,7 @@ export function normalizePasarGuardConfig(value: unknown): NormalizedPasarGuardC
       protocol: protocolFor(type),
       countryCode: country.code,
       countryName: country.name,
-      runtimeConfig: configForTag(config, tag, selectorTags),
+      runtimeConfig: configForTag(config, tag, proxyTags),
     }];
   });
   if (!nodes.length) {

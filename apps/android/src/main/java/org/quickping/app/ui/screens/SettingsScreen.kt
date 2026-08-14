@@ -60,12 +60,14 @@ import org.quickping.app.BuildConfig
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
+import org.quickping.app.data.auth.currentAppSigningIdentity
 import org.quickping.app.model.AppLanguage
 import org.quickping.app.model.AppSettings
 import org.quickping.app.model.DnsProvider
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.QuickSwitch
+import org.quickping.app.vpn.QuickPingVpnService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -127,93 +129,103 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsGroup {
-                    SettingsTile(
-                        title = quickText("حالت پروکسی", "Proxy mode"),
-                        icon = R.drawable.ic_proxy,
-                        trailing = {
-                            QuickSwitch(
-                                checked = settings.proxyModeEnabled,
-                                onCheckedChange = { enabled ->
-                                    onUpdateSettings { it.copy(proxyModeEnabled = enabled) }
-                                },
-                            )
-                        },
-                    )
-                    SettingsTile(
-                        title = quickText("اشتراک‌گذاری با نقطه اتصال", "Share over hotspot"),
-                        icon = R.drawable.ic_hotspot,
-                        onClick = { showHotspotSheet = true },
-                    )
-                    SettingsTile(
-                        title = quickText("پورت SOCKS5 و HTTP", "HTTP and SOCKS5 port"),
-                        icon = R.drawable.ic_port,
-                        onClick = { showPortDialog = true },
-                        trailing = { ValuePill(settings.proxyPort.toString()) },
-                    )
-                    SettingsTile(
-                        title = "DNS",
-                        icon = R.drawable.ic_dns,
-                        onClick = { showDnsDialog = true },
-                        trailing = { ValuePill(dnsLabel(settings.dnsProvider), caret = true) },
-                    )
-                    SettingsTile(
-                        title = quickText("پینگ گرفتن خودکار سرورها", "Automatically ping servers"),
-                        icon = R.drawable.ic_ping_auto,
-                        trailing = {
-                            QuickSwitch(
-                                checked = settings.autoPing,
-                                onCheckedChange = { enabled -> onUpdateSettings { it.copy(autoPing = enabled) } },
-                            )
-                        },
-                    )
-                }
+                SettingsTile(
+                    title = quickText("حالت پروکسی", "Proxy mode"),
+                    icon = R.drawable.ic_proxy,
+                    trailing = {
+                        QuickSwitch(
+                            checked = settings.proxyModeEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateSettings { it.copy(proxyModeEnabled = enabled) }
+                            },
+                        )
+                    },
+                )
             }
             item {
-                SettingsGroup {
-                    SettingsTile(
-                        title = quickText("غیرفعال کردن بهینه‌سازی باتری", "Disable battery optimization"),
-                        icon = R.drawable.ic_battery_optimize,
-                        onClick = { showBatteryWarning = true },
-                    )
-                    SettingsTile(
-                        title = quickText("زبان", "Language"),
-                        icon = R.drawable.ic_language,
-                        onClick = { showLanguageDialog = true },
-                        trailing = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    settings.language.label,
-                                    color = QuickPingColors.TextSecondary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Spacer(Modifier.width(9.dp))
-                                EndChevron()
-                            }
-                        },
-                    )
-                    SettingsTile(
-                        title = quickText("گزارش مشکل", "Report a problem"),
-                        icon = R.drawable.ic_exclamation_circle,
-                        onClick = { showReportWarning = true },
-                    )
-                    SettingsTile(
-                        title = quickText("نسخه", "Version"),
-                        icon = R.drawable.ic_version,
-                        onClick = onVersion,
-                        trailing = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    BuildConfig.VERSION_NAME.substringBefore('-'),
-                                    color = QuickPingColors.TextSecondary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Spacer(Modifier.width(9.dp))
-                                EndChevron()
-                            }
-                        },
-                    )
-                }
+                SettingsTile(
+                    title = quickText("اشتراک‌گذاری با نقطه اتصال", "Share over hotspot"),
+                    icon = R.drawable.ic_hotspot,
+                    onClick = { showHotspotSheet = true },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("پورت SOCKS5 و HTTP", "HTTP and SOCKS5 port"),
+                    icon = R.drawable.ic_port,
+                    onClick = { showPortDialog = true },
+                    trailing = { ValuePill(settings.proxyPort.toString()) },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = "DNS",
+                    icon = R.drawable.ic_dns,
+                    onClick = { showDnsDialog = true },
+                    trailing = { ValuePill(dnsLabel(settings.dnsProvider), caret = true) },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("پینگ گرفتن خودکار سرورها", "Automatically ping servers"),
+                    icon = R.drawable.ic_ping_auto,
+                    trailing = {
+                        QuickSwitch(
+                            checked = settings.autoPing,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(autoPing = enabled) } },
+                        )
+                    },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("غیرفعال کردن بهینه‌سازی باتری", "Disable battery optimization"),
+                    icon = R.drawable.ic_battery_optimize,
+                    onClick = { showBatteryWarning = true },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("زبان", "Language"),
+                    icon = R.drawable.ic_language,
+                    onClick = { showLanguageDialog = true },
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                settings.language.label,
+                                color = QuickPingColors.TextSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.width(9.dp))
+                            EndChevron()
+                        }
+                    },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("گزارش مشکل", "Report a problem"),
+                    icon = R.drawable.ic_exclamation_circle,
+                    onClick = { showReportWarning = true },
+                )
+            }
+            item {
+                SettingsTile(
+                    title = quickText("نسخه", "Version"),
+                    icon = R.drawable.ic_version,
+                    onClick = onVersion,
+                    trailing = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                BuildConfig.VERSION_NAME.substringBefore('-'),
+                                color = QuickPingColors.TextSecondary,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Spacer(Modifier.width(9.dp))
+                            EndChevron()
+                        }
+                    },
+                )
             }
         }
     }
@@ -278,8 +290,8 @@ fun SettingsScreen(
         ReferenceDialog(
             title = quickText("بهینه‌سازی باتری", "Battery optimization"),
             body = quickText(
-                "برای جلوگیری از قطع‌شدن VPN در پس‌زمینه، QuickPing را در صفحهٔ بعد از محدودیت باتری خارج کنید.",
-                "Allow QuickPing to run without battery restrictions so the VPN remains connected in the background.",
+                "برای جلوگیری از قطع‌شدن VPN در پس‌زمینه، nimHUB را در صفحهٔ بعد از محدودیت باتری خارج کنید.",
+                "Allow nimHUB to run without battery restrictions so the VPN remains connected in the background.",
             ),
             confirm = quickText("ادامه", "Continue"),
             onConfirm = { showBatteryWarning = false; openBatterySettings(context) },
@@ -294,7 +306,7 @@ fun SettingsScreen(
                 "Before continuing, reproduce the issue once. A technical report without login secrets will be prepared for support.",
             ),
             confirm = quickText("ادامه", "Continue"),
-            onConfirm = { showReportWarning = false; openProblemReport(context) },
+            onConfirm = { showReportWarning = false; openProblemReport(context, settings) },
             onDismiss = { showReportWarning = false },
         )
     }
@@ -486,8 +498,8 @@ private fun HotspotSheet(
             )
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CopyValueCard(Modifier.weight(1f), host, quickText("هاست", "Host"), R.drawable.ic_server) { copyText(context, "QuickPing host", host) }
-                CopyValueCard(Modifier.weight(1f), port.toString(), quickText("پورت", "Port"), R.drawable.ic_port) { copyText(context, "QuickPing port", port.toString()) }
+                CopyValueCard(Modifier.weight(1f), host, quickText("هاست", "Host"), R.drawable.ic_server) { copyText(context, "nimHUB host", host) }
+                CopyValueCard(Modifier.weight(1f), port.toString(), quickText("پورت", "Port"), R.drawable.ic_port) { copyText(context, "nimHUB port", port.toString()) }
             }
             Spacer(Modifier.height(12.dp))
             Text(quickText("برای کپی‌کردن کلیک کنید", "Tap a value to copy"), Modifier.fillMaxWidth(), color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
@@ -557,20 +569,35 @@ private fun openBatterySettings(context: Context) {
     }.onFailure { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
 }
 
-private fun openProblemReport(context: Context) {
+private fun openProblemReport(context: Context, appSettings: AppSettings) {
+    val serviceStatus = QuickPingVpnService.status.value
+    val failure = serviceStatus.failure
+    val signingIdentity = currentAppSigningIdentity(context)
     val report = buildString {
-        appendLine("QuickPing ${BuildConfig.VERSION_NAME}")
+        appendLine("nimHUB ${BuildConfig.VERSION_NAME}")
         appendLine("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
         appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("Package: ${signingIdentity?.packageName ?: context.packageName}")
+        signingIdentity?.let { appendLine("Signing SHA-1: ${it.sha1}") }
+        appendLine("VPN state: ${serviceStatus.state.name}")
+        failure?.let {
+            appendLine("Failure code: ${it.code}")
+            appendLine("Failure detail: ${it.safeDetail}")
+        }
+        appendLine("Mode: ${if (appSettings.proxyModeEnabled) "proxy" else "tun"}")
+        appendLine("DNS: ${appSettings.dnsProvider.storageValue}")
+        appendLine("Split tunnel: ${appSettings.splitTunnelingEnabled} (${appSettings.splitTunnelMode.name.lowercase()})")
+        appendLine("Guardian: ${appSettings.guardianEnabled}")
+        appendLine("Hotspot sharing: ${appSettings.shareHotspot}")
         appendLine()
         append("Problem description: ")
     }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "QuickPing problem report")
+        putExtra(Intent.EXTRA_SUBJECT, "nimHUB problem report")
         putExtra(Intent.EXTRA_TEXT, report)
     }
-    context.startActivity(Intent.createChooser(intent, "QuickPing"))
+    context.startActivity(Intent.createChooser(intent, "nimHUB"))
 }
 
 private fun localIpv4Address(): String = runCatching {

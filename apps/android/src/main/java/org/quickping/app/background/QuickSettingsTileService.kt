@@ -6,6 +6,7 @@ import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import org.quickping.app.MainActivity
+import org.quickping.app.R
 import org.quickping.app.vpn.QuickPingVpnService
 import org.quickping.app.vpn.ServiceState
 
@@ -51,7 +52,7 @@ class QuickSettingsTileService : TileService() {
                 ServiceState.Connecting -> Tile.STATE_UNAVAILABLE
                 else -> Tile.STATE_INACTIVE
             }
-            label = "QuickPing"
+            label = getString(R.string.app_name)
             updateTile()
         }
     }

@@ -19,6 +19,27 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - name: Verify Android artifact server wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/android-artifact-server.js
+          grep -F 'COPY scripts/android-artifact-server.js /app/server.js' .dockerfile.android
+          grep -F 'CMD ["node", "/app/server.js"]' .dockerfile.android
+          APK_DIR=$(mktemp -d)
+          printf 'test-apk' > "$APK_DIR/nimHUB-smoke.apk"
+          APK_DIR="$APK_DIR" PORT=32123 node scripts/android-artifact-server.js &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$APK_DIR"' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:32123/health > /tmp/nimhub-artifact-health.json; then
+              break
+            fi
+            sleep 0.1
+          done
+          grep -F '"ok":true' /tmp/nimhub-artifact-health.json
+          grep -F 'nimHUB-smoke.apk' /tmp/nimhub-artifact-health.json
+          curl -fsS http://127.0.0.1:32123/nimHUB-smoke.apk | grep -F 'test-apk'
       - run: npm ci
       - run: npm test
       - run: npm run lint
@@ -38,25 +59,18 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - uses: actions/cache/restore@v4
-        id: debug-keystore-cache
-        with:
-          path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v2
-      - name: Ensure stable debug keystore
+      - name: Ensure CI-only debug keystore
         run: |
           mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -noprompt \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
-          fi
+          keytool -genkeypair -noprompt \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=nimHUB CI Debug,O=nimHUB,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
           test -s "$HOME/.android/debug.keystore"
       - uses: actions/cache/restore@v4
         id: libbox-cache
@@ -77,18 +91,31 @@ jobs:
         with:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
-      - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
-      - uses: actions/cache/save@v4
-        if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
-        with:
-          path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v2
-      - run: |
-          APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+      - name: Build debug, minified release and unit tests
+        run: ./gradlew :apps:android:assembleDebug :apps:android:assembleRelease :apps:android:testDebugUnitTest --stacktrace
+      - name: Verify CI debug certificate and unsigned release audit output
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEBUG_APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          RELEASE_APK=$(find apps/android/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DEBUG_APK"
+          if "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$RELEASE_APK" >/dev/null 2>&1; then
+            echo "PR/CI release APK must stay unsigned; production signing is isolated to the manual signing workflow." >&2
+            exit 1
+          fi
+          echo "Release APK correctly remains unsigned for static audit."
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: QuickPing-debug
+          name: nimHUB-ci-debug-no-google-oauth
           path: apps/android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: nimHUB-ci-release-unsigned-static-audit
+          path: apps/android/build/outputs/apk/release/*.apk
           if-no-files-found: error
