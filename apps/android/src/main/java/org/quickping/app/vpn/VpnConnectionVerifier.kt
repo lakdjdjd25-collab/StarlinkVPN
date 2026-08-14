@@ -26,9 +26,14 @@ internal fun requiredConnectivityProbeNames(
     add("telegram")
     add("youtube")
     add("instagram")
-    if (guardianEnabled && "socials" in enabledGuardianCategories) {
-        remove("telegram")
-        remove("instagram")
+    if (guardianEnabled) {
+        if ("socials" in enabledGuardianCategories) {
+            remove("telegram")
+            remove("instagram")
+        }
+        if ("youtube" in enabledGuardianCategories) {
+            remove("youtube")
+        }
     }
 }
 
@@ -47,9 +52,9 @@ internal fun requiredConnectivityProbeNames(
  * that remote service through the requested transport.
  *
  * A destination explicitly blocked by the user's Guardian policy is not a VPN
- * health failure. In particular, the Social networks category deliberately
- * rejects Telegram and Instagram domains, so those probes are skipped only when
- * that Guardian category is actually active.
+ * health failure. Social networks deliberately rejects Telegram and Instagram,
+ * while the YouTube category deliberately rejects YouTube itself. Those probes
+ * are skipped only while the matching Guardian category is actually active.
  */
 internal class VpnConnectionVerifier(
     private val context: Context,
