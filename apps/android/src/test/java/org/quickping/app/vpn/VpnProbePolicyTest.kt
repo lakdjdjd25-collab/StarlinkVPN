@@ -27,6 +27,28 @@ class VpnProbePolicyTest {
     }
 
     @Test
+    fun youtubeGuardianOnlyRemovesYouTubeProbe() {
+        assertEquals(
+            setOf("web", "telegram", "instagram"),
+            requiredConnectivityProbeNames(
+                guardianEnabled = true,
+                enabledGuardianCategories = setOf("youtube"),
+            ),
+        )
+    }
+
+    @Test
+    fun socialAndYouTubeGuardianKeepOnlyOrdinaryWebProbe() {
+        assertEquals(
+            setOf("web"),
+            requiredConnectivityProbeNames(
+                guardianEnabled = true,
+                enabledGuardianCategories = setOf("socials", "youtube"),
+            ),
+        )
+    }
+
+    @Test
     fun unrelatedGuardianCategoriesDoNotWeakenConnectivityProof() {
         assertEquals(
             setOf("web", "telegram", "youtube", "instagram"),
@@ -38,12 +60,12 @@ class VpnProbePolicyTest {
     }
 
     @Test
-    fun disabledGuardianNeverWeakensConnectivityProofEvenWithStoredSocials() {
+    fun disabledGuardianNeverWeakensConnectivityProofEvenWithStoredBlocks() {
         assertEquals(
             setOf("web", "telegram", "youtube", "instagram"),
             requiredConnectivityProbeNames(
                 guardianEnabled = false,
-                enabledGuardianCategories = setOf("socials"),
+                enabledGuardianCategories = setOf("socials", "youtube"),
             ),
         )
     }
