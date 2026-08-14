@@ -68,7 +68,7 @@ internal class RecentServerStore(context: Context) {
     }
 
     private fun key(userId: String, serviceId: String): String =
-        "recent_${userId.hashCode()}_${serviceId.hashCode()}"
+        "recent:$userId:$serviceId"
 
     private companion object {
         const val PREFERENCES = "nimhub_recent_servers"
