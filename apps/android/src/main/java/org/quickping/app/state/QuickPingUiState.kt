@@ -29,6 +29,7 @@ data class QuickPingUiState(
     val loginError: String? = null,
     val connectionError: String? = null,
     val connectionErrorCode: String? = null,
+    val connectionErrorDetail: String? = null,
     val installedApps: List<InstalledApp> = emptyList(),
     val loadingInstalledApps: Boolean = false,
     val accountActionBusy: Boolean = false,
