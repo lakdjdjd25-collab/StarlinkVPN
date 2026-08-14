@@ -8,11 +8,11 @@ import org.quickping.app.model.DnsProvider
 
 class VpnDnsPolicyTest {
     @Test
-    fun defaultModePreservesModernProviderDns() {
+    fun defaultModeUsesLocalDnsOnlyForNodeBootstrapAndDohForApplications() {
         val raw = """{
             "dns": {
-                "servers": [{"type":"https","tag":"provider-dns","server":"1.1.1.1"}],
-                "final": "provider-dns"
+                "servers": [{"type":"local","tag":"provider-local"}],
+                "final": "provider-local"
             }
         }"""
         val compiled = """{
@@ -24,32 +24,65 @@ class VpnDnsPolicyTest {
         }"""
 
         val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
-        val dns = JSONObject(result).getJSONObject("dns")
+        val config = JSONObject(result)
+        val dns = config.getJSONObject("dns")
+        val servers = dns.getJSONArray("servers")
+        val bootstrap = servers.getJSONObject(0)
+        val secure = servers.getJSONObject(1)
 
-        assertEquals("provider-dns", dns.getString("final"))
-        assertEquals("https", dns.getJSONArray("servers").getJSONObject(0).getString("type"))
-        assertEquals("proxy", JSONObject(result).getJSONObject("route").getString("final"))
+        assertEquals("local", bootstrap.getString("type"))
+        assertEquals("quickping-node-bootstrap", bootstrap.getString("tag"))
+        assertEquals("https", secure.getString("type"))
+        assertEquals("quickping-tunnel-doh", secure.getString("tag"))
+        assertEquals("1.1.1.1", secure.getString("server"))
+        assertEquals("proxy", secure.getString("detour"))
+        assertEquals("quickping-tunnel-doh", dns.getString("final"))
+        assertEquals("ipv4_only", dns.getString("strategy"))
+
+        val resolver = config.getJSONObject("route").getJSONObject("default_domain_resolver")
+        assertEquals("quickping-node-bootstrap", resolver.getString("server"))
+        assertEquals("ipv4_only", resolver.getString("strategy"))
     }
 
     @Test
-    fun explicitDnsChoiceKeepsCompiledDns() {
+    fun explicitGoogleChoiceUsesGoogleDohInsideTunnel() {
         val raw = """{"dns":{"servers":[{"type":"https","tag":"provider-dns","server":"1.1.1.1"}]}}"""
-        val compiled = """{"dns":{"servers":[{"type":"https","tag":"custom","server":"8.8.8.8"}],"final":"custom"}}"""
+        val compiled = """{
+            "dns":{"servers":[{"type":"local","tag":"old"}],"final":"old"},
+            "route":{"final":"selected"}
+        }"""
 
         val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Google)
+        val secure = JSONObject(result)
+            .getJSONObject("dns")
+            .getJSONArray("servers")
+            .getJSONObject(1)
 
-        assertEquals("custom", JSONObject(result).getJSONObject("dns").getString("final"))
+        assertEquals("https", secure.getString("type"))
+        assertEquals("8.8.8.8", secure.getString("server"))
+        assertEquals("dns.google", secure.getJSONObject("tls").getString("server_name"))
+        assertEquals("selected", secure.getString("detour"))
     }
 
     @Test
-    fun legacyProviderDnsFallsBackToCompiledDns() {
-        val raw = """{"dns":{"servers":[{"tag":"legacy","address":"1.1.1.1"}]}}"""
-        val compiled = """{"dns":{"servers":[{"type":"local","tag":"quickping-dns"}],"final":"quickping-dns"}}"""
+    fun malformedCompiledConfigFallsBackWithoutThrowing() {
+        val result = applyProviderDnsPolicy("{}", "not-json", DnsProvider.Default)
+        assertEquals("not-json", result)
+    }
 
-        val result = applyProviderDnsPolicy(raw, compiled, DnsProvider.Default)
-        val dns = JSONObject(result).getJSONObject("dns")
+    @Test
+    fun routeRulesRemainIntactWhenDnsPolicyIsApplied() {
+        val compiled = """{
+            "route": {
+                "final":"selected",
+                "rules":[{"protocol":"dns","action":"hijack-dns"}]
+            }
+        }"""
 
-        assertEquals("quickping-dns", dns.getString("final"))
-        assertTrue(dns.getJSONArray("servers").getJSONObject(0).has("type"))
+        val result = applyProviderDnsPolicy("{}", compiled, DnsProvider.Cloudflare)
+        val rules = JSONObject(result).getJSONObject("route").getJSONArray("rules")
+
+        assertTrue(rules.length() == 1)
+        assertEquals("hijack-dns", rules.getJSONObject(0).getString("action"))
     }
 }
