@@ -223,6 +223,17 @@ class QuickPingApiClient(baseUrl: String) {
         )
     }
 
+    fun changePassword(accessToken: String, currentPassword: String, newPassword: String) {
+        request(
+            method = "POST",
+            path = "/api/v1/client/account/password/change",
+            body = JSONObject()
+                .put("currentPassword", currentPassword)
+                .put("newPassword", newPassword),
+            accessToken = accessToken,
+        )
+    }
+
     fun deleteAccount(accessToken: String, password: String) {
         request(
             method = "DELETE",

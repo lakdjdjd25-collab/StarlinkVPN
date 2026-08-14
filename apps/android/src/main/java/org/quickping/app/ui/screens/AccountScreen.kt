@@ -63,9 +63,6 @@ fun AccountScreen(
     service: Service,
     busy: Boolean,
     error: String?,
-    passwordChallengeId: String?,
-    passwordDebugCode: String?,
-    onRequestPasswordCode: () -> Unit,
     onConfirmPasswordChange: (String, String) -> Unit,
     onDeleteAccount: (String) -> Unit,
     onClearAction: () -> Unit,
@@ -75,8 +72,9 @@ fun AccountScreen(
 ) {
     var showPasswordSheet by remember { mutableStateOf(false) }
     var showDeleteSheet by remember { mutableStateOf(false) }
-    var passwordCode by remember { mutableStateOf("") }
+    var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
+    var repeatedNewPassword by remember { mutableStateOf("") }
     var deletionPassword by remember { mutableStateOf("") }
 
     QuickPingScreen {
@@ -108,8 +106,9 @@ fun AccountScreen(
                 user = user,
                 onChangePassword = {
                     onClearAction()
-                    passwordCode = ""
+                    currentPassword = ""
                     newPassword = ""
+                    repeatedNewPassword = ""
                     showPasswordSheet = true
                 },
                 onDelete = {
@@ -178,73 +177,47 @@ fun AccountScreen(
             )
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 OutlinedTextField(
-                    value = user.email,
-                    onValueChange = {},
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it.take(256) },
                     modifier = Modifier.fillMaxWidth(),
-                    readOnly = true,
                     singleLine = true,
-                    leadingIcon = { Icon(painterResource(R.drawable.ic_mail), null) },
+                    label = { Text(quickText("گذرواژهٔ فعلی", "Current password")) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
+                    visualTransformation = PasswordVisualTransformation(),
                     shape = RoundedCornerShape(16.dp),
                     colors = accountFieldColors(),
                 )
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = passwordCode,
-                        onValueChange = { passwordCode = it.filter(Char::isDigit).take(6) },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        label = { Text(quickText("کد اعتبارسنجی", "Verification code")) },
-                        leadingIcon = { Icon(painterResource(R.drawable.ic_otp), null) },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = accountFieldColors(),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
-                        onClick = onRequestPasswordCode,
-                        enabled = !busy && passwordChallengeId == null,
-                        modifier = Modifier.height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, QuickPingColors.Border),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = QuickPingColors.Surface,
-                            contentColor = QuickPingColors.TextPrimary,
-                        ),
-                    ) {
-                        Text(
-                            if (busy && passwordChallengeId == null) quickText("صبر کنید…", "Wait…")
-                            else quickText("فرستادن کد", "Send code"),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-                Text(
-                    quickText(
-                        "ما یک کد تأیید به ایمیلی که وارد کرده‌اید خواهیم فرستاد.",
-                        "We will send a verification code to your account email.",
-                    ),
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    color = QuickPingColors.TextSecondary,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
+                OutlinedTextField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it.take(72) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(quickText("گذرواژهٔ جدید", "New password")) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = accountFieldColors(),
                 )
-                if (passwordChallengeId != null) {
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = { newPassword = it.take(72) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        label = { Text(quickText("گذرواژهٔ جدید", "New password")) },
-                        leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = accountFieldColors(),
-                    )
-                }
-                passwordDebugCode?.let { code ->
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = repeatedNewPassword,
+                    onValueChange = { repeatedNewPassword = it.take(72) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(quickText("تکرار گذرواژهٔ جدید", "Repeat new password")) },
+                    leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = accountFieldColors(),
+                )
+                if (repeatedNewPassword.isNotEmpty() && repeatedNewPassword != newPassword) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Debug code: $code", color = QuickPingColors.Warning, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        quickText("تکرار گذرواژه با گذرواژهٔ جدید یکسان نیست", "The repeated password does not match"),
+                        color = QuickPingColors.Danger,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
                 error?.let { message ->
                     Spacer(Modifier.height(8.dp))
@@ -254,9 +227,9 @@ fun AccountScreen(
                 SheetConfirmButton(
                     text = if (busy) quickText("لطفاً صبر کنید…", "Please wait…") else quickText("تأیید", "Confirm"),
                     onClick = {
-                        onConfirmPasswordChange(passwordCode, newPassword)
+                        onConfirmPasswordChange(currentPassword, newPassword)
                     },
-                    enabled = !busy && passwordChallengeId != null && passwordCode.length == 6 && newPassword.length >= 8,
+                    enabled = !busy && currentPassword.isNotBlank() && newPassword.length >= 8 && repeatedNewPassword == newPassword,
                 )
                 Spacer(Modifier.height(10.dp))
                 SheetCancelButton {
@@ -356,7 +329,7 @@ private fun ProfileCard(
                 modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF284D85)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_avatar), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(32.dp))
+                Icon(painterResource(R.drawable.ic_user), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(28.dp))
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -425,12 +398,6 @@ private fun ReferenceServiceCard(service: Service, onServices: () -> Unit) {
                 title = quickText("نمایش همه سرویس‌ها", "Show all services"),
                 modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
                 icon = R.drawable.ic_ticket,
-                onClick = onServices,
-            )
-            SettingRow(
-                title = quickText("گزینه‌های بیشتر", "More options"),
-                modifier = Modifier.clip(RoundedCornerShape(15.dp)).background(QuickPingColors.SurfaceHigh),
-                icon = R.drawable.ic_open,
                 onClick = onServices,
             )
         }

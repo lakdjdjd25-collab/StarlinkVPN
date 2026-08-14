@@ -339,12 +339,11 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun confirmPasswordChange(code: String, newPassword: String) {
-        val challengeId = _state.value.passwordChangeChallengeId ?: return
+    fun changePassword(currentPassword: String, newPassword: String) {
         accountJob?.cancel()
         accountJob = viewModelScope.launch {
             _state.update { it.copy(accountActionBusy = true, accountActionError = null) }
-            runCatching { repository.confirmPasswordChange(challengeId, code, newPassword) }
+            runCatching { repository.changePassword(currentPassword, newPassword) }
                 .onSuccess {
                     disconnectVpn()
                     repository.signOut()
@@ -562,7 +561,7 @@ private fun Throwable.connectionMessage(): String = when (this) {
 private fun Throwable.accountMessage(): String = when (this) {
     is ApiException -> when (code) {
         "invalid_code" -> "کد تأیید نامعتبر یا منقضی شده است"
-        "invalid_password" -> "گذرواژه صحیح نیست"
+        "invalid_password", "invalid_current_password" -> "گذرواژه فعلی صحیح نیست"
         "try_later" -> "برای دریافت کد جدید کمی صبر کنید"
         "email_unavailable" -> "ارسال کد ایمیل فعلاً امکان‌پذیر نیست"
         "invalid_input" -> message

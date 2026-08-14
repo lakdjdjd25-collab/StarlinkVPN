@@ -101,6 +101,12 @@ class QuickPingRepository(context: Context) {
             }
         }
 
+    suspend fun changePassword(currentPassword: String, newPassword: String) = withContext(Dispatchers.IO) {
+        authenticatedRequest { accessToken ->
+            api.changePassword(accessToken, currentPassword, newPassword)
+        }
+    }
+
     suspend fun deleteAccount(password: String) = withContext(Dispatchers.IO) {
         authenticatedRequest { accessToken -> api.deleteAccount(accessToken, password) }
     }
