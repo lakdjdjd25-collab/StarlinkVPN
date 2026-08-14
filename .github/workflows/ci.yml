@@ -85,3 +85,9 @@ jobs:
           name: nimHUB-ci-debug-no-google-oauth
           path: apps/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: nimHUB-ci-release-unsigned-static-audit
+          path: apps/android/build/outputs/apk/release/*.apk
+          if-no-files-found: error
