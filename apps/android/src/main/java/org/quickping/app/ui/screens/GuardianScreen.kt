@@ -67,7 +67,7 @@ fun GuardianScreen(
                         .clip(CircleShape)
                         .background(QuickPingColors.Surface)
                         .clickable {
-                            val defaults = setOf("malware", "ads", "youtube", "phishing")
+                            val defaults = setOf("malware", "phishing")
                             categories.filter { category -> category.enabled != (category.id in defaults) }
                                 .forEach { category -> onToggleCategory(category.id) }
                         }
