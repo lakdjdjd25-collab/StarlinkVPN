@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       isFree: plan.interval === "FREE",
       guardianProfile: { create: { rules: { create: [
         { category: "malware", enabled: true },
-        { category: "ads", enabled: true },
+        { category: "ads", enabled: false },
         { category: "phishing", enabled: true },
       ] } } },
     },
