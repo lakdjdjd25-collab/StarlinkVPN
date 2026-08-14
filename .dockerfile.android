@@ -1,0 +1,68 @@
+FROM golang:1.25.12-bookworm AS android-build
+
+ARG ANDROID_DEBUG_KEYSTORE_B64
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    GRADLE_OPTS=-Xmx4g
+ENV PATH="${PATH}:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        openjdk-17-jdk \
+        unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pin the Android command-line tools so Railway builds are reproducible.
+RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" /tmp/android-cli \
+    && curl -fsSL \
+        https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+        -o /tmp/android-cli/tools.zip \
+    && unzip -q /tmp/android-cli/tools.zip -d /tmp/android-cli \
+    && mkdir -p "${ANDROID_HOME}/cmdline-tools/latest" \
+    && mv /tmp/android-cli/cmdline-tools/* "${ANDROID_HOME}/cmdline-tools/latest/" \
+    && rm -rf /tmp/android-cli \
+    && yes | sdkmanager --licenses >/dev/null \
+    && sdkmanager \
+        "platform-tools" \
+        "platforms;android-36" \
+        "build-tools;36.0.0" \
+        "ndk;28.0.13004108"
+
+WORKDIR /workspace
+COPY . .
+
+# Railway Docker builds only expose service variables that are declared as ARG.
+# Keep the signing key confined to this build stage and fail closed if it is absent.
+RUN test -n "${ANDROID_DEBUG_KEYSTORE_B64}" \
+    && mkdir -p /root/.android \
+    && printf '%s' "${ANDROID_DEBUG_KEYSTORE_B64}" | base64 --decode > /root/.android/debug.keystore \
+    && chmod 600 /root/.android/debug.keystore \
+    && keytool -list \
+        -keystore /root/.android/debug.keystore \
+        -storepass android \
+        -alias androiddebugkey >/dev/null
+
+RUN ./scripts/build-sing-box-android.sh \
+    && ./gradlew :apps:android:assembleDebug --stacktrace \
+    && APK="$(find apps/android/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)" \
+    && test -n "${APK}" \
+    && "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "${APK}" \
+    && rm -f /root/.android/debug.keystore
+
+FROM node:24-bookworm-slim AS runtime
+
+ENV NODE_ENV=production \
+    PORT=3000
+
+WORKDIR /app
+COPY --from=android-build /workspace/apps/android/build/outputs/apk/debug /app/apps/android/build/outputs/apk/debug
+
+EXPOSE 3000
+
+CMD ["node", "-e", "const http=require('http');const fs=require('fs');const path=require('path');const dir='/app/apps/android/build/outputs/apk/debug';http.createServer((req,res)=>{if(req.url==='/'||req.url==='/health'){fs.readdir(dir,(err,files)=>{if(err){res.writeHead(500);return res.end('APK directory unavailable')}const apks=files.filter(f=>f.endsWith('.apk'));res.writeHead(apks.length?200:503,{'content-type':'application/json'});return res.end(JSON.stringify({ok:apks.length>0,apks}))});return}const name=path.basename(req.url);if(!name.endsWith('.apk')){res.writeHead(404);return res.end('Not found')}fs.readFile(path.join(dir,name),(err,data)=>{if(err){res.writeHead(404);return res.end('APK not found')}res.writeHead(200,{'content-type':'application/vnd.android.package-archive','content-disposition':'attachment; filename=\"'+name+'\"'});res.end(data)})}).listen(Number(process.env.PORT)||3000)"]
