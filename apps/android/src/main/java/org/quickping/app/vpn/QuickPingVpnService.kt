@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -30,11 +31,19 @@ class QuickPingVpnService : VpnService() {
     private var tunnelJob: Job? = null
     private lateinit var platform: AndroidSingBoxPlatform
     private lateinit var core: TunnelCore
+    private lateinit var trafficMonitor: VpnTrafficMonitor
 
     override fun onCreate() {
         super.onCreate()
         platform = AndroidSingBoxPlatform(this)
         core = SingBoxTunnelCore(platform) { disconnect() }
+        trafficMonitor = VpnTrafficMonitor()
+        serviceScope.launch {
+            trafficMonitor.stats.collect { traffic ->
+                val current = status.value
+                if (current.traffic != traffic) status.value = current.copy(traffic = traffic)
+            }
+        }
         // MutableStateFlow lives at process scope. If Android destroyed a previous
         // service instance unexpectedly, never let a stale Connected/Connecting
         // value survive into a fresh service that has no running native core.
@@ -86,6 +95,7 @@ class QuickPingVpnService : VpnService() {
                     provider = settings.dnsProvider,
                 )
                 core.start(runtimeConfig, compiled.launchOptions)
+                startTrafficMonitorWithRetry()
 
                 // A running libbox process is not enough. In TUN mode, nimHUB's
                 // own VpnService must have successfully established and retained
@@ -94,6 +104,11 @@ class QuickPingVpnService : VpnService() {
                 if (!settings.proxyModeEnabled) {
                     check(platform.hasTunInterface()) { "nimhub tun interface missing" }
                 }
+
+                // Record the native-core byte baseline before the verification
+                // traffic. A successful HTTP request that bypasses sing-box must
+                // not be allowed to promote the UI to Connected.
+                val trafficBaseline = trafficMonitor.stats.value.totalBytes
 
                 // TUN mode then proves Android VPN traffic with real HTTPS.
                 // Proxy mode proves HTTPS through nimHUB's local HTTP proxy.
@@ -104,6 +119,14 @@ class QuickPingVpnService : VpnService() {
                     ),
                 ) {
                     if (settings.proxyModeEnabled) "proxy verification failed" else "tunnel verification failed"
+                }
+
+                // The exact HTTPS verification traffic above must also be visible
+                // in sing-box's own command-server counters. This closes the old
+                // false-positive path where the app itself had internet but the
+                // native tunnel carried zero bytes.
+                check(trafficMonitor.awaitTrafficAfter(trafficBaseline)) {
+                    "native traffic not observed after verification"
                 }
 
                 check(core.isRunning()) { "native core stopped during verification" }
@@ -122,6 +145,7 @@ class QuickPingVpnService : VpnService() {
                 // tear a failed startup down; otherwise it can race this path and
                 // overwrite Error with Disconnected.
                 stopping.set(true)
+                trafficMonitor.stop()
                 runCatching { core.stop() }
                 val failure = error.toVpnFailure()
                 Log.e(TAG, "VPN startup failed [${failure.code}]: ${failure.safeDetail}")
@@ -132,10 +156,23 @@ class QuickPingVpnService : VpnService() {
         }
     }
 
+    private suspend fun startTrafficMonitorWithRetry() {
+        var lastError: Throwable? = null
+        repeat(4) { attempt ->
+            val result = runCatching { trafficMonitor.start() }
+            if (result.isSuccess) return
+            lastError = result.exceptionOrNull()
+            trafficMonitor.stop()
+            if (attempt < 3) delay(175L * (attempt + 1))
+        }
+        throw IllegalStateException("native traffic monitor unavailable", lastError)
+    }
+
     private fun disconnect() {
         if (!stopping.compareAndSet(false, true)) return
         tunnelJob?.cancel()
         tunnelJob = serviceScope.launch {
+            trafficMonitor.stop()
             runCatching { core.stop() }
             publish(ServiceState.Disconnected)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -189,6 +226,7 @@ class QuickPingVpnService : VpnService() {
     override fun onDestroy() {
         stopping.set(true)
         tunnelJob?.cancel()
+        if (::trafficMonitor.isInitialized) trafficMonitor.stop()
         if (::core.isInitialized && core.isRunning()) {
             runCatching { runBlocking(Dispatchers.IO) { core.stop() } }
         }
@@ -202,7 +240,11 @@ class QuickPingVpnService : VpnService() {
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
     private fun publish(state: ServiceState, failure: VpnFailure? = null) {
-        status.value = VpnServiceStatus(state = state, failure = failure)
+        status.value = VpnServiceStatus(
+            state = state,
+            failure = failure,
+            traffic = if (::trafficMonitor.isInitialized) trafficMonitor.stats.value else VpnTrafficStats(),
+        )
     }
 
     companion object {
@@ -226,6 +268,7 @@ data class VpnFailure(
 data class VpnServiceStatus(
     val state: ServiceState,
     val failure: VpnFailure? = null,
+    val traffic: VpnTrafficStats = VpnTrafficStats(),
 )
 
 private fun Throwable.toVpnFailure(): VpnFailure {
@@ -233,6 +276,10 @@ private fun Throwable.toVpnFailure(): VpnFailure {
     val detail = source.mapNotNull { it.message }.firstOrNull { it.isNotBlank() }.orEmpty()
     val normalized = detail.lowercase()
     val (code, message) = when {
+        "native traffic not observed" in normalized ->
+            "traffic_unverified" to "تونل ساخته شد اما هستهٔ VPN هیچ عبور واقعی داده‌ای ثبت نکرد"
+        "native traffic monitor unavailable" in normalized ->
+            "traffic_monitor" to "بررسی آمار واقعی هستهٔ VPN راه‌اندازی نشد"
         "proxy verification failed" in normalized ->
             "proxy_unhealthy" to "پروکسی محلی راه‌اندازی شد اما عبور واقعی اینترنت از آن تأیید نشد"
         "tunnel verification failed" in normalized ->
