@@ -62,7 +62,7 @@ async function applyPasarGuardSync(
       where: { id: bindingId },
       select: { id: true, serviceId: true },
     });
-    if (!binding) throw new PasarGuardError("invalid_response", "اتصال پاسارگارد در QuickPing پیدا نشد");
+    if (!binding) throw new PasarGuardError("invalid_response", "اتصال پاسارگارد در nimHUB پیدا نشد");
 
     await tx.service.update({
       where: { id: binding.serviceId },
@@ -200,7 +200,7 @@ export async function bindPasarGuardUser(
     where: { id: quickPingUserId, status: "ACTIVE" },
     select: { id: true },
   });
-  if (!quickPingUser) throw new PasarGuardError("invalid_response", "کاربر فعال QuickPing پیدا نشد");
+  if (!quickPingUser) throw new PasarGuardError("invalid_response", "کاربر فعال nimHUB پیدا نشد");
 
   const existing = await db.pasarGuardBinding.findUnique({
     where: { externalUserId: BigInt(user.id) },
@@ -215,7 +215,7 @@ export async function bindPasarGuardUser(
       select: { id: true, externalUserId: true },
     });
     if (existingForQuickPingUser && existingForQuickPingUser.id !== existing?.id) {
-      throw new PasarGuardError("invalid_response", "این حساب QuickPing قبلاً به یک اشتراک پاسارگارد متصل شده است");
+      throw new PasarGuardError("invalid_response", "این حساب nimHUB قبلاً به یک اشتراک پاسارگارد متصل شده است");
     }
   }
 
@@ -263,7 +263,7 @@ export async function bindPasarGuardUser(
               rules: {
                 create: [
                   { category: "malware", enabled: true },
-                  { category: "ads", enabled: true },
+                  { category: "ads", enabled: false },
                   { category: "phishing", enabled: true },
                 ],
               },
