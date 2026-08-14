@@ -105,10 +105,12 @@ class QuickPingVpnService : VpnService() {
                     check(platform.hasTunInterface()) { "nimhub tun interface missing" }
                 }
 
-                // Record the native-core byte baseline before the verification
-                // traffic. A successful HTTP request that bypasses sing-box must
-                // not be allowed to promote the UI to Connected.
-                val trafficBaseline = trafficMonitor.stats.value.totalBytes
+                // Wait for a native status sample first. Taking a zero baseline
+                // before CommandStatus reports could accidentally count startup
+                // DNS/core traffic as proof that the later HTTPS probe crossed
+                // the tunnel.
+                val trafficBaseline = trafficMonitor.awaitInitialSample()
+                    ?: error("native traffic monitor produced no baseline sample")
 
                 // TUN mode then proves Android VPN traffic with real HTTPS.
                 // Proxy mode proves HTTPS through nimHUB's local HTTP proxy.
@@ -122,9 +124,9 @@ class QuickPingVpnService : VpnService() {
                 }
 
                 // The exact HTTPS verification traffic above must also be visible
-                // in sing-box's own command-server counters. This closes the old
-                // false-positive path where the app itself had internet but the
-                // native tunnel carried zero bytes.
+                // in a *newer* sing-box status sample and increase both upload and
+                // download totals. This closes the old false-positive path where
+                // the app itself had internet but the native tunnel carried zero.
                 check(trafficMonitor.awaitTrafficAfter(trafficBaseline)) {
                     "native traffic not observed after verification"
                 }
@@ -278,7 +280,7 @@ private fun Throwable.toVpnFailure(): VpnFailure {
     val (code, message) = when {
         "native traffic not observed" in normalized ->
             "traffic_unverified" to "تونل ساخته شد اما هستهٔ VPN هیچ عبور واقعی داده‌ای ثبت نکرد"
-        "native traffic monitor unavailable" in normalized ->
+        "native traffic monitor" in normalized ->
             "traffic_monitor" to "بررسی آمار واقعی هستهٔ VPN راه‌اندازی نشد"
         "proxy verification failed" in normalized ->
             "proxy_unhealthy" to "پروکسی محلی راه‌اندازی شد اما عبور واقعی اینترنت از آن تأیید نشد"
