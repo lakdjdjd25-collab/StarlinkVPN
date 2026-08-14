@@ -9,13 +9,12 @@ import org.quickping.app.model.AppSettings
  *
  * Subscription panels often ship convenience `direct` rules. Those rules are
  * appropriate for a generic sing-box client, but they must not silently bypass
- * a full-tunnel Android VPN. User-requested split tunneling is applied later by
- * [VpnConfigCompiler] and remains authoritative.
+ * nimHUB routing. User-requested split tunneling is applied later by
+ * [VpnConfigCompiler] and remains authoritative, so provider-owned direct rules
+ * must be removed in both full-tunnel and split-tunnel modes.
  */
 internal object VpnRuntimeSanitizer {
-    fun sanitize(rawConfigJson: String, settings: AppSettings): String {
-        if (settings.splitTunnelingEnabled) return rawConfigJson
-
+    fun sanitize(rawConfigJson: String, @Suppress("UNUSED_PARAMETER") settings: AppSettings): String {
         val config = JSONObject(rawConfigJson)
         val route = config.optJSONObject("route") ?: return rawConfigJson
         val directTags = directOutboundTags(config)
