@@ -4,6 +4,8 @@ import android.app.Activity
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +41,30 @@ private object Route {
     const val Services = "account/services"
     const val Notifications = "notifications"
     const val Version = "update/latest"
+}
+
+private fun NavHostController.openSettingsSafely() {
+    if (currentDestination?.route != Route.Home) return
+    navigate(Route.Settings) {
+        launchSingleTop = true
+    }
+}
+
+private fun NavHostController.closeSettingsSafely() {
+    if (currentDestination?.route == Route.Home) return
+
+    // Settings is always opened from Home. Pop explicitly to Home instead of
+    // using a generic popBackStack(), which can pop Home as well if two back
+    // callbacks arrive while the previous navigation transition is settling.
+    val returnedHome = popBackStack(Route.Home, inclusive = false)
+    if (!returnedHome && currentDestination?.route != Route.Home) {
+        // Defensive recovery for an already-corrupted/empty route history: make
+        // Home the visible destination instead of leaving NavHost with no page.
+        navigate(Route.Home) {
+            popUpTo(Route.Settings) { inclusive = true }
+            launchSingleTop = true
+        }
+    }
 }
 
 @Composable
@@ -135,17 +161,27 @@ fun QuickPingApp(
                     state = state,
                     onToggleConnection = onToggleVpn,
                     onSelectServer = quickPingViewModel::selectServer,
-                    onSettings = { navController.navigate(Route.Settings) },
+                    onSettings = navController::openSettingsSafely,
                     onAccount = { navController.navigate(Route.Account) },
                     onNotifications = { navController.navigate(Route.Notifications) },
                 )
             }
-            composable(Route.Settings) {
+            composable(
+                route = Route.Settings,
+                // The Settings page is frequently opened again immediately after
+                // Back. Removing its cross-fade keeps a previous exit transition
+                // from racing a fresh Settings back-stack entry and rendering a
+                // fully transparent/blank NavHost frame.
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 SettingsScreen(
                     settings = state.settings,
                     onUpdateSettings = quickPingViewModel::updateSetting,
                     onResetSettings = quickPingViewModel::resetSettings,
-                    onBack = navController::popBackStack,
+                    onBack = navController::closeSettingsSafely,
                     onSplitTunneling = { navController.navigate(Route.SplitTunneling) },
                     onGuardian = { navController.navigate(Route.Guardian) },
                     onAccount = { navController.navigate(Route.Account) },
