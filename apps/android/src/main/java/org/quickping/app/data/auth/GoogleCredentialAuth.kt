@@ -46,11 +46,12 @@ class GoogleCredentialAuth(private val activity: Activity) {
         val preferredError = pickerError ?: directError
         if (preferredError is ApiException) throw preferredError
 
+        val signingIdentity = signingIdentityDiagnostic()
         if (directError is NoCredentialException && pickerError is NoCredentialException) {
             throw ApiException(
                 status = 0,
                 code = "google_no_credential",
-                message = "هیچ حساب Google قابل استفاده‌ای برای این نسخه پیدا نشد. حساب Google دستگاه و تنظیمات OAuth امضای برنامه را بررسی کنید.",
+                message = "هیچ حساب Google قابل استفاده‌ای برای این نسخه پیدا نشد. Android OAuth باید دقیقاً با $signingIdentity ثبت شده باشد.",
             )
         }
 
@@ -67,7 +68,7 @@ class GoogleCredentialAuth(private val activity: Activity) {
                 throw ApiException(
                     status = 0,
                     code = "google_provider_config",
-                    message = "Google Credential Provider تنظیمات این نسخه را نپذیرفت ($diagnostic). package و SHA امضای نسخه باید در Android OAuth ثبت شده باشند.",
+                    message = "Google Credential Provider تنظیمات این نسخه را نپذیرفت ($diagnostic). Android OAuth باید دقیقاً با $signingIdentity ثبت شده باشد.",
                 )
             }
             credentialErrors.any { it.javaClass.simpleName.contains("Unsupported", ignoreCase = true) } -> {
@@ -118,6 +119,11 @@ class GoogleCredentialAuth(private val activity: Activity) {
             )
         }
     }
+
+    private fun signingIdentityDiagnostic(): String =
+        currentAppSigningIdentity(activity)?.let { identity ->
+            "package=${identity.packageName} و SHA-1=${identity.sha1}"
+        } ?: "package=${activity.packageName} و SHA-1 امضای همین APK"
 
     private suspend fun requestDirectGoogleSignIn(challenge: GoogleNonceChallenge): String {
         val option = GetSignInWithGoogleOption.Builder(challenge.serverClientId)
