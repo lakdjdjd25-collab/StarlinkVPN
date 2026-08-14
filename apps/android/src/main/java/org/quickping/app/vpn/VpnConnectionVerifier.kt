@@ -25,8 +25,11 @@ import org.quickping.app.BuildConfig
  *  - Proxy mode probes through nimHUB's local HTTP proxy and does not require a
  *    VPN transport because no TUN interface exists in that mode.
  *
- * Do not depend on one health endpoint. A single blocked/CDN/DNS endpoint used
- * to tear down an otherwise working connection in previous builds.
+ * A single generic health URL is not enough for this app. The release gate must
+ * prove the destination classes the user explicitly relies on: ordinary Web,
+ * Telegram, YouTube and Instagram. A valid HTTP status (including redirect or
+ * access-denied) is sufficient because it proves DNS + TCP + TLS + HTTP reached
+ * that remote service through the requested transport.
  */
 internal class VpnConnectionVerifier(
     private val context: Context,
@@ -39,7 +42,7 @@ internal class VpnConnectionVerifier(
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         do {
             val transportReady = proxyPort != null || hasVpnTransport()
-            if (transportReady && probeAnyEndpoint(proxyPort)) return true
+            if (transportReady && probeRequiredGroups(proxyPort)) return true
             delay(RETRY_DELAY_MS)
         } while (SystemClock.elapsedRealtime() < deadline)
         return false
@@ -53,18 +56,27 @@ internal class VpnConnectionVerifier(
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    private suspend fun probeAnyEndpoint(proxyPort: Int?): Boolean = coroutineScope {
-        probeUrls().map { url -> async(Dispatchers.IO) { probeHttps(url, proxyPort) } }
-            .awaitAll()
-            .any { it }
+    private suspend fun probeRequiredGroups(proxyPort: Int?): Boolean = coroutineScope {
+        requiredProbeGroups().map { group ->
+            async(Dispatchers.IO) {
+                group.urls.any { url -> probeHttps(url, proxyPort) }
+            }
+        }.awaitAll().all { it }
     }
 
-    private fun probeUrls(): List<String> = listOf(
-        "${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/health",
-        "https://cp.cloudflare.com/generate_204",
-        "https://www.gstatic.com/generate_204",
-        "https://telegram.org/",
-    ).distinct()
+    private fun requiredProbeGroups(): List<ProbeGroup> = listOf(
+        ProbeGroup(
+            name = "web",
+            urls = listOf(
+                "${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/health",
+                "https://cp.cloudflare.com/generate_204",
+                "https://www.gstatic.com/generate_204",
+            ).distinct(),
+        ),
+        ProbeGroup("telegram", listOf("https://telegram.org/")),
+        ProbeGroup("youtube", listOf("https://www.youtube.com/")),
+        ProbeGroup("instagram", listOf("https://www.instagram.com/")),
+    )
 
     private suspend fun probeHttps(url: String, proxyPort: Int?): Boolean = withContext(Dispatchers.IO) {
         runCatching {
@@ -89,15 +101,17 @@ internal class VpnConnectionVerifier(
                 connection.setRequestProperty("Connection", "close")
                 connection.setRequestProperty("User-Agent", "nimHUB/${BuildConfig.VERSION_NAME}")
 
-                // Any valid HTTP response proves DNS + TCP + TLS + HTTP reached a
-                // remote host. Do not require 2xx: a 3xx/4xx still proves that
-                // traffic genuinely left through the requested transport.
                 connection.responseCode in 100..599
             } finally {
                 connection.disconnect()
             }
         }.getOrDefault(false)
     }
+
+    private data class ProbeGroup(
+        val name: String,
+        val urls: List<String>,
+    )
 
     private companion object {
         const val LOCAL_PROXY_HOST = "127.0.0.1"
