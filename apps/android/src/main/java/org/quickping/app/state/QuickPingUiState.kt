@@ -15,6 +15,7 @@ data class QuickPingUiState(
     val connectionStatus: ConnectionStatus = ConnectionStatus.Disconnected,
     val selectedServerId: String = "",
     val servers: List<Server> = emptyList(),
+    val serversByService: Map<String, List<Server>> = emptyMap(),
     val services: List<Service> = emptyList(),
     val service: Service = emptyService,
     val user: UserInfo = guestUser,
