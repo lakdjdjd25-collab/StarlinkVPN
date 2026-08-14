@@ -302,7 +302,7 @@ private suspend fun downloadVerifiedApk(context: Context, release: AppRelease): 
         if (!connection.url.protocol.equals("https", ignoreCase = true)) {
             throw UpdateIntegrityException()
         }
-        val advertisedLength = connection.contentLengthLong
+        val advertisedLength = connection.contentLength.toLong()
         if (advertisedLength > MAX_UPDATE_BYTES) throw UpdateTooLargeException()
 
         val digest = MessageDigest.getInstance("SHA-256")
