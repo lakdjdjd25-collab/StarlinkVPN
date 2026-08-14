@@ -76,6 +76,54 @@ ENV NODE_ENV=production \
 WORKDIR /app
 COPY --from=android-build /workspace/release-apk /app/apk
 
+RUN cat > /app/server.js <<'EOF'
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const apkDir = '/app/apk';
+const port = Number(process.env.PORT) || 3000;
+
+function listApks(callback) {
+  fs.readdir(apkDir, (error, files) => {
+    if (error) return callback(error);
+    callback(null, files.filter((file) => file.endsWith('.apk')));
+  });
+}
+
+http.createServer((request, response) => {
+  if (request.url === '/' || request.url === '/health') {
+    listApks((error, apks) => {
+      if (error) {
+        response.writeHead(500, { 'content-type': 'application/json' });
+        return response.end(JSON.stringify({ ok: false, error: 'APK directory unavailable' }));
+      }
+      response.writeHead(apks.length ? 200 : 503, { 'content-type': 'application/json' });
+      return response.end(JSON.stringify({ ok: apks.length > 0, apks }));
+    });
+    return;
+  }
+
+  const name = path.basename(request.url || '');
+  if (!name.endsWith('.apk')) {
+    response.writeHead(404);
+    return response.end('Not found');
+  }
+
+  fs.readFile(path.join(apkDir, name), (error, data) => {
+    if (error) {
+      response.writeHead(404);
+      return response.end('APK not found');
+    }
+    response.writeHead(200, {
+      'content-type': 'application/vnd.android.package-archive',
+      'content-disposition': `attachment; filename="${name}"`,
+    });
+    response.end(data);
+  });
+}).listen(port, '0.0.0.0');
+EOF
+
 EXPOSE 3000
 
-CMD ["node", "-e", "const http=require('http');const fs=require('fs');const path=require('path');const dir='/app/apk';http.createServer((req,res)=>{if(req.url==='/'||req.url==='/health'){fs.readdir(dir,(err,files)=>{if(err){res.writeHead(500);return res.end('APK directory unavailable')}const apks=files.filter(f=>f.endsWith('.apk'));res.writeHead(apks.length?200:503,{'content-type':'application/json'});return res.end(JSON.stringify({ok:apks.length>0,apks}))});return}const name=path.basename(req.url);if(!name.endsWith('.apk')){res.writeHead(404);return res.end('Not found')}fs.readFile(path.join(dir,name),(err,data)=>{if(err){res.writeHead(404);return res.end('APK not found')}res.writeHead(200,{'content-type':'application/vnd.android.package-archive','content-disposition':'attachment; filename=\"'+name+'\"'});res.end(data)})}).listen(Number(process.env.PORT)||3000)"]
+CMD ["node", "/app/server.js"]
