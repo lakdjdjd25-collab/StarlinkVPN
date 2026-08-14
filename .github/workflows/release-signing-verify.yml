@@ -59,7 +59,7 @@ jobs:
             -storepass "$ANDROID_RELEASE_STORE_PASSWORD" \
             -alias "$ANDROID_RELEASE_KEY_ALIAS" \
             | grep -E 'Alias name:|SHA1:|SHA256:'
-          echo "Google Android OAuth package: org.quickping"
+          echo "Expected Google Android OAuth package: org.quickping"
 
       - uses: actions/cache/restore@v4
         id: libbox-cache
@@ -84,13 +84,23 @@ jobs:
       - name: Build signed minified release and tests
         run: ./gradlew :apps:android:assembleRelease :apps:android:testDebugUnitTest --stacktrace
 
-      - name: Verify stable production certificate
+      - name: Verify exact production OAuth identity
         shell: bash
         run: |
           set -euo pipefail
           APK=$(find apps/android/build/outputs/apk/release -name '*.apk' | head -n 1)
           test -s "$APK"
+
+          BADGING="$($ANDROID_HOME/build-tools/36.0.0/aapt dump badging "$APK")"
+          printf '%s\n' "$BADGING" | grep -F "package: name='org.quickping'"
+          if printf '%s\n' "$BADGING" | grep -Fq "package: name='org.quickping.debug'"; then
+            echo "Production artifact unexpectedly contains the debug application ID." >&2
+            exit 1
+          fi
+
+          echo "Signed APK certificate:"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          echo "Google Android OAuth must use package org.quickping with the SHA-1 printed above."
           echo "Signed APK verified locally on the runner. It is intentionally not uploaded or published."
 
       - name: Remove temporary keystore
