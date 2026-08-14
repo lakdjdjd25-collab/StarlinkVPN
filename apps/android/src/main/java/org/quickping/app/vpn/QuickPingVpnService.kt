@@ -55,9 +55,19 @@ class QuickPingVpnService : VpnService() {
                 val rawConfig = VpnRuntimeStore(this@QuickPingVpnService).read()
                 val settingsStore = QuickPingSettingsStore(this@QuickPingVpnService)
                 val settings = settingsStore.load()
+
+                // 2.6.8 transport regression guard: keep the Android TUN on IPv4
+                // until dual-stack is proven stable on the current PasarGuard
+                // fleet. 1280 avoids outer-tunnel fragmentation that can make
+                // UDP/QUIC applications look connected while media traffic
+                // stalls on cellular networks.
+                val runtimeSettings = settings.copy(
+                    ipv6Enabled = false,
+                    mtu = SAFE_TUN_MTU,
+                )
                 val compiled = VpnConfigCompiler.compile(
                     rawConfigJson = rawConfig,
-                    settings = settings,
+                    settings = runtimeSettings,
                     enabledGuardianCategories = settingsStore.enabledGuardianCategoryIds(),
                     applicationPackage = packageName,
                 )
@@ -157,6 +167,7 @@ class QuickPingVpnService : VpnService() {
         const val ACTION_DISCONNECT = "org.quickping.action.DISCONNECT"
         private const val CHANNEL_ID = "quickping_vpn"
         private const val NOTIFICATION_ID = 2401
+        private const val SAFE_TUN_MTU = 1280
         val status = MutableStateFlow(VpnServiceStatus(ServiceState.Disconnected))
         private const val TAG = "QuickPingVpnService"
     }
