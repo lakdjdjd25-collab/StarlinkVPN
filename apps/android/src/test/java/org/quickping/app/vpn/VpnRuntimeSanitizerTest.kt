@@ -25,7 +25,7 @@ class VpnRuntimeSanitizerTest {
     }
 
     @Test
-    fun `explicit split tunneling leaves provider routing untouched`() {
+    fun `split tunnel also removes provider direct rules before user rules are compiled`() {
         val sanitized = JSONObject(
             VpnRuntimeSanitizer.sanitize(
                 rawConfigJson = providerWithDirectRouting,
@@ -34,9 +34,10 @@ class VpnRuntimeSanitizerTest {
         )
 
         val route = sanitized.getJSONObject("route")
-        assertEquals("direct", route.getString("final"))
+        assertEquals("proxy", route.getString("final"))
         val rules = route.getJSONArray("rules")
-        assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("outbound") == "direct" })
+        assertFalse((0 until rules.length()).any { rules.getJSONObject(it).optString("outbound") == "direct" })
+        assertTrue((0 until rules.length()).any { rules.getJSONObject(it).optString("outbound") == "proxy" })
     }
 
     private val providerWithDirectRouting = """
