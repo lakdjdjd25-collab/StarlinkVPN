@@ -23,7 +23,7 @@ import org.quickping.app.ui.screens.GuardianScreen
 import org.quickping.app.ui.screens.HomeScreen
 import org.quickping.app.ui.screens.NotificationsScreen
 import org.quickping.app.ui.screens.ReferenceLoginScreen
-import org.quickping.app.ui.screens.ServicesScreen
+import org.quickping.app.ui.screens.ServicesCatalogScreen
 import org.quickping.app.ui.screens.SettingsScreen
 import org.quickping.app.ui.screens.SplashScreen
 import org.quickping.app.ui.screens.SplitTunnelingScreen
@@ -204,8 +204,10 @@ fun QuickPingApp(
                     )
                 }
                 composable(Route.Services) {
-                    ServicesScreen(
-                        service = state.service,
+                    ServicesCatalogScreen(
+                        services = state.services,
+                        currentServiceId = state.service.id,
+                        onSelectService = quickPingViewModel::selectService,
                         onBack = navController::popBackStack,
                     )
                 }
