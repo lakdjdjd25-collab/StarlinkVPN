@@ -4,14 +4,10 @@ import org.json.JSONObject
 import org.quickping.app.model.DnsProvider
 
 /**
- * The user's "Default" DNS choice means follow the service/provider policy.
- * PasarGuard can deliver a complete sing-box DNS section. Replacing that with
- * Android's local resolver can re-introduce ISP filtering/poisoning even while
- * the proxy tunnel itself is healthy.
- *
- * Only preserve new-style DNS server objects (sing-box 1.12+ shape). Legacy
- * DNS shapes are left to VpnConfigCompiler's safe local fallback so an old
- * subscription cannot make the runtime config invalid.
+ * Default DNS follows the PasarGuard/provider policy only when the provider DNS
+ * is self-contained after Android compilation. This prevents copying DNS
+ * detours that refer to selector/urltest tags that no longer exist in the
+ * selected per-node runtime config.
  */
 internal fun applyProviderDnsPolicy(
     rawConfigJson: String,
@@ -25,14 +21,39 @@ internal fun applyProviderDnsPolicy(
     val servers = providerDns.optJSONArray("servers") ?: return compiledConfigJson
     if (servers.length() == 0) return compiledConfigJson
 
+    val compiled = runCatching { JSONObject(compiledConfigJson) }.getOrNull() ?: return compiledConfigJson
+    val availableTags = linkedSetOf<String>().apply {
+        compiled.optJSONArray("outbounds")?.let { outbounds ->
+            for (index in 0 until outbounds.length()) {
+                outbounds.optJSONObject(index)?.optString("tag")
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::add)
+            }
+        }
+        compiled.optJSONArray("endpoints")?.let { endpoints ->
+            for (index in 0 until endpoints.length()) {
+                endpoints.optJSONObject(index)?.optString("tag")
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::add)
+            }
+        }
+    }
+
     for (index in 0 until servers.length()) {
         val server = servers.optJSONObject(index) ?: return compiledConfigJson
         if (server.optString("type").isBlank()) return compiledConfigJson
+        val detour = server.optString("detour")
+        if (detour.isNotBlank() && detour !in availableTags) return compiledConfigJson
+        val resolver = server.optString("domain_resolver")
+        if (resolver.isNotBlank()) {
+            val dnsTags = (0 until servers.length())
+                .mapNotNull { servers.optJSONObject(it)?.optString("tag")?.takeIf(String::isNotBlank) }
+                .toSet()
+            if (resolver !in dnsTags) return compiledConfigJson
+        }
     }
 
     return runCatching {
-        JSONObject(compiledConfigJson)
-            .put("dns", JSONObject(providerDns.toString()))
-            .toString()
+        compiled.put("dns", JSONObject(providerDns.toString())).toString()
     }.getOrDefault(compiledConfigJson)
 }
