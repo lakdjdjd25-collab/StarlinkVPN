@@ -42,7 +42,7 @@ jobs:
         id: debug-keystore-cache
         with:
           path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v2
+          key: quickping-android-debug-keystore-v1
       - name: Ensure stable debug keystore
         run: |
           mkdir -p "$HOME/.android"
@@ -82,7 +82,7 @@ jobs:
         if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
         with:
           path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v2
+          key: quickping-android-debug-keystore-v1
       - run: |
           APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
