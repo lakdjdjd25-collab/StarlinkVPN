@@ -16,6 +16,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.quickping.app.BuildConfig
+import org.quickping.app.data.settings.QuickPingSettingsStore
 
 /**
  * Starting libbox only proves that the configuration parsed and listeners were
@@ -30,6 +31,11 @@ import org.quickping.app.BuildConfig
  * Telegram, YouTube and Instagram. A valid HTTP status (including redirect or
  * access-denied) is sufficient because it proves DNS + TCP + TLS + HTTP reached
  * that remote service through the requested transport.
+ *
+ * A destination explicitly blocked by the user's Guardian policy is not a VPN
+ * health failure. In particular, the Social networks category deliberately
+ * rejects Telegram and Instagram domains, so those probes are skipped only when
+ * that Guardian category is actually active.
  */
 internal class VpnConnectionVerifier(
     private val context: Context,
@@ -39,10 +45,11 @@ internal class VpnConnectionVerifier(
         proxyPort: Int? = null,
     ): Boolean {
         require(proxyPort == null || proxyPort in 1024..65535) { "invalid local proxy port" }
+        val groups = requiredProbeGroups()
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         do {
             val transportReady = proxyPort != null || hasVpnTransport()
-            if (transportReady && probeRequiredGroups(proxyPort)) return true
+            if (transportReady && probeRequiredGroups(groups, proxyPort)) return true
             delay(RETRY_DELAY_MS)
         } while (SystemClock.elapsedRealtime() < deadline)
         return false
@@ -56,27 +63,46 @@ internal class VpnConnectionVerifier(
             capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    private suspend fun probeRequiredGroups(proxyPort: Int?): Boolean = coroutineScope {
-        requiredProbeGroups().map { group ->
+    private suspend fun probeRequiredGroups(
+        groups: List<ProbeGroup>,
+        proxyPort: Int?,
+    ): Boolean = coroutineScope {
+        groups.map { group ->
             async(Dispatchers.IO) {
                 group.urls.any { url -> probeHttps(url, proxyPort) }
             }
         }.awaitAll().all { it }
     }
 
-    private fun requiredProbeGroups(): List<ProbeGroup> = listOf(
-        ProbeGroup(
-            name = "web",
-            urls = listOf(
-                "${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/health",
-                "https://cp.cloudflare.com/generate_204",
-                "https://www.gstatic.com/generate_204",
-            ).distinct(),
-        ),
-        ProbeGroup("telegram", listOf("https://telegram.org/")),
-        ProbeGroup("youtube", listOf("https://www.youtube.com/")),
-        ProbeGroup("instagram", listOf("https://www.instagram.com/")),
-    )
+    private fun requiredProbeGroups(): List<ProbeGroup> {
+        val settingsStore = QuickPingSettingsStore(context)
+        val settings = settingsStore.load()
+        val enabledGuardian = if (settings.guardianEnabled) {
+            settingsStore.enabledGuardianCategoryIds()
+        } else {
+            emptySet()
+        }
+        val intentionallyBlockedGroups = buildSet {
+            if ("socials" in enabledGuardian) {
+                add("telegram")
+                add("instagram")
+            }
+        }
+
+        return listOf(
+            ProbeGroup(
+                name = "web",
+                urls = listOf(
+                    "${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/health",
+                    "https://cp.cloudflare.com/generate_204",
+                    "https://www.gstatic.com/generate_204",
+                ).distinct(),
+            ),
+            ProbeGroup("telegram", listOf("https://telegram.org/")),
+            ProbeGroup("youtube", listOf("https://www.youtube.com/")),
+            ProbeGroup("instagram", listOf("https://www.instagram.com/")),
+        ).filterNot { it.name in intentionallyBlockedGroups }
+    }
 
     private suspend fun probeHttps(url: String, proxyPort: Int?): Boolean = withContext(Dispatchers.IO) {
         runCatching {
