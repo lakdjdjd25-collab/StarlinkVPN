@@ -74,7 +74,6 @@ internal class VpnTrafficMonitor : CommandClientHandler {
         do {
             val current = _stats.value
             if (
-                current.available &&
                 current.totalBytes > baselineTotalBytes &&
                 current.uplinkTotalBytes > 0L &&
                 current.downlinkTotalBytes > 0L
