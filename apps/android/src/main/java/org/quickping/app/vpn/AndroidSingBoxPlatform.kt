@@ -61,18 +61,24 @@ internal class AndroidSingBoxPlatform(
         check(VpnService.prepare(service) == null) { "android: missing VPN permission" }
 
         val builder = service.Builder()
-            .setSession("QuickPing")
+            .setSession("nimHUB")
             .setMtu(options.mtu)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
 
+        // Libbox iterators are single-use. Keep the address-family presence before
+        // consuming the address iterators; Android 13+ needs these booleans when
+        // sing-box does not emit an explicit route-address list and we must add
+        // the full-tunnel default route ourselves.
+        val hasIpv4Address = options.inet4Address.hasNext()
+        val hasIpv6Address = options.inet6Address.hasNext()
         options.inet4Address.consume { builder.addAddress(it.address(), it.prefix()) }
         options.inet6Address.consume { builder.addAddress(it.address(), it.prefix()) }
 
         if (options.autoRoute) {
             builder.addDnsServer(options.dnsServerAddress.value)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                addModernRoutes(builder, options)
+                addModernRoutes(builder, options, hasIpv4Address, hasIpv6Address)
             } else {
                 options.inet4RouteRange.consume { builder.addRoute(it.address(), it.prefix()) }
                 options.inet6RouteRange.consume { builder.addRoute(it.address(), it.prefix()) }
@@ -98,18 +104,23 @@ internal class AndroidSingBoxPlatform(
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun addModernRoutes(builder: VpnService.Builder, options: TunOptions) {
+    private fun addModernRoutes(
+        builder: VpnService.Builder,
+        options: TunOptions,
+        hasIpv4Address: Boolean,
+        hasIpv6Address: Boolean,
+    ) {
         val inet4Routes = options.inet4RouteAddress
         if (inet4Routes.hasNext()) {
             inet4Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
-        } else if (options.inet4Address.hasNext()) {
+        } else if (hasIpv4Address) {
             builder.addRoute("0.0.0.0", 0)
         }
 
         val inet6Routes = options.inet6RouteAddress
         if (inet6Routes.hasNext()) {
             inet6Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
-        } else if (options.inet6Address.hasNext()) {
+        } else if (hasIpv6Address) {
             builder.addRoute("::", 0)
         }
 
@@ -259,7 +270,7 @@ internal class AndroidSingBoxPlatform(
     }
 
     private companion object {
-        const val TAG = "QuickPingSingBox"
+        const val TAG = "nimHUBSingBox"
 
         val systemCertificatePem: List<String> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
             val result = mutableListOf<String>()
