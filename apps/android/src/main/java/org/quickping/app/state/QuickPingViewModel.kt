@@ -136,6 +136,23 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         restartVpnIfActive()
     }
 
+    fun selectService(id: String) {
+        val current = _state.value
+        if (id.isBlank() || id == current.service.id) return
+        val selectedService = current.services.firstOrNull { it.id == id } ?: return
+        val selectedServers = current.serversByService[id].orEmpty()
+        _state.update {
+            it.copy(
+                service = selectedService,
+                servers = selectedServers,
+                selectedServerId = selectedServers.firstOrNull()?.id.orEmpty(),
+                connectionError = null,
+                connectionErrorCode = null,
+            )
+        }
+        restartVpnIfActive()
+    }
+
     fun refreshServerPings() {
         if (!_state.value.settings.autoPing || _state.value.servers.isEmpty() || pingJob?.isActive == true) return
         val targets = _state.value.servers.filter { it.host.isNotBlank() && it.port in 1..65535 }
@@ -523,7 +540,9 @@ private fun QuickPingUiState.withBootstrap(
     val servers = payload.serversByService[service.id].orEmpty()
     return copy(
         user = payload.user,
+        services = payload.services,
         service = service,
+        serversByService = payload.serversByService,
         servers = servers,
         selectedServerId = servers.firstOrNull()?.id.orEmpty(),
         guardianCategories = guardian,
