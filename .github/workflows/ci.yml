@@ -70,10 +70,15 @@ jobs:
         with:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
-      - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
-      - run: |
-          APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+      - name: Build debug, minified release and unit tests
+        run: ./gradlew :apps:android:assembleDebug :apps:android:assembleRelease :apps:android:testDebugUnitTest --stacktrace
+      - name: Verify CI debug certificate and release output
+        run: |
+          DEBUG_APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
+          RELEASE_APK=$(find apps/android/build/outputs/apk/release -name '*.apk' | head -n 1)
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$DEBUG_APK"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
