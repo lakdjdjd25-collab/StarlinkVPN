@@ -100,7 +100,7 @@ internal fun ReferenceConnectionPanel(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                ReferenceSelectedSummary(state, server, bestLocationSelected)
+                ReferenceSelectedSummary(state, server)
             }
         }
         Box(
@@ -117,43 +117,7 @@ internal fun ReferenceConnectionPanel(
 private fun ReferenceSelectedSummary(
     state: QuickPingUiState,
     server: Server?,
-    bestLocationSelected: Boolean,
 ) {
-    if (bestLocationSelected && server != null) {
-        Column(Modifier.width(135.dp), horizontalAlignment = Alignment.End) {
-            Box(
-                modifier = Modifier
-                    .size(width = 92.dp, height = 56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, Color(0xFF2A3040), RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_rocket),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier.size(47.dp),
-                )
-            }
-            Spacer(Modifier.height(5.dp))
-            ReferenceRtlText(
-                quickText("بهترین مکان", "Best location"),
-                Modifier.fillMaxWidth(),
-                19,
-                FontWeight.Bold,
-                QuickPingColors.TextPrimary,
-            )
-            ReferenceRtlText(
-                quickText("شبکهٔ سریع‌تر  •  ------", "Fastest network  •  ------"),
-                Modifier.fillMaxWidth(),
-                10,
-                FontWeight.Normal,
-                QuickPingColors.TextMuted,
-            )
-        }
-        return
-    }
-
     if (server == null) {
         ReferenceRtlText(
             quickText("سروری در دسترس نیست", "No server is available"),
@@ -180,20 +144,18 @@ private fun ReferenceSelectedSummary(
             now = System.currentTimeMillis()
         }
     }
-    val connectedAddress by produceState(
+
+    val selectedAddress by produceState(
         initialValue = server.host.ifBlank { "—" },
-        key1 = state.connectionStatus,
+        key1 = server.id,
         key2 = server.host,
     ) {
-        if (connected) {
-            value = withContext(Dispatchers.IO) {
-                runCatching { InetAddress.getByName(server.host).hostAddress }
-                    .getOrNull()
-                    ?.takeIf(String::isNotBlank)
-                    ?: server.host.ifBlank { "—" }
-            }
-        } else {
-            value = server.host.ifBlank { "—" }
+        value = withContext(Dispatchers.IO) {
+            if (server.host.isBlank()) return@withContext "—"
+            runCatching { InetAddress.getByName(server.host).hostAddress }
+                .getOrNull()
+                ?.takeIf(String::isNotBlank)
+                ?: server.host
         }
     }
 
@@ -231,16 +193,13 @@ private fun ReferenceSelectedSummary(
                 }
                 connected -> {
                     val elapsed = (now - connectedAt).coerceAtLeast(0L)
-                    "${formatConnectionDuration(elapsed)}  •  $connectedAddress"
+                    "${formatConnectionDuration(elapsed)}  •  $selectedAddress"
                 }
                 state.connectionStatus == ConnectionStatus.Connecting -> quickText(
-                    "در حال اتصال…",
-                    "Connecting…",
+                    "در حال اتصال…  •  $selectedAddress",
+                    "Connecting…  •  $selectedAddress",
                 )
-                else -> quickText(
-                    "شبکهٔ ${referenceCountryName(server)}  •  ------",
-                    "${referenceCountryName(server)} network  •  ------",
-                )
+                else -> "--:--:--  •  $selectedAddress"
             }
             Text(
                 text = info,

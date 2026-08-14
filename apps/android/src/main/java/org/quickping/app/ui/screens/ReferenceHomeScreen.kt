@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,7 +38,6 @@ internal fun ReferenceHomeScreen(
     onNotifications: () -> Unit,
 ) {
     val connected = state.connectionStatus == ConnectionStatus.Connected
-    var bestLocationSelected by rememberSaveable { mutableStateOf(false) }
     Box(Modifier.fillMaxSize().background(QuickPingColors.Background)) {
         Image(
             painter = painterResource(if (connected) R.drawable.bg_home_connected else R.drawable.bg_home_disconnected),
@@ -65,23 +64,24 @@ internal fun ReferenceHomeScreen(
         )
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ReferenceHomeHeader(state, onSettings, onAccount, onNotifications)
-            ReferenceConnectionPanel(state, bestLocationSelected, onToggleConnection)
+            ReferenceConnectionPanel(state, false, onToggleConnection)
             ReferenceServerList(
                 modifier = Modifier.weight(1f).background(QuickPingColors.Background),
                 state = state,
-                bestLocationSelected = bestLocationSelected,
+                bestLocationSelected = false,
                 onSelectBestLocation = {
-                    val best = state.servers.filter { it.pingMs != null }.minByOrNull { it.pingMs ?: Int.MAX_VALUE }
+                    val best = state.servers
+                        .filter { it.pingMs != null }
+                        .minByOrNull { it.pingMs ?: Int.MAX_VALUE }
                         ?: state.servers.firstOrNull()
-                    best?.let {
-                        bestLocationSelected = true
-                        onSelectServer(it.id)
+                    best?.let { server ->
+                        onSelectServer(server.id)
+                        if (state.connectionStatus !in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
+                            onToggleConnection()
+                        }
                     }
                 },
-                onSelectServer = {
-                    bestLocationSelected = false
-                    onSelectServer(it)
-                },
+                onSelectServer = onSelectServer,
             )
         }
         Box(

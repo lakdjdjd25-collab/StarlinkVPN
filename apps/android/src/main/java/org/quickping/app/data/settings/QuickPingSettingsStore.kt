@@ -11,33 +11,37 @@ import org.quickping.app.model.SplitTunnelMode
 class QuickPingSettingsStore(context: Context) {
     private val preferences = context.applicationContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
 
-    fun load(): AppSettings = AppSettings(
-        darkTheme = preferences.getBoolean(KEY_DARK_THEME, true),
-        autoConnect = preferences.getBoolean(KEY_AUTO_CONNECT, false),
-        autoPing = preferences.getBoolean(KEY_AUTO_PING, true),
-        shareHotspot = preferences.getBoolean(KEY_SHARE_HOTSPOT, false),
-        proxyModeEnabled = preferences.getBoolean(KEY_PROXY_MODE, false),
-        localProxyEnabled = preferences.getBoolean(KEY_LOCAL_PROXY, true),
-        splitTunnelingEnabled = preferences.getBoolean(KEY_SPLIT_ENABLED, false),
-        splitTunnelMode = runCatching {
-            SplitTunnelMode.valueOf(preferences.getString(KEY_SPLIT_MODE, null).orEmpty())
-        }.getOrDefault(SplitTunnelMode.Exclude),
-        splitTunnelPackages = preferences.getStringSet(KEY_SPLIT_PACKAGES, emptySet()).orEmpty().toSet(),
-        splitTunnelAddresses = preferences.getString(KEY_SPLIT_ADDRESSES, null).toStringList(),
-        rememberSplitTunnelSettings = preferences.getBoolean(KEY_SPLIT_REMEMBER, true),
-        blockIrDomains = preferences.getBoolean(KEY_BLOCK_IR_DOMAINS, true),
-        guardianEnabled = preferences.getBoolean(KEY_GUARDIAN_ENABLED, true),
-        dnsProvider = DnsProvider.fromStorage(preferences.getString(KEY_DNS_PROVIDER, null)),
-        proxyPort = preferences.getInt(KEY_PROXY_PORT, 10810).coerceIn(1024, 65535),
-        language = AppLanguage.fromCode(preferences.getString(KEY_LANGUAGE, null)),
-        reconnectOnNetworkChange = preferences.getBoolean(KEY_RECONNECT, true),
-        strictRoute = preferences.getBoolean(KEY_STRICT_ROUTE, true),
-        ipv6Enabled = preferences.getBoolean(KEY_IPV6, true),
-        mtu = preferences.getInt(KEY_MTU, 1500).coerceIn(1280, 9000),
-    )
+    fun load(): AppSettings {
+        migrateLegacyRuntimeSettings()
+        return AppSettings(
+            darkTheme = preferences.getBoolean(KEY_DARK_THEME, true),
+            autoConnect = preferences.getBoolean(KEY_AUTO_CONNECT, false),
+            autoPing = preferences.getBoolean(KEY_AUTO_PING, true),
+            shareHotspot = preferences.getBoolean(KEY_SHARE_HOTSPOT, false),
+            proxyModeEnabled = preferences.getBoolean(KEY_PROXY_MODE, false),
+            localProxyEnabled = preferences.getBoolean(KEY_LOCAL_PROXY, true),
+            splitTunnelingEnabled = preferences.getBoolean(KEY_SPLIT_ENABLED, false),
+            splitTunnelMode = runCatching {
+                SplitTunnelMode.valueOf(preferences.getString(KEY_SPLIT_MODE, null).orEmpty())
+            }.getOrDefault(SplitTunnelMode.Exclude),
+            splitTunnelPackages = preferences.getStringSet(KEY_SPLIT_PACKAGES, emptySet()).orEmpty().toSet(),
+            splitTunnelAddresses = preferences.getString(KEY_SPLIT_ADDRESSES, null).toStringList(),
+            rememberSplitTunnelSettings = preferences.getBoolean(KEY_SPLIT_REMEMBER, true),
+            blockIrDomains = preferences.getBoolean(KEY_BLOCK_IR_DOMAINS, true),
+            guardianEnabled = preferences.getBoolean(KEY_GUARDIAN_ENABLED, true),
+            dnsProvider = DnsProvider.fromStorage(preferences.getString(KEY_DNS_PROVIDER, null)),
+            proxyPort = preferences.getInt(KEY_PROXY_PORT, 10810).coerceIn(1024, 65535),
+            language = AppLanguage.fromCode(preferences.getString(KEY_LANGUAGE, null)),
+            reconnectOnNetworkChange = preferences.getBoolean(KEY_RECONNECT, true),
+            strictRoute = preferences.getBoolean(KEY_STRICT_ROUTE, true),
+            ipv6Enabled = preferences.getBoolean(KEY_IPV6, true),
+            mtu = preferences.getInt(KEY_MTU, 1500).coerceIn(1280, 9000),
+        )
+    }
 
     fun save(settings: AppSettings) {
         preferences.edit()
+            .putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
             .putBoolean(KEY_DARK_THEME, settings.darkTheme)
             .putBoolean(KEY_AUTO_CONNECT, settings.autoConnect)
             .putBoolean(KEY_AUTO_PING, settings.autoPing)
@@ -62,7 +66,7 @@ class QuickPingSettingsStore(context: Context) {
     }
 
     fun reset(): AppSettings {
-        preferences.edit().clear().apply()
+        preferences.edit().clear().putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION).apply()
         return AppSettings()
     }
 
@@ -81,6 +85,27 @@ class QuickPingSettingsStore(context: Context) {
         preferences.getBoolean(guardianKey(id), id in DEFAULT_GUARDIAN_CATEGORIES)
     }
 
+    private fun migrateLegacyRuntimeSettings() {
+        val currentVersion = preferences.getInt(KEY_SETTINGS_SCHEMA_VERSION, 0)
+        if (currentVersion >= CURRENT_SETTINGS_SCHEMA_VERSION) return
+
+        val splitMode = runCatching {
+            SplitTunnelMode.valueOf(preferences.getString(KEY_SPLIT_MODE, null).orEmpty())
+        }.getOrDefault(SplitTunnelMode.Exclude)
+        val staleIncludeWhitelist = preferences.getBoolean(KEY_SPLIT_ENABLED, false) &&
+            splitMode == SplitTunnelMode.Include
+
+        // Earlier builds could persist an Include-only app list indefinitely.
+        // After an upgrade that state can make the VPN appear connected while
+        // only one previously selected app (commonly Telegram) enters the TUN.
+        // Preserve the user's saved list, but require them to explicitly enable
+        // split tunneling again after this migration. Normal VPN mode is full tunnel.
+        preferences.edit().apply {
+            if (staleIncludeWhitelist) putBoolean(KEY_SPLIT_ENABLED, false)
+            putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
+        }.apply()
+    }
+
     private fun String?.toStringList(): List<String> {
         if (isNullOrBlank()) return emptyList()
         return runCatching {
@@ -97,6 +122,8 @@ class QuickPingSettingsStore(context: Context) {
     companion object {
         const val PREFERENCES = "quickping"
         const val KEY_AUTO_CONNECT = "auto_connect"
+        private const val KEY_SETTINGS_SCHEMA_VERSION = "settings_schema_version"
+        private const val CURRENT_SETTINGS_SCHEMA_VERSION = 2
         private const val KEY_DARK_THEME = "dark_theme"
         private const val KEY_AUTO_PING = "auto_ping"
         private const val KEY_SHARE_HOTSPOT = "share_hotspot"
