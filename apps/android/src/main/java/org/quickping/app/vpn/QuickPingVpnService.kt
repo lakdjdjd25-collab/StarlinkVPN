@@ -54,13 +54,19 @@ class QuickPingVpnService : VpnService() {
             runCatching {
                 val rawConfig = VpnRuntimeStore(this@QuickPingVpnService).read()
                 val settingsStore = QuickPingSettingsStore(this@QuickPingVpnService)
+                val settings = settingsStore.load()
                 val compiled = VpnConfigCompiler.compile(
                     rawConfigJson = rawConfig,
-                    settings = settingsStore.load(),
+                    settings = settings,
                     enabledGuardianCategories = settingsStore.enabledGuardianCategoryIds(),
                     applicationPackage = packageName,
                 )
-                core.start(compiled.configJson, compiled.launchOptions)
+                val runtimeConfig = applyProviderDnsPolicy(
+                    rawConfigJson = rawConfig,
+                    compiledConfigJson = compiled.configJson,
+                    provider = settings.dnsProvider,
+                )
+                core.start(runtimeConfig, compiled.launchOptions)
                 publish(ServiceState.Connected)
                 getSystemService<NotificationManager>()?.notify(
                     NOTIFICATION_ID,
