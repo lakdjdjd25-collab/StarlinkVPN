@@ -31,6 +31,15 @@ data class VpnTrafficStats(
         get() = uplinkTotalBytes.coerceAtLeast(0L) + downlinkTotalBytes.coerceAtLeast(0L)
 }
 
+internal fun hasNativeTrafficAdvanced(
+    baseline: VpnTrafficStats,
+    current: VpnTrafficStats,
+): Boolean =
+    baseline.sampleSequence > 0L &&
+        current.sampleSequence > baseline.sampleSequence &&
+        current.uplinkTotalBytes > baseline.uplinkTotalBytes &&
+        current.downlinkTotalBytes > baseline.downlinkTotalBytes
+
 /**
  * Reads sing-box's own command-server status stream. This is deliberately
  * independent of Android TrafficStats: the release gate needs proof that bytes
@@ -88,14 +97,7 @@ internal class VpnTrafficMonitor : CommandClientHandler {
         require(baseline.sampleSequence > 0L) { "traffic baseline has no native sample" }
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         do {
-            val current = _stats.value
-            if (
-                current.sampleSequence > baseline.sampleSequence &&
-                current.uplinkTotalBytes > baseline.uplinkTotalBytes &&
-                current.downlinkTotalBytes > baseline.downlinkTotalBytes
-            ) {
-                return true
-            }
+            if (hasNativeTrafficAdvanced(baseline, _stats.value)) return true
             delay(POLL_INTERVAL_MS)
         } while (SystemClock.elapsedRealtime() < deadline)
         return false
