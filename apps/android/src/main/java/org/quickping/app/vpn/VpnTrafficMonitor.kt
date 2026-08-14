@@ -11,6 +11,7 @@ import io.nekohasekai.libbox.LogIterator
 import io.nekohasekai.libbox.OutboundGroupIterator
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,7 @@ data class VpnTrafficStats(
     val connectionsIn: Int = 0,
     val connectionsOut: Int = 0,
     val available: Boolean = false,
+    val sampleSequence: Long = 0L,
 ) {
     val totalBytes: Long
         get() = uplinkTotalBytes.coerceAtLeast(0L) + downlinkTotalBytes.coerceAtLeast(0L)
@@ -38,6 +40,7 @@ data class VpnTrafficStats(
 internal class VpnTrafficMonitor : CommandClientHandler {
     private val _stats = MutableStateFlow(VpnTrafficStats())
     val stats: StateFlow<VpnTrafficStats> = _stats.asStateFlow()
+    private val sampleCounter = AtomicLong(0L)
 
     @Volatile
     private var client: CommandClient? = null
@@ -45,6 +48,7 @@ internal class VpnTrafficMonitor : CommandClientHandler {
     @Synchronized
     fun start() {
         stop()
+        sampleCounter.set(0L)
         _stats.value = VpnTrafficStats()
         val options = CommandClientOptions().apply {
             addCommand(Libbox.CommandStatus)
@@ -63,20 +67,32 @@ internal class VpnTrafficMonitor : CommandClientHandler {
             runCatching { current.disconnect() }
                 .onFailure { Log.w(TAG, "Unable to disconnect traffic monitor", it) }
         }
+        sampleCounter.set(0L)
         _stats.value = VpnTrafficStats()
     }
 
+    suspend fun awaitInitialSample(timeoutMs: Long = DEFAULT_SAMPLE_TIMEOUT_MS): VpnTrafficStats? {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        do {
+            val current = _stats.value
+            if (current.sampleSequence > 0L) return current
+            delay(POLL_INTERVAL_MS)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        return null
+    }
+
     suspend fun awaitTrafficAfter(
-        baselineTotalBytes: Long,
+        baseline: VpnTrafficStats,
         timeoutMs: Long = DEFAULT_TRAFFIC_TIMEOUT_MS,
     ): Boolean {
+        require(baseline.sampleSequence > 0L) { "traffic baseline has no native sample" }
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         do {
             val current = _stats.value
             if (
-                current.totalBytes > baselineTotalBytes &&
-                current.uplinkTotalBytes > 0L &&
-                current.downlinkTotalBytes > 0L
+                current.sampleSequence > baseline.sampleSequence &&
+                current.uplinkTotalBytes > baseline.uplinkTotalBytes &&
+                current.downlinkTotalBytes > baseline.downlinkTotalBytes
             ) {
                 return true
             }
@@ -102,6 +118,7 @@ internal class VpnTrafficMonitor : CommandClientHandler {
             connectionsIn = message.connectionsIn.coerceAtLeast(0),
             connectionsOut = message.connectionsOut.coerceAtLeast(0),
             available = message.trafficAvailable,
+            sampleSequence = sampleCounter.incrementAndGet(),
         )
     }
 
@@ -116,6 +133,7 @@ internal class VpnTrafficMonitor : CommandClientHandler {
     private companion object {
         const val TAG = "nimHUBTraffic"
         const val STATUS_INTERVAL_NS = 500_000_000L
+        const val DEFAULT_SAMPLE_TIMEOUT_MS = 4_000L
         const val DEFAULT_TRAFFIC_TIMEOUT_MS = 7_000L
         const val POLL_INTERVAL_MS = 150L
     }
