@@ -205,7 +205,7 @@ internal class AndroidSingBoxPlatform(
         @Suppress("DEPRECATION")
         val wifiInfo = service.applicationContext.getSystemService<WifiManager>()?.connectionInfo
             ?: return@runCatching null
-        var ssid = wifiInfo.ssid ?: return@runCatching WIFIState("", "")
+        var ssid = wifiInfo.ssid ?: return@runCatching null
         if (ssid == "<unknown ssid>") return@runCatching WIFIState("", "")
         if (ssid.startsWith('"') && ssid.endsWith('"')) ssid = ssid.substring(1, ssid.length - 1)
         WIFIState(ssid, wifiInfo.bssid.orEmpty())
