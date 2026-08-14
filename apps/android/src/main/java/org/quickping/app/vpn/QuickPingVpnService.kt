@@ -86,11 +86,16 @@ class QuickPingVpnService : VpnService() {
                 )
                 core.start(runtimeConfig, compiled.launchOptions)
 
-                // libbox start() only proves that the configuration parsed and the
-                // TUN service started. Do not present a false Connected state until
-                // real HTTPS traffic succeeds while Android exposes a VPN network.
-                check(VpnConnectionVerifier(this@QuickPingVpnService).awaitHealthy()) {
-                    "tunnel verification failed"
+                // libbox start() only proves that the configuration parsed and
+                // its listeners started. TUN mode must prove Android VPN traffic;
+                // Proxy mode must prove HTTPS traffic through the local HTTP proxy.
+                val proxyVerificationPort = settings.proxyPort.takeIf { settings.proxyModeEnabled }
+                check(
+                    VpnConnectionVerifier(this@QuickPingVpnService).awaitHealthy(
+                        proxyPort = proxyVerificationPort,
+                    ),
+                ) {
+                    if (settings.proxyModeEnabled) "proxy verification failed" else "tunnel verification failed"
                 }
 
                 publish(ServiceState.Connected)
@@ -215,6 +220,8 @@ private fun Throwable.toVpnFailure(): VpnFailure {
     val detail = source.mapNotNull { it.message }.firstOrNull { it.isNotBlank() }.orEmpty()
     val normalized = detail.lowercase()
     val (code, message) = when {
+        "proxy verification failed" in normalized ->
+            "proxy_unhealthy" to "پروکسی محلی راه‌اندازی شد اما عبور واقعی اینترنت از آن تأیید نشد"
         "tunnel verification failed" in normalized ->
             "tunnel_unhealthy" to "تونل VPN ساخته شد اما عبور واقعی اینترنت تأیید نشد"
         "vpn permission" in normalized -> "vpn_permission" to "مجوز VPN داده نشده است"
