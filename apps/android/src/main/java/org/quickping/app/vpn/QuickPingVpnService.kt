@@ -23,7 +23,6 @@ import kotlinx.coroutines.runBlocking
 import org.quickping.app.MainActivity
 import org.quickping.app.R
 import org.quickping.app.data.settings.QuickPingSettingsStore
-import org.quickping.app.model.DnsProvider
 
 class QuickPingVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -55,24 +54,9 @@ class QuickPingVpnService : VpnService() {
             runCatching {
                 val rawConfig = VpnRuntimeStore(this@QuickPingVpnService).read()
                 val settingsStore = QuickPingSettingsStore(this@QuickPingVpnService)
-                val storedSettings = settingsStore.load()
-
-                // "Default" must not delegate filtered-domain resolution back to
-                // the access network. Resolve through encrypted DoH by default;
-                // users can still explicitly choose Google/Cloudflare in settings.
-                val runtimeSettings = if (storedSettings.dnsProvider == DnsProvider.Default) {
-                    storedSettings.copy(dnsProvider = DnsProvider.Cloudflare)
-                } else {
-                    storedSettings
-                }
-
-                // Provider subscriptions can contain direct-route shortcuts. In
-                // normal VPN mode QuickPing is a full tunnel; only the explicit
-                // split-tunneling setting may bypass selected traffic.
-                val sanitizedConfig = VpnRuntimeSanitizer.sanitize(rawConfig, runtimeSettings)
                 val compiled = VpnConfigCompiler.compile(
-                    rawConfigJson = sanitizedConfig,
-                    settings = runtimeSettings,
+                    rawConfigJson = rawConfig,
+                    settings = settingsStore.load(),
                     enabledGuardianCategories = settingsStore.enabledGuardianCategoryIds(),
                     applicationPackage = packageName,
                 )

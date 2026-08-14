@@ -66,20 +66,13 @@ internal class AndroidSingBoxPlatform(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
 
-        // Libbox exposes these values as forward-only iterators. Capture whether
-        // each address family exists before consuming the iterators to add the
-        // TUN interface addresses. Android 13+ needs this information later to
-        // install the 0/0 fallback route when sing-box does not expose explicit
-        // route-address iterators.
-        val hasInet4Address = options.inet4Address.hasNext()
-        val hasInet6Address = options.inet6Address.hasNext()
         options.inet4Address.consume { builder.addAddress(it.address(), it.prefix()) }
         options.inet6Address.consume { builder.addAddress(it.address(), it.prefix()) }
 
         if (options.autoRoute) {
             builder.addDnsServer(options.dnsServerAddress.value)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                addModernRoutes(builder, options, hasInet4Address, hasInet6Address)
+                addModernRoutes(builder, options)
             } else {
                 options.inet4RouteRange.consume { builder.addRoute(it.address(), it.prefix()) }
                 options.inet6RouteRange.consume { builder.addRoute(it.address(), it.prefix()) }
@@ -105,23 +98,18 @@ internal class AndroidSingBoxPlatform(
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private fun addModernRoutes(
-        builder: VpnService.Builder,
-        options: TunOptions,
-        hasInet4Address: Boolean,
-        hasInet6Address: Boolean,
-    ) {
+    private fun addModernRoutes(builder: VpnService.Builder, options: TunOptions) {
         val inet4Routes = options.inet4RouteAddress
         if (inet4Routes.hasNext()) {
             inet4Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
-        } else if (hasInet4Address) {
+        } else if (options.inet4Address.hasNext()) {
             builder.addRoute("0.0.0.0", 0)
         }
 
         val inet6Routes = options.inet6RouteAddress
         if (inet6Routes.hasNext()) {
             inet6Routes.consume { builder.addRoute(IpPrefix(InetAddress.getByName(it.address()), it.prefix())) }
-        } else if (hasInet6Address) {
+        } else if (options.inet6Address.hasNext()) {
             builder.addRoute("::", 0)
         }
 
