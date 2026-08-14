@@ -38,25 +38,18 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: yes | sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - uses: actions/cache/restore@v4
-        id: debug-keystore-cache
-        with:
-          path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v1
-      - name: Ensure stable debug keystore
+      - name: Ensure CI-only debug keystore
         run: |
           mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -noprompt \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
-          fi
+          keytool -genkeypair -noprompt \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=nimHUB CI Debug,O=nimHUB,C=US" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
           test -s "$HOME/.android/debug.keystore"
       - uses: actions/cache/restore@v4
         id: libbox-cache
@@ -78,17 +71,12 @@ jobs:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
-      - uses: actions/cache/save@v4
-        if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
-        with:
-          path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v1
       - run: |
           APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: QuickPing-debug
+          name: nimHUB-ci-debug-no-google-oauth
           path: apps/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
