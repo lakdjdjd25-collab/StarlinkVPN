@@ -278,8 +278,8 @@ fun SettingsScreen(
         ReferenceDialog(
             title = quickText("بهینه‌سازی باتری", "Battery optimization"),
             body = quickText(
-                "برای جلوگیری از قطع‌شدن VPN در پس‌زمینه، QuickPing را در صفحهٔ بعد از محدودیت باتری خارج کنید.",
-                "Allow QuickPing to run without battery restrictions so the VPN remains connected in the background.",
+                "برای جلوگیری از قطع‌شدن VPN در پس‌زمینه، nimHUB را در صفحهٔ بعد از محدودیت باتری خارج کنید.",
+                "Allow nimHUB to run without battery restrictions so the VPN remains connected in the background.",
             ),
             confirm = quickText("ادامه", "Continue"),
             onConfirm = { showBatteryWarning = false; openBatterySettings(context) },
@@ -486,8 +486,8 @@ private fun HotspotSheet(
             )
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CopyValueCard(Modifier.weight(1f), host, quickText("هاست", "Host"), R.drawable.ic_server) { copyText(context, "QuickPing host", host) }
-                CopyValueCard(Modifier.weight(1f), port.toString(), quickText("پورت", "Port"), R.drawable.ic_port) { copyText(context, "QuickPing port", port.toString()) }
+                CopyValueCard(Modifier.weight(1f), host, quickText("هاست", "Host"), R.drawable.ic_server) { copyText(context, "nimHUB host", host) }
+                CopyValueCard(Modifier.weight(1f), port.toString(), quickText("پورت", "Port"), R.drawable.ic_port) { copyText(context, "nimHUB port", port.toString()) }
             }
             Spacer(Modifier.height(12.dp))
             Text(quickText("برای کپی‌کردن کلیک کنید", "Tap a value to copy"), Modifier.fillMaxWidth(), color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
@@ -559,7 +559,7 @@ private fun openBatterySettings(context: Context) {
 
 private fun openProblemReport(context: Context) {
     val report = buildString {
-        appendLine("QuickPing ${BuildConfig.VERSION_NAME}")
+        appendLine("nimHUB ${BuildConfig.VERSION_NAME}")
         appendLine("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
         appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
         appendLine()
@@ -567,10 +567,10 @@ private fun openProblemReport(context: Context) {
     }
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "QuickPing problem report")
+        putExtra(Intent.EXTRA_SUBJECT, "nimHUB problem report")
         putExtra(Intent.EXTRA_TEXT, report)
     }
-    context.startActivity(Intent.createChooser(intent, "QuickPing"))
+    context.startActivity(Intent.createChooser(intent, "nimHUB"))
 }
 
 private fun localIpv4Address(): String = runCatching {
