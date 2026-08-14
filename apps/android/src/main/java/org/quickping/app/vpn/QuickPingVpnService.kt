@@ -34,6 +34,12 @@ class QuickPingVpnService : VpnService() {
         super.onCreate()
         val platform = AndroidSingBoxPlatform(this)
         core = SingBoxTunnelCore(platform) { disconnect() }
+        // MutableStateFlow lives at process scope. If Android destroyed a previous
+        // service instance unexpectedly, never let a stale Connected/Connecting
+        // value survive into a fresh service that has no running native core.
+        if (status.value.state == ServiceState.Connected || status.value.state == ServiceState.Connecting) {
+            publish(ServiceState.Disconnected)
+        }
         createNotificationChannel()
     }
 
@@ -46,7 +52,15 @@ class QuickPingVpnService : VpnService() {
     }
 
     private fun connect() {
-        if (status.value.state == ServiceState.Connecting || status.value.state == ServiceState.Connected) return
+        val currentState = status.value.state
+        if (currentState == ServiceState.Connecting && tunnelJob?.isActive == true) return
+        if (currentState == ServiceState.Connected && core.isRunning()) return
+        if (currentState == ServiceState.Connecting || currentState == ServiceState.Connected) {
+            // State without an active job/core is stale; recover instead of
+            // short-circuiting and leaving a visual-only Connected state.
+            publish(ServiceState.Disconnected)
+        }
+
         stopping.set(false)
         startForeground(NOTIFICATION_ID, connectionNotification())
         publish(ServiceState.Connecting)
@@ -82,6 +96,10 @@ class QuickPingVpnService : VpnService() {
                 )
             }.onFailure { error ->
                 if (error is CancellationException && stopping.get()) return@onFailure
+                // Suppress the native serviceStop callback while we intentionally
+                // tear a failed startup down; otherwise it can race this path and
+                // overwrite Error with Disconnected.
+                stopping.set(true)
                 runCatching { core.stop() }
                 val failure = error.toVpnFailure()
                 Log.e(TAG, "VPN startup failed [${failure.code}]: ${failure.safeDetail}")
@@ -147,8 +165,13 @@ class QuickPingVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        stopping.set(true)
+        tunnelJob?.cancel()
         if (::core.isInitialized && core.isRunning()) {
             runCatching { runBlocking(Dispatchers.IO) { core.stop() } }
+        }
+        if (status.value.state == ServiceState.Connected || status.value.state == ServiceState.Connecting) {
+            publish(ServiceState.Disconnected)
         }
         serviceScope.cancel()
         super.onDestroy()
