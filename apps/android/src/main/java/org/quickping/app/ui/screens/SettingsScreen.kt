@@ -66,6 +66,7 @@ import org.quickping.app.model.DnsProvider
 import org.quickping.app.ui.components.QuickPingScreen
 import org.quickping.app.ui.components.QuickPingTopBar
 import org.quickping.app.ui.components.QuickSwitch
+import org.quickping.app.vpn.QuickPingVpnService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -294,7 +295,7 @@ fun SettingsScreen(
                 "Before continuing, reproduce the issue once. A technical report without login secrets will be prepared for support.",
             ),
             confirm = quickText("ادامه", "Continue"),
-            onConfirm = { showReportWarning = false; openProblemReport(context) },
+            onConfirm = { showReportWarning = false; openProblemReport(context, settings) },
             onDismiss = { showReportWarning = false },
         )
     }
@@ -557,11 +558,23 @@ private fun openBatterySettings(context: Context) {
     }.onFailure { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
 }
 
-private fun openProblemReport(context: Context) {
+private fun openProblemReport(context: Context, appSettings: AppSettings) {
+    val serviceStatus = QuickPingVpnService.status.value
+    val failure = serviceStatus.failure
     val report = buildString {
         appendLine("nimHUB ${BuildConfig.VERSION_NAME}")
         appendLine("Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
         appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("VPN state: ${serviceStatus.state.name}")
+        failure?.let {
+            appendLine("Failure code: ${it.code}")
+            appendLine("Failure detail: ${it.safeDetail}")
+        }
+        appendLine("Mode: ${if (appSettings.proxyModeEnabled) "proxy" else "tun"}")
+        appendLine("DNS: ${appSettings.dnsProvider.storageValue}")
+        appendLine("Split tunnel: ${appSettings.splitTunnelingEnabled} (${appSettings.splitTunnelMode.name.lowercase()})")
+        appendLine("Guardian: ${appSettings.guardianEnabled}")
+        appendLine("Hotspot sharing: ${appSettings.shareHotspot}")
         appendLine()
         append("Problem description: ")
     }
