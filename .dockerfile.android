@@ -37,8 +37,12 @@ RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" /tmp/android-cli \
 WORKDIR /workspace
 COPY . .
 
-# Railway Docker builds only expose service variables that are declared as ARG.
-# Keep the signing key confined to this build stage and fail closed if it is absent.
+RUN chmod +x gradlew scripts/build-sing-box-android.sh \
+    && ./scripts/build-sing-box-android.sh
+
+# Railway Docker builds only expose service variables declared as ARG. Decode
+# the key, sign, verify and delete it in one RUN so no committed filesystem
+# layer ever contains the keystore. Failed RUN layers are not exported.
 RUN test -n "${ANDROID_DEBUG_KEYSTORE_B64}" \
     && mkdir -p /root/.android \
     && printf '%s' "${ANDROID_DEBUG_KEYSTORE_B64}" | base64 --decode > /root/.android/debug.keystore \
@@ -46,9 +50,7 @@ RUN test -n "${ANDROID_DEBUG_KEYSTORE_B64}" \
     && keytool -list \
         -keystore /root/.android/debug.keystore \
         -storepass android \
-        -alias androiddebugkey >/dev/null
-
-RUN ./scripts/build-sing-box-android.sh \
+        -alias androiddebugkey >/dev/null \
     && ./gradlew :apps:android:assembleDebug --stacktrace \
     && APK="$(find apps/android/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)" \
     && test -n "${APK}" \
