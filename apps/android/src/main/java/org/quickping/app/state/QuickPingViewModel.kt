@@ -487,7 +487,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private companion object {
-        val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "ads", "youtube", "phishing")
+        val DEFAULT_GUARDIAN_CATEGORIES = setOf("malware", "phishing")
     }
 }
 
