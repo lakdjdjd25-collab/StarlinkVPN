@@ -26,6 +26,20 @@ jobs:
           node --check scripts/android-artifact-server.js
           grep -F 'COPY scripts/android-artifact-server.js /app/server.js' .dockerfile.android
           grep -F 'CMD ["node", "/app/server.js"]' .dockerfile.android
+          APK_DIR=$(mktemp -d)
+          printf 'test-apk' > "$APK_DIR/nimHUB-smoke.apk"
+          APK_DIR="$APK_DIR" PORT=32123 node scripts/android-artifact-server.js &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$APK_DIR"' EXIT
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:32123/health > /tmp/nimhub-artifact-health.json; then
+              break
+            fi
+            sleep 0.1
+          done
+          grep -F '"ok":true' /tmp/nimhub-artifact-health.json
+          grep -F 'nimHUB-smoke.apk' /tmp/nimhub-artifact-health.json
+          curl -fsS http://127.0.0.1:32123/nimHUB-smoke.apk | grep -F 'test-apk'
       - run: npm ci
       - run: npm test
       - run: npm run lint
