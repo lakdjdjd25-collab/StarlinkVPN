@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.produceState
@@ -50,6 +51,8 @@ import org.quickping.app.core.design.quickText
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.Server
 import org.quickping.app.state.QuickPingUiState
+import org.quickping.app.vpn.QuickPingVpnService
+import org.quickping.app.vpn.VpnTrafficStats
 
 @Composable
 internal fun ReferenceConnectionPanel(
@@ -60,6 +63,7 @@ internal fun ReferenceConnectionPanel(
     val server = state.servers.firstOrNull { it.id == state.selectedServerId }
     val connected = state.connectionStatus == ConnectionStatus.Connected
     val panelShape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
+    val serviceStatus by QuickPingVpnService.status.collectAsState()
 
     Box(
         modifier = Modifier
@@ -100,7 +104,11 @@ internal fun ReferenceConnectionPanel(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                ReferenceSelectedSummary(state, server)
+                ReferenceSelectedSummary(
+                    state = state,
+                    server = server,
+                    traffic = serviceStatus.traffic,
+                )
             }
         }
         Box(
@@ -117,6 +125,7 @@ internal fun ReferenceConnectionPanel(
 private fun ReferenceSelectedSummary(
     state: QuickPingUiState,
     server: Server?,
+    traffic: VpnTrafficStats,
 ) {
     if (server == null) {
         ReferenceRtlText(
@@ -212,6 +221,19 @@ private fun ReferenceSelectedSummary(
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
+            if (connected) {
+                Text(
+                    text = formatTrafficSummary(traffic),
+                    modifier = Modifier.widthIn(max = 132.dp),
+                    color = Color(0xFF777D8A),
+                    fontFamily = Peyda,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -222,4 +244,17 @@ private fun formatConnectionDuration(elapsedMillis: Long): String {
     val minutes = (totalSeconds % 3_600L) / 60L
     val seconds = totalSeconds % 60L
     return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+private fun formatTrafficSummary(traffic: VpnTrafficStats): String =
+    "↓ ${formatCompactBytes(traffic.downlinkTotalBytes)}  •  ↑ ${formatCompactBytes(traffic.uplinkTotalBytes)}"
+
+internal fun formatCompactBytes(bytes: Long): String {
+    val safe = bytes.coerceAtLeast(0L).toDouble()
+    return when {
+        safe >= 1024.0 * 1024.0 * 1024.0 -> String.format(Locale.US, "%.1fGB", safe / (1024.0 * 1024.0 * 1024.0))
+        safe >= 1024.0 * 1024.0 -> String.format(Locale.US, "%.1fMB", safe / (1024.0 * 1024.0))
+        safe >= 1024.0 -> String.format(Locale.US, "%.1fKB", safe / 1024.0)
+        else -> "${safe.toLong()}B"
+    }
 }
