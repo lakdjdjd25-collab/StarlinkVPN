@@ -10,6 +10,9 @@ const schema = z.object({ password: z.string().min(1).max(256) });
 export async function DELETE(request: NextRequest) {
   const auth = await requireBearer(request, ["CUSTOMER"]);
   if (!auth.ok) return auth.response;
+  if (auth.serviceId) {
+    return fail(403, "license_session_not_allowed", "برای حذف حساب باید با حساب کاربری وارد شوید");
+  }
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "گذرواژه را وارد کنید");
 
