@@ -10,11 +10,11 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  // Account owners must be able to rotate their own password regardless of
-  // whether the account is a customer or the primary administrator. Support
-  // accounts intentionally remain excluded from this self-service endpoint.
   const auth = await requireBearer(request, ["CUSTOMER", "ADMIN"]);
   if (!auth.ok) return auth.response;
+  if (auth.serviceId) {
+    return fail(403, "license_session_not_allowed", "برای تغییر گذرواژه باید با حساب کاربری وارد شوید");
+  }
 
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
