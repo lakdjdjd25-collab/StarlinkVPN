@@ -1,3 +1,4 @@
+# NimHUB Vpn deterministic Android release builder.
 FROM golang:1.25.12-bookworm AS go
 
 FROM node:24-bookworm AS build
