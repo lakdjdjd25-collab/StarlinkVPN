@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -39,13 +41,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalLayoutDirection
-import com.google.android.gms.common.moduleinstall.InstallStatusListener
-import com.google.android.gms.common.moduleinstall.ModuleInstall
-import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
-import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate
-import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_CANCELED
-import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED
-import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_FAILED
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -87,7 +82,6 @@ fun ReferenceLoginScreen(
     var showEmailDialog by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var scannerPreparing by remember { mutableStateOf(false) }
 
     val welcomeTarget = quickText("خوش اومدید", "Welcome")
     var typedWelcome by remember(welcomeTarget) { mutableStateOf("") }
@@ -135,76 +129,29 @@ fun ReferenceLoginScreen(
             .build()
     }
     val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }
-    val moduleInstallClient = remember(context) { ModuleInstall.getClient(context) }
     val qrNotFoundText = quickText("کد مجوز در QR پیدا نشد", "License code was not found in the QR")
     val qrFailedText = quickText("اسکن QR انجام نشد", "QR scan failed")
-    val qrPreparingText = quickText("در حال آماده‌سازی اسکنر QR…", "Preparing QR scanner…")
+    val licenseInvalidText = quickText("کد مجوز معتبر نیست", "License code is not valid")
+
+    fun submitLicense(raw: String, fromQr: Boolean = false) {
+        val parsed = referenceExtractLicense(raw)
+        if (parsed.isBlank()) {
+            scanError = if (fromQr) qrNotFoundText else licenseInvalidText
+            return
+        }
+        license = parsed
+        scanError = null
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        onPasswordLogin(parsed, "")
+    }
 
     fun launchQrScanner() {
+        scanError = null
         scanner.startScan()
-            .addOnSuccessListener { barcode ->
-                val parsed = referenceExtractLicense(barcode.rawValue.orEmpty())
-                if (parsed.isNotBlank()) {
-                    license = parsed
-                    scanError = null
-                } else {
-                    scanError = qrNotFoundText
-                }
-            }
+            .addOnSuccessListener { barcode -> submitLicense(barcode.rawValue.orEmpty(), fromQr = true) }
             .addOnCanceledListener { scanError = null }
             .addOnFailureListener { scanError = qrFailedText }
-    }
-
-    fun prepareAndLaunchQrScanner() {
-        if (scannerPreparing) return
-        scanError = null
-        moduleInstallClient.areModulesAvailable(scanner)
-            .addOnSuccessListener { availability ->
-                if (availability.areModulesAvailable()) {
-                    launchQrScanner()
-                } else {
-                    scannerPreparing = true
-                    scanError = qrPreparingText
-                    lateinit var listener: InstallStatusListener
-                    listener = InstallStatusListener { update: ModuleInstallStatusUpdate ->
-                        when (update.installState) {
-                            STATE_COMPLETED -> {
-                                scannerPreparing = false
-                                scanError = null
-                                moduleInstallClient.unregisterListener(listener)
-                                launchQrScanner()
-                            }
-                            STATE_CANCELED, STATE_FAILED -> {
-                                scannerPreparing = false
-                                scanError = qrFailedText
-                                moduleInstallClient.unregisterListener(listener)
-                            }
-                        }
-                    }
-                    val request = ModuleInstallRequest.newBuilder()
-                        .addApi(scanner)
-                        .setListener(listener)
-                        .build()
-                    moduleInstallClient.installModules(request)
-                        .addOnSuccessListener { response ->
-                            if (response.areModulesAlreadyInstalled()) {
-                                scannerPreparing = false
-                                scanError = null
-                                launchQrScanner()
-                            }
-                        }
-                        .addOnFailureListener {
-                            scannerPreparing = false
-                            scanError = qrFailedText
-                            moduleInstallClient.unregisterListener(listener)
-                        }
-                }
-            }
-            .addOnFailureListener { scanError = qrFailedText }
-    }
-
-    LaunchedEffect(scanner) {
-        moduleInstallClient.deferredInstall(scanner)
     }
 
     Box(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
@@ -310,20 +257,8 @@ fun ReferenceLoginScreen(
                     license = it
                     scanError = null
                 },
-                onBack = {
-                    license = ""
-                    focusManager.clearFocus()
-                    keyboardController?.hide()
-                },
-                onScan = { prepareAndLaunchQrScanner() },
-                onSubmit = {
-                    val value = license.trim()
-                    if (value.isNotBlank()) {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                        onPasswordLogin(value, "")
-                    }
-                },
+                onScan = { launchQrScanner() },
+                onSubmit = { submitLicense(license) },
             )
 
             val visibleError = scanError ?: error
@@ -544,7 +479,6 @@ private fun ReferenceLicenseBar(
     enabled: Boolean,
     compact: Boolean,
     onValueChange: (String) -> Unit,
-    onBack: () -> Unit,
     onScan: () -> Unit,
     onSubmit: () -> Unit,
 ) {
@@ -558,7 +492,7 @@ private fun ReferenceLicenseBar(
                 .padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onBack)
+            ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onSubmit, enabled && value.isNotBlank())
             Spacer(Modifier.width(6.dp))
             ReferenceLoginInnerButton(R.drawable.ic_scan, onScan)
             Box(Modifier.weight(1f).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterEnd) {
@@ -578,7 +512,8 @@ private fun ReferenceLicenseBar(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = enabled,
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (enabled && value.isNotBlank()) onSubmit() }),
                     textStyle = TextStyle(
                         color = QuickPingColors.TextPrimary,
                         fontFamily = Peyda,
@@ -588,7 +523,7 @@ private fun ReferenceLicenseBar(
                     cursorBrush = SolidColor(Color(0xFF4A82FF)),
                 )
             }
-            ReferenceLoginInnerButton(R.drawable.ic_ticket, onSubmit, enabled && value.isNotBlank())
+            ReferenceLoginInnerButton(R.drawable.ic_ticket, onClick = {})
         }
     }
 }
@@ -711,8 +646,10 @@ private fun normalizeReferenceLicense(value: String): String {
 private fun referenceLocalizedLoginError(message: String): String = when {
     message.contains("Email or password is incorrect", ignoreCase = true) ->
         quickText("ایمیل یا رمز عبور صحیح نیست", "Email or password is incorrect")
-    message.contains("License is invalid or inactive", ignoreCase = true) ->
-        quickText("مجوز معتبر یا فعال نیست", "License is invalid or inactive")
+    message.contains("License is invalid", ignoreCase = true) ->
+        quickText("مجوز نامعتبر، منقضی یا بدون حجم باقی‌مانده است", "License is invalid, expired, or has no remaining quota")
+    message.contains("This license allows up to", ignoreCase = true) ->
+        quickText("تعداد دستگاه‌های مجاز این مجوز تکمیل شده است", "The device limit for this license has been reached")
     message.contains("Google sign-in was cancelled", ignoreCase = true) ->
         quickText("ورود با گوگل لغو شد", "Google sign-in was cancelled")
     message.contains("No available Google account", ignoreCase = true) ->
