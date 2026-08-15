@@ -52,6 +52,15 @@ export type PasarGuardUserTemplate = {
   resetStrategy: string;
 };
 
+export type PasarGuardUserUpdate = {
+  dataLimit?: bigint;
+  expiresAt?: Date | null;
+  maxDevices?: number | null;
+  status?: string;
+  groupIds?: number[];
+  note?: string;
+};
+
 type PasarGuardCredentials = { baseUrl: URL; username: string; password: string };
 type PasarGuardClientOptions = PasarGuardCredentials & { fetch?: typeof fetch; timeoutMs?: number };
 
@@ -76,6 +85,13 @@ function toBigInt(value: string | number | bigint | null | undefined): bigint {
   } catch {
     throw new PasarGuardError("invalid_response", "مقدار مصرف دریافتی از پاسارگارد معتبر نیست");
   }
+}
+
+function safeDataLimit(value: bigint): number {
+  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new PasarGuardError("invalid_response", "حجم سرویس پاسارگارد خارج از محدودهٔ معتبر است");
+  }
+  return Number(value);
 }
 
 function parseExpiry(value: string | number | null | undefined): Date | null {
@@ -215,9 +231,16 @@ export class PasarGuardClient {
     return mapUser(parsed.data);
   }
 
-  async createUser(username: string, dataLimit: bigint, groupIds: number[], note: string, maxDevices = 1): Promise<PasarGuardUser> {
-    if (dataLimit <= 0n || dataLimit > BigInt(Number.MAX_SAFE_INTEGER) || groupIds.length === 0) {
-      throw new PasarGuardError("invalid_response", "مشخصات سرویس رایگان پاسارگارد معتبر نیست");
+  async createUser(
+    username: string,
+    dataLimit: bigint,
+    groupIds: number[],
+    note: string,
+    maxDevices = 1,
+    expiresAt: Date | null = null,
+  ): Promise<PasarGuardUser> {
+    if (dataLimit <= 0n || groupIds.length === 0 || maxDevices <= 0) {
+      throw new PasarGuardError("invalid_response", "مشخصات سرویس پاسارگارد معتبر نیست");
     }
     const response = await this.authorized("api/user", {
       method: "POST",
@@ -225,8 +248,8 @@ export class PasarGuardClient {
       body: JSON.stringify({
         username,
         status: "active",
-        expire: 0,
-        data_limit: Number(dataLimit),
+        expire: expiresAt ? expiresAt.toISOString() : 0,
+        data_limit: safeDataLimit(dataLimit),
         data_limit_reset_strategy: "no_reset",
         group_ids: [...new Set(groupIds)].sort((a, b) => a - b),
         note,
@@ -236,6 +259,45 @@ export class PasarGuardClient {
     const parsed = rawUserSchema.safeParse(await response.json().catch(() => null));
     if (!parsed.success) throw new PasarGuardError("invalid_response", "کاربر ساخته‌شده در پاسارگارد ساختار معتبری ندارد");
     return mapUser(parsed.data);
+  }
+
+  async updateUser(username: string, changes: PasarGuardUserUpdate): Promise<PasarGuardUser> {
+    const body: Record<string, unknown> = {};
+    if (changes.dataLimit !== undefined) body.data_limit = safeDataLimit(changes.dataLimit);
+    if (changes.expiresAt !== undefined) body.expire = changes.expiresAt ? changes.expiresAt.toISOString() : 0;
+    if (changes.maxDevices !== undefined) {
+      if (changes.maxDevices !== null && changes.maxDevices <= 0) {
+        throw new PasarGuardError("invalid_response", "تعداد دستگاه پاسارگارد معتبر نیست");
+      }
+      body.hwid_limit = changes.maxDevices;
+    }
+    if (changes.status !== undefined) body.status = changes.status;
+    if (changes.groupIds !== undefined) {
+      if (changes.groupIds.length === 0) throw new PasarGuardError("invalid_response", "گروه سرور پاسارگارد خالی است");
+      body.group_ids = [...new Set(changes.groupIds)].sort((a, b) => a - b);
+    }
+    if (changes.note !== undefined) body.note = changes.note;
+    if (Object.keys(body).length === 0) return this.getUserByUsername(username);
+
+    const response = await this.authorized(`api/user/${encodeURIComponent(username)}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const parsed = rawUserSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) throw new PasarGuardError("invalid_response", "کاربر ویرایش‌شده در پاسارگارد ساختار معتبری ندارد");
+    return mapUser(parsed.data);
+  }
+
+  async getUserByUsername(username: string): Promise<PasarGuardUser> {
+    const response = await this.authorized(`api/user/${encodeURIComponent(username)}`);
+    const parsed = rawUserSchema.safeParse(await response.json().catch(() => null));
+    if (!parsed.success) throw new PasarGuardError("invalid_response", "اطلاعات کاربر پاسارگارد ساختار معتبری ندارد");
+    return mapUser(parsed.data);
+  }
+
+  async deleteUser(username: string): Promise<void> {
+    await this.authorized(`api/user/${encodeURIComponent(username)}`, { method: "DELETE" });
   }
 
   async createUserFromTemplate(templateId: number, username: string, note: string): Promise<PasarGuardUser> {
