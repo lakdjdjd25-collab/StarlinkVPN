@@ -77,6 +77,7 @@ jobs:
         with:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
+      - run: python3 scripts/apply-login-fixes-2.6.11.py
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
       - uses: actions/cache/save@v4
         if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
@@ -89,6 +90,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: QuickPing-debug
+          name: NimHUB-Vpn-2.6.11-debug
           path: apps/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
