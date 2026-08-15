@@ -4,13 +4,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import org.quickping.app.QuickPingApplication
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
@@ -30,11 +34,24 @@ fun AccountScreenWithSignOutConfirmation(
     onSignOut: () -> Unit,
     onServices: () -> Unit,
 ) {
+    val context = LocalContext.current
     var showSignOutConfirmation by rememberSaveable { mutableStateOf(false) }
+    var displayedService by remember(service.id) { mutableStateOf(service) }
+
+    LaunchedEffect(service) {
+        displayedService = service
+    }
+    LaunchedEffect(service.id) {
+        val application = context.applicationContext as? QuickPingApplication ?: return@LaunchedEffect
+        val bootstrap = application.repository.restoreSession() ?: return@LaunchedEffect
+        val refreshedService = bootstrap.services.firstOrNull { it.id == service.id }
+            ?: bootstrap.services.firstOrNull()
+        if (refreshedService != null) displayedService = refreshedService
+    }
 
     AccountScreen(
         user = user,
-        service = service,
+        service = displayedService,
         busy = busy,
         error = error,
         onConfirmPasswordChange = onConfirmPasswordChange,
