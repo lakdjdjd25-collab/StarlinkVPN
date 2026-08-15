@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Quick Ping</string>
-    <string name="tile_name">QuickPing VPN</string>
-    <string name="vpn_channel_name">اتصال QuickPing</string>
+    <string name="app_name">NimHUB Vpn</string>
+    <string name="tile_name">NimHUB Vpn</string>
+    <string name="vpn_channel_name">اتصال NimHUB Vpn</string>
     <string name="vpn_connected">اتصال امن برقرار است</string>
     <string name="vpn_connecting">در حال برقراری اتصال امن</string>
 </resources>
