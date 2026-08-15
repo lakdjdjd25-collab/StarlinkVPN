@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +28,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,6 +82,7 @@ fun AccountScreen(
     var showNewPassword by remember { mutableStateOf(false) }
     var showRepeatedNewPassword by remember { mutableStateOf(false) }
     var deletionPassword by remember { mutableStateOf("") }
+    val passwordSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     QuickPingScreen {
         QuickPingTopBar(
@@ -164,6 +168,7 @@ fun AccountScreen(
                     onClearAction()
                 }
             },
+            sheetState = passwordSheetState,
             dragHandle = null,
             containerColor = QuickPingColors.SurfaceHigh,
             contentColor = QuickPingColors.TextPrimary,
@@ -180,7 +185,14 @@ fun AccountScreen(
                     }
                 },
             )
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp),
+            ) {
                 OutlinedTextField(
                     value = currentPassword,
                     onValueChange = { currentPassword = it.take(256) },

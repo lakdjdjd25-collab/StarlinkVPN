@@ -39,6 +39,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.platform.LocalLayoutDirection
+import com.google.android.gms.common.moduleinstall.InstallStatusListener
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_CANCELED
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_FAILED
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -47,6 +54,7 @@ import org.quickping.app.R
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
+import org.json.JSONObject
 import org.quickping.app.model.AppLanguage
 
 private const val REFERENCE_LOGIN_MOTION_MS = 300
@@ -79,7 +87,7 @@ fun ReferenceLoginScreen(
     var showEmailDialog by remember { mutableStateOf(false) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var verificationCode by remember { mutableStateOf("") }
+    var scannerPreparing by remember { mutableStateOf(false) }
 
     val welcomeTarget = quickText("خوش اومدید", "Welcome")
     var typedWelcome by remember(welcomeTarget) { mutableStateOf("") }
@@ -98,9 +106,6 @@ fun ReferenceLoginScreen(
         }
     }
 
-    LaunchedEffect(debugCode) {
-        if (!debugCode.isNullOrBlank()) verificationCode = debugCode
-    }
 
     val logoWidth by animateDpAsState(
         targetValue = if (keyboardVisible) 104.dp else 156.dp,
@@ -130,6 +135,77 @@ fun ReferenceLoginScreen(
             .build()
     }
     val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }
+    val moduleInstallClient = remember(context) { ModuleInstall.getClient(context) }
+    val qrNotFoundText = quickText("کد مجوز در QR پیدا نشد", "License code was not found in the QR")
+    val qrFailedText = quickText("اسکن QR انجام نشد", "QR scan failed")
+    val qrPreparingText = quickText("در حال آماده‌سازی اسکنر QR…", "Preparing QR scanner…")
+
+    fun launchQrScanner() {
+        scanner.startScan()
+            .addOnSuccessListener { barcode ->
+                val parsed = referenceExtractLicense(barcode.rawValue.orEmpty())
+                if (parsed.isNotBlank()) {
+                    license = parsed
+                    scanError = null
+                } else {
+                    scanError = qrNotFoundText
+                }
+            }
+            .addOnCanceledListener { scanError = null }
+            .addOnFailureListener { scanError = qrFailedText }
+    }
+
+    fun prepareAndLaunchQrScanner() {
+        if (scannerPreparing) return
+        scanError = null
+        moduleInstallClient.areModulesAvailable(scanner)
+            .addOnSuccessListener { availability ->
+                if (availability.areModulesAvailable()) {
+                    launchQrScanner()
+                } else {
+                    scannerPreparing = true
+                    scanError = qrPreparingText
+                    lateinit var listener: InstallStatusListener
+                    listener = InstallStatusListener { update: ModuleInstallStatusUpdate ->
+                        when (update.installState) {
+                            STATE_COMPLETED -> {
+                                scannerPreparing = false
+                                scanError = null
+                                moduleInstallClient.unregisterListener(listener)
+                                launchQrScanner()
+                            }
+                            STATE_CANCELED, STATE_FAILED -> {
+                                scannerPreparing = false
+                                scanError = qrFailedText
+                                moduleInstallClient.unregisterListener(listener)
+                            }
+                        }
+                    }
+                    val request = ModuleInstallRequest.newBuilder()
+                        .addApi(scanner)
+                        .setListener(listener)
+                        .build()
+                    moduleInstallClient.installModules(request)
+                        .addOnSuccessListener { response ->
+                            if (response.areModulesAlreadyInstalled()) {
+                                scannerPreparing = false
+                                scanError = null
+                                launchQrScanner()
+                            }
+                        }
+                        .addOnFailureListener {
+                            scannerPreparing = false
+                            scanError = qrFailedText
+                            moduleInstallClient.unregisterListener(listener)
+                        }
+                }
+            }
+            .addOnFailureListener { scanError = qrFailedText }
+    }
+
+    LaunchedEffect(scanner) {
+        moduleInstallClient.deferredInstall(scanner)
+    }
 
     Box(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
         Image(
@@ -206,19 +282,24 @@ fun ReferenceLoginScreen(
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.height(if (keyboardVisible) 3.dp else 10.dp))
-            Text(
-                text = buildAnnotatedString {
-                    append(typedWelcome)
-                    withStyle(SpanStyle(color = Color(0xFF4A82FF), fontWeight = FontWeight.Normal)) {
-                        append(if (cursorVisible) "│" else " ")
-                    }
-                },
-                color = Color(0xFFD1D4DB),
-                fontFamily = Peyda,
-                fontSize = if (keyboardVisible) 16.sp else 18.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = typedWelcome,
+                    color = Color(0xFFD1D4DB),
+                    fontFamily = Peyda,
+                    fontSize = if (keyboardVisible) 16.sp else 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "│",
+                    color = Color(0xFF4A82FF).copy(alpha = if (cursorVisible) 1f else 0f),
+                    fontFamily = Peyda,
+                    fontSize = if (keyboardVisible) 16.sp else 18.sp,
+                    fontWeight = FontWeight.Normal,
+                    maxLines = 1,
+                )
+            }
 
             Spacer(Modifier.weight(1f))
             ReferenceLicenseBar(
@@ -234,35 +315,22 @@ fun ReferenceLoginScreen(
                     focusManager.clearFocus()
                     keyboardController?.hide()
                 },
-                onScan = {
-                    scanner.startScan()
-                        .addOnSuccessListener { barcode ->
-                            val parsed = referenceExtractLicense(barcode.rawValue.orEmpty())
-                            if (parsed.isNotBlank()) {
-                                license = parsed
-                                scanError = null
-                            } else {
-                                scanError = "کد مجوز در QR پیدا نشد"
-                            }
-                        }
-                        .addOnCanceledListener { scanError = null }
-                        .addOnFailureListener { scanError = "اسکن QR انجام نشد" }
-                },
+                onScan = { prepareAndLaunchQrScanner() },
                 onSubmit = {
                     val value = license.trim()
                     if (value.isNotBlank()) {
                         focusManager.clearFocus()
                         keyboardController?.hide()
-                        onPasswordLogin(value, value)
+                        onPasswordLogin(value, "")
                     }
                 },
             )
 
-            val visibleError = scanError ?: error?.takeIf { challengeId == null }
+            val visibleError = scanError ?: error
             if (!visibleError.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    visibleError,
+                    referenceLocalizedLoginError(visibleError),
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFF2A1116).copy(alpha = .72f), RoundedCornerShape(10.dp))
@@ -422,17 +490,6 @@ fun ReferenceLoginScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         visualTransformation = PasswordVisualTransformation(),
                     )
-                    TextButton(
-                        onClick = {
-                            if (email.contains("@")) {
-                                showEmailDialog = false
-                                onRequestEmailCode(email)
-                            }
-                        },
-                        enabled = email.contains("@") && !busy,
-                    ) {
-                        Text(quickText("ورود با کد ایمیل", "Sign in with email code"), color = QuickPingColors.TextSecondary)
-                    }
                 }
             },
             confirmButton = {
@@ -478,44 +535,6 @@ fun ReferenceLoginScreen(
                 }
             }
         }
-    } else if (challengeId != null) {
-        AlertDialog(
-            onDismissRequest = onCancelChallenge,
-            containerColor = QuickPingColors.SurfaceHigh,
-            title = {
-                Text(
-                    quickText("کد تأیید ایمیل", "Email verification code"),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = QuickPingColors.TextPrimary,
-                    textAlign = TextAlign.Center,
-                )
-            },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    OutlinedTextField(
-                        value = verificationCode,
-                        onValueChange = { verificationCode = it.filter(Char::isDigit).take(6) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    )
-                    if (!error.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(error, color = QuickPingColors.Danger, fontSize = 11.sp, textAlign = TextAlign.Center)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { onVerifyCode(verificationCode) }, enabled = verificationCode.length == 6) {
-                    Text(quickText("تأیید و ورود", "Verify and sign in"), color = QuickPingColors.PrimaryLight)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onCancelChallenge) {
-                    Text(quickText("انصراف", "Cancel"), color = QuickPingColors.TextSecondary)
-                }
-            },
-        )
     }
 }
 
@@ -656,15 +675,51 @@ private fun ReferenceLoginTerms(compact: Boolean) {
     )
 }
 
-private fun referenceExtractLicense(raw: String): String {
+internal fun referenceExtractLicense(raw: String): String {
     val value = raw.trim()
     if (value.isBlank()) return ""
-    if (!value.contains("://")) return value
+
+    if (value.startsWith("{")) {
+        runCatching { JSONObject(value) }.getOrNull()?.let { json ->
+            listOf("license", "code", "key")
+                .firstNotNullOfOrNull { key -> json.optString(key).takeIf(String::isNotBlank) }
+                ?.let(::normalizeReferenceLicense)
+                ?.takeIf(String::isNotBlank)
+                ?.let { return it }
+        }
+    }
+
+    val prefixed = value.replace(Regex("^(?i)(NIMHUB|LICENSE|LICENCE)\\s*[:=]\\s*"), "")
+    normalizeReferenceLicense(prefixed).takeIf(String::isNotBlank)?.let { return it }
+
+    if (!value.contains("://")) return ""
     return runCatching {
         val uri = Uri.parse(value)
-        listOf("license", "code", "key")
+        val candidate = listOf("license", "code", "key")
             .firstNotNullOfOrNull { uri.getQueryParameter(it)?.trim()?.takeIf(String::isNotBlank) }
-            ?: uri.lastPathSegment?.trim()?.takeIf(String::isNotBlank)
-            ?: value
-    }.getOrDefault(value)
+            ?: uri.lastPathSegment?.trim().orEmpty()
+        normalizeReferenceLicense(candidate)
+    }.getOrDefault("")
+}
+
+private fun normalizeReferenceLicense(value: String): String {
+    val candidate = value.trim().uppercase()
+    return candidate.takeIf { it.matches(Regex("[A-Z0-9_-]{6,64}")) }.orEmpty()
+}
+
+@Composable
+private fun referenceLocalizedLoginError(message: String): String = when {
+    message.contains("Email or password is incorrect", ignoreCase = true) ->
+        quickText("ایمیل یا رمز عبور صحیح نیست", "Email or password is incorrect")
+    message.contains("License is invalid or inactive", ignoreCase = true) ->
+        quickText("مجوز معتبر یا فعال نیست", "License is invalid or inactive")
+    message.contains("Google sign-in was cancelled", ignoreCase = true) ->
+        quickText("ورود با گوگل لغو شد", "Google sign-in was cancelled")
+    message.contains("No available Google account", ignoreCase = true) ->
+        quickText("حساب گوگل قابل استفاده‌ای روی دستگاه پیدا نشد", "No available Google account was found on this device")
+    message.contains("Google sign-in could not be opened", ignoreCase = true) ->
+        quickText("ورود با گوگل باز نشد", "Google sign-in could not be opened")
+    message.contains("ورود گوگل") || message.contains("Google", ignoreCase = true) ->
+        quickText("ورود با گوگل کامل نشد", "Google sign-in could not be completed")
+    else -> message
 }
