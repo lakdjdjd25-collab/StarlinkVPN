@@ -85,4 +85,88 @@ describe("PasarGuard API client", () => {
     const [templatesUrl] = fetcher.mock.calls[1] as [URL, RequestInit];
     expect(templatesUrl.pathname).toBe("/api/user_templates");
   });
+
+  it("creates a finite service with quota, expiry, groups and HWID limit", async () => {
+    const expire = new Date("2026-09-14T08:30:00.000Z");
+    const remote = {
+      id: 31,
+      username: "nh_123",
+      status: "active",
+      used_traffic: 0,
+      data_limit: 107374182400,
+      expire: expire.toISOString(),
+      hwid_limit: 3,
+      group_ids: [2, 5],
+    };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "create-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(remote), { status: 201 }));
+    const client = new PasarGuardClient({
+      baseUrl: normalizePasarGuardBaseUrl("https://panel.example.com/dashboard"),
+      username: "admin",
+      password: "test-password",
+      fetch: fetcher as unknown as typeof fetch,
+    });
+
+    const created = await client.createUser("nh_123", 107374182400n, [5, 2, 5], "NimHUB service", 3, expire);
+
+    expect(created).toEqual(expect.objectContaining({ id: 31, dataLimit: 107374182400n, maxDevices: 3 }));
+    const [url, init] = fetcher.mock.calls[1] as [URL, RequestInit];
+    expect(url.pathname).toBe("/api/user");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      username: "nh_123",
+      status: "active",
+      expire: expire.toISOString(),
+      data_limit: 107374182400,
+      data_limit_reset_strategy: "no_reset",
+      group_ids: [2, 5],
+      hwid_limit: 3,
+    });
+  });
+
+  it("updates and deletes a service through the official username route", async () => {
+    const expire = new Date("2026-10-01T00:00:00.000Z");
+    const updatedRemote = {
+      id: 44,
+      username: "nh_user/unsafe",
+      status: "disabled",
+      used_traffic: 1024,
+      data_limit: 53687091200,
+      expire: expire.toISOString(),
+      hwid_limit: 2,
+      group_ids: [7],
+    };
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "update-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(updatedRemote), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const client = new PasarGuardClient({
+      baseUrl: normalizePasarGuardBaseUrl("https://panel.example.com/dashboard"),
+      username: "admin",
+      password: "test-password",
+      fetch: fetcher as unknown as typeof fetch,
+    });
+
+    await client.updateUser("nh_user/unsafe", {
+      dataLimit: 53687091200n,
+      expiresAt: expire,
+      maxDevices: 2,
+      status: "disabled",
+    });
+    await client.deleteUser("nh_user/unsafe");
+
+    const [updateUrl, updateInit] = fetcher.mock.calls[1] as [URL, RequestInit];
+    expect(updateUrl.pathname).toBe("/api/user/nh_user%2Funsafe");
+    expect(updateInit.method).toBe("PUT");
+    expect(JSON.parse(String(updateInit.body))).toMatchObject({
+      data_limit: 53687091200,
+      expire: expire.toISOString(),
+      hwid_limit: 2,
+      status: "disabled",
+    });
+    const [deleteUrl, deleteInit] = fetcher.mock.calls[2] as [URL, RequestInit];
+    expect(deleteUrl.pathname).toBe("/api/user/nh_user%2Funsafe");
+    expect(deleteInit.method).toBe("DELETE");
+  });
 });
