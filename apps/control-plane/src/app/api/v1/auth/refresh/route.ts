@@ -1,6 +1,11 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { createOpaqueToken, hashOpaqueToken, issueToken } from "@/lib/auth";
+import {
+  createOpaqueToken,
+  hashOpaqueToken,
+  issueToken,
+  opaqueTokenServiceId,
+} from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 
@@ -12,6 +17,7 @@ const schema = z.object({
 export async function POST(request: NextRequest) {
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "Refresh token is missing");
+  const serviceId = opaqueTokenServiceId(input.data.refreshToken);
   const existing = await db.refreshToken.findUnique({
     where: { tokenHash: hashOpaqueToken(input.data.refreshToken) },
     include: { user: true, device: true },
@@ -27,7 +33,23 @@ export async function POST(request: NextRequest) {
   ) {
     return fail(401, "invalid_refresh_token", "The refresh token is invalid or expired");
   }
-  const next = createOpaqueToken();
+
+  if (serviceId) {
+    const service = await db.service.findFirst({
+      where: {
+        id: serviceId,
+        userId: existing.userId,
+        status: "ACTIVE",
+        expiresAt: { gt: new Date() },
+      },
+      select: { quotaBytes: true, usedBytes: true },
+    });
+    if (!service || service.usedBytes >= service.quotaBytes) {
+      return fail(401, "license_unavailable", "The licensed service is no longer active");
+    }
+  }
+
+  const next = createOpaqueToken(serviceId ?? undefined);
   const nextExpiresAt = new Date(Date.now() + 30 * 86_400_000);
   const rotated = await db.$transaction(async (transaction) => {
     const revoked = await transaction.refreshToken.updateMany({
@@ -48,7 +70,7 @@ export async function POST(request: NextRequest) {
   });
   if (!rotated) return fail(401, "token_reused", "The refresh token was already used");
   return ok({
-    accessToken: await issueToken(existing.user.id, existing.user.role),
+    accessToken: await issueToken(existing.user.id, existing.user.role, "access", serviceId ?? undefined),
     refreshToken: next.raw,
     expiresInSeconds: 900,
   });
