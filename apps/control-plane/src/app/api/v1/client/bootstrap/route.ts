@@ -11,7 +11,11 @@ export async function GET(request: NextRequest) {
     where: { id: auth.userId },
     include: {
       services: {
-        where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
+        where: {
+          ...(auth.serviceId ? { id: auth.serviceId } : {}),
+          status: "ACTIVE",
+          expiresAt: { gt: new Date() },
+        },
         orderBy: { expiresAt: "desc" },
         include: {
           plan: true,
@@ -33,6 +37,9 @@ export async function GET(request: NextRequest) {
   });
   if (!user || user.status !== "ACTIVE") {
     return fail(403, "account_unavailable", "The account is unavailable");
+  }
+  if (auth.serviceId && user.services.length !== 1) {
+    return fail(403, "license_unavailable", "The licensed service is no longer active");
   }
   const hasPaidService = user.services.some((service) => !service.isFree);
   const [settings, release, notifications] = await Promise.all([
