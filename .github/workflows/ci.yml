@@ -10,6 +10,165 @@ permissions:
   contents: read
 
 jobs:
+  patch-login-source:
+    if: github.ref == 'refs/heads/feat/nimhub-2.6.11-login-qr-google'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply source patch once
+        shell: bash
+        run: |
+          if [ -f .github/patch-2.6.11-login-applied ]; then
+            echo "Patch already applied"
+            exit 0
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('apps/android/src/main/java/org/quickping/app/ui/screens/ReferenceLoginScreen.kt')
+          s = p.read_text()
+          s = s.replace(
+              'import androidx.compose.foundation.text.BasicTextField\nimport androidx.compose.foundation.text.KeyboardOptions',
+              'import androidx.compose.foundation.text.BasicTextField\nimport androidx.compose.foundation.text.KeyboardActions\nimport androidx.compose.foundation.text.KeyboardOptions',
+          )
+          s = s.replace(
+              'import androidx.compose.ui.text.input.KeyboardType\nimport androidx.compose.ui.text.input.PasswordVisualTransformation',
+              'import androidx.compose.ui.text.input.ImeAction\nimport androidx.compose.ui.text.input.KeyboardType\nimport androidx.compose.ui.text.input.PasswordVisualTransformation',
+          )
+          for line in [
+              'import com.google.android.gms.common.moduleinstall.InstallStatusListener\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstall\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstallRequest\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_CANCELED\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_COMPLETED\n',
+              'import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate.InstallState.STATE_FAILED\n',
+          ]:
+              s = s.replace(line, '')
+          s = s.replace('    var scannerPreparing by remember { mutableStateOf(false) }\n', '')
+
+          start_marker = '    val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }'
+          start = s.index(start_marker)
+          end = s.index('\n    Box(Modifier.fillMaxSize().background(Color(0xFF05070B)))', start)
+          scanner_block = '''    val scanner = remember(context, scannerOptions) { GmsBarcodeScanning.getClient(context, scannerOptions) }
+    val qrNotFoundText = quickText("کد مجوز در QR پیدا نشد", "License code was not found in the QR")
+    val qrFailedText = quickText("اسکن QR انجام نشد", "QR scan failed")
+    val licenseInvalidText = quickText("کد مجوز معتبر نیست", "License code is not valid")
+
+    fun submitLicense(raw: String, fromQr: Boolean = false) {
+        val parsed = referenceExtractLicense(raw)
+        if (parsed.isBlank()) {
+            scanError = if (fromQr) qrNotFoundText else licenseInvalidText
+            return
+        }
+        license = parsed
+        scanError = null
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        onPasswordLogin(parsed, "")
+    }
+
+    fun launchQrScanner() {
+        scanError = null
+        scanner.startScan()
+            .addOnSuccessListener { barcode -> submitLicense(barcode.rawValue.orEmpty(), fromQr = true) }
+            .addOnCanceledListener { scanError = null }
+            .addOnFailureListener { scanError = qrFailedText }
+    }
+'''
+          s = s[:start] + scanner_block + s[end:]
+
+          old_call = '''                onBack = {
+                    license = ""
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                },
+                onScan = { prepareAndLaunchQrScanner() },
+                onSubmit = {
+                    val value = license.trim()
+                    if (value.isNotBlank()) {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onPasswordLogin(value, "")
+                    }
+                },'''
+          new_call = '''                onScan = { launchQrScanner() },
+                onSubmit = { submitLicense(license) },'''
+          if old_call not in s:
+              raise SystemExit('license call block not found')
+          s = s.replace(old_call, new_call, 1)
+
+          signature_old = '    onValueChange: (String) -> Unit,\n    onBack: () -> Unit,\n    onScan: () -> Unit,'
+          signature_new = '    onValueChange: (String) -> Unit,\n    onScan: () -> Unit,'
+          if signature_old not in s:
+              raise SystemExit('license signature not found')
+          s = s.replace(signature_old, signature_new, 1)
+
+          old_buttons = '''            ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onBack)
+            Spacer(Modifier.width(6.dp))
+            ReferenceLoginInnerButton(R.drawable.ic_scan, onScan)'''
+          new_buttons = '''            ReferenceLoginInnerButton(R.drawable.ic_arrow_back, onSubmit, enabled && value.isNotBlank())
+            Spacer(Modifier.width(6.dp))
+            ReferenceLoginInnerButton(R.drawable.ic_scan, onScan)'''
+          if old_buttons not in s:
+              raise SystemExit('license left buttons not found')
+          s = s.replace(old_buttons, new_buttons, 1)
+
+          ticket_old = '            ReferenceLoginInnerButton(R.drawable.ic_ticket, onSubmit, enabled && value.isNotBlank())'
+          if ticket_old not in s:
+              raise SystemExit('license ticket button not found')
+          s = s.replace(ticket_old, '            ReferenceLoginInnerButton(R.drawable.ic_ticket, onClick = {})', 1)
+
+          keyboard_old = '                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),'
+          keyboard_new = '                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),\n                    keyboardActions = KeyboardActions(onDone = { if (enabled && value.isNotBlank()) onSubmit() }),'
+          if keyboard_old not in s:
+              raise SystemExit('license keyboard options not found')
+          s = s.replace(keyboard_old, keyboard_new, 1)
+
+          error_old = '    message.contains("License is invalid or inactive", ignoreCase = true) ->\n        quickText("مجوز معتبر یا فعال نیست", "License is invalid or inactive")'
+          error_new = '    message.contains("License is invalid", ignoreCase = true) ->\n        quickText("مجوز نامعتبر، منقضی یا بدون حجم باقی‌مانده است", "License is invalid, expired, or has no remaining quota")\n    message.contains("This license allows up to", ignoreCase = true) ->\n        quickText("تعداد دستگاه‌های مجاز این مجوز تکمیل شده است", "The device limit for this license has been reached")'
+          if error_old not in s:
+              raise SystemExit('license error mapping not found')
+          s = s.replace(error_old, error_new, 1)
+          p.write_text(s)
+          PY
+
+          mkdir -p apps/android/src/test/java/org/quickping/app/ui/screens
+          cat > apps/android/src/test/java/org/quickping/app/ui/screens/ReferenceLoginLicenseTest.kt <<'EOF'
+          package org.quickping.app.ui.screens
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class ReferenceLoginLicenseTest {
+              @Test fun plainLicenseIsNormalized() {
+                  assertEquals("ABC123-XY", referenceExtractLicense("  abc123-xy  "))
+              }
+
+              @Test fun prefixedLicenseIsNormalized() {
+                  assertEquals("ABC123-XY", referenceExtractLicense("license: abc123-xy"))
+              }
+
+              @Test fun malformedLicenseIsRejected() {
+                  assertTrue(referenceExtractLicense("bad code with spaces").isBlank())
+              }
+          }
+          EOF
+          touch .github/patch-2.6.11-login-applied
+          git diff --check
+          git config user.name "lakdjdjd25-collab"
+          git config user.email "lakdjdjd25@gmail.com"
+          git add apps/android/src/main/java/org/quickping/app/ui/screens/ReferenceLoginScreen.kt \
+                  apps/android/src/test/java/org/quickping/app/ui/screens/ReferenceLoginLicenseTest.kt \
+                  .github/patch-2.6.11-login-applied
+          git commit -m "fix(android): make QR and license login actionable"
+          git push origin HEAD:feat/nimhub-2.6.11-login-qr-google
+
   control-plane:
     runs-on: ubuntu-latest
     timeout-minutes: 20
