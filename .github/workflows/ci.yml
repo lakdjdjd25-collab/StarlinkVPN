@@ -43,21 +43,20 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: quickping-android-debug-keystore-v2
-      - name: Ensure stable debug keystore
+      - name: Verify canonical debug signing key
         run: |
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair -noprompt \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000
+          KEYSTORE="$HOME/.android/debug.keystore"
+          EXPECTED_SHA1="AF:40:02:16:67:06:8E:78:AA:6F:E3:D6:67:04:92:2B:E6:82:A0:FE"
+          if [ ! -s "$KEYSTORE" ]; then
+            echo "Canonical NimHUB debug keystore is unavailable; refusing to create a new OAuth identity."
+            exit 1
           fi
-          test -s "$HOME/.android/debug.keystore"
+          ACTUAL_SHA1=$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey -keypass android | sed -n 's/^[[:space:]]*SHA1: //p' | head -n 1)
+          echo "Android OAuth signing SHA1: $ACTUAL_SHA1"
+          if [ "$ACTUAL_SHA1" != "$EXPECTED_SHA1" ]; then
+            echo "Signing fingerprint changed; refusing to build an APK that would break Google OAuth."
+            exit 1
+          fi
       - uses: actions/cache/restore@v4
         id: libbox-cache
         with:
@@ -78,17 +77,12 @@ jobs:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
-      - uses: actions/cache/save@v4
-        if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
-        with:
-          path: ~/.android/debug.keystore
-          key: quickping-android-debug-keystore-v2
       - run: |
           APK=$(find apps/android/build/outputs/apk/debug -name '*.apk' | head -n 1)
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: QuickPing-debug
+          name: NimHUB-Vpn-debug
           path: apps/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
