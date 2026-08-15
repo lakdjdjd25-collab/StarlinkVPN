@@ -212,7 +212,7 @@ class QuickPingApiClient(baseUrl: String) {
         code: String,
         newPassword: String,
     ) {
-        request(
+        requestNoData(
             method = "POST",
             path = "/api/v1/client/account/password/confirm",
             body = JSONObject()
@@ -224,7 +224,7 @@ class QuickPingApiClient(baseUrl: String) {
     }
 
     fun changePassword(accessToken: String, currentPassword: String, newPassword: String) {
-        request(
+        requestNoData(
             method = "POST",
             path = "/api/v1/client/account/password/change",
             body = JSONObject()
@@ -235,7 +235,7 @@ class QuickPingApiClient(baseUrl: String) {
     }
 
     fun deleteAccount(accessToken: String, password: String) {
-        request(
+        requestNoData(
             method = "DELETE",
             path = "/api/v1/client/account",
             body = JSONObject().put("password", password),
@@ -249,6 +249,43 @@ class QuickPingApiClient(baseUrl: String) {
         body: JSONObject? = null,
         accessToken: String? = null,
     ): JSONObject {
+        val response = execute(method, path, body, accessToken)
+        val envelope = parseEnvelope(response.status, response.text)
+        if (response.status !in 200..299) throwApiError(response.status, envelope)
+        return envelope.optJSONObject("data")
+            ?: throw ApiException(response.status, "invalid_response", "دادهٔ پاسخ سرور ناقص است")
+    }
+
+    private fun requestNoData(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        accessToken: String? = null,
+    ) {
+        val response = execute(method, path, body, accessToken)
+        if (response.status !in 200..299) {
+            val envelope = response.text.takeIf { it.isNotBlank() }?.let { text ->
+                runCatching { JSONObject(text) }.getOrNull()
+            }
+            if (envelope != null) throwApiError(response.status, envelope)
+            throw ApiException(
+                response.status,
+                "http_${response.status}",
+                "سرور درخواست را با خطای HTTP ${response.status} رد کرد",
+            )
+        }
+        if (response.text.isBlank()) return
+        runCatching { JSONObject(response.text) }.getOrElse {
+            throw ApiException(response.status, "invalid_response", "پاسخ موفق سرور ساختار معتبری ندارد")
+        }
+    }
+
+    private fun execute(
+        method: String,
+        path: String,
+        body: JSONObject?,
+        accessToken: String?,
+    ): RawResponse {
         val endpoint = URL(origin)
         require(endpoint.protocol == "https" || (endpoint.protocol == "http" && endpoint.host == "10.0.2.2")) {
             "QuickPing API must use HTTPS outside the Android emulator"
@@ -275,23 +312,27 @@ class QuickPingApiClient(baseUrl: String) {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
-            val envelope = runCatching { JSONObject(text) }.getOrElse {
-                throw ApiException(status, "invalid_response", "پاسخ سرور قابل خواندن نیست")
-            }
-            if (status !in 200..299) {
-                val error = envelope.optJSONObject("error")
-                throw ApiException(
-                    status = status,
-                    code = error?.optString("code").orEmpty().ifBlank { "request_failed" },
-                    message = error?.optString("message").orEmpty().ifBlank { "درخواست انجام نشد" },
-                )
-            }
-            return envelope.optJSONObject("data")
-                ?: throw ApiException(status, "invalid_response", "دادهٔ پاسخ سرور ناقص است")
+            return RawResponse(status, text)
         } finally {
             connection.disconnect()
         }
     }
+
+    private fun parseEnvelope(status: Int, text: String): JSONObject =
+        runCatching { JSONObject(text) }.getOrElse {
+            throw ApiException(status, "invalid_response", "پاسخ سرور قابل خواندن نیست")
+        }
+
+    private fun throwApiError(status: Int, envelope: JSONObject): Nothing {
+        val error = envelope.optJSONObject("error")
+        throw ApiException(
+            status = status,
+            code = error?.optString("code").orEmpty().ifBlank { "request_failed" },
+            message = error?.optString("message").orEmpty().ifBlank { "درخواست انجام نشد" },
+        )
+    }
+
+    private data class RawResponse(val status: Int, val text: String)
 }
 
 private fun JSONObject.toUserInfo() = UserInfo(
