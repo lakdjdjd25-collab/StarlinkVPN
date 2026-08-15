@@ -10,6 +10,9 @@ const PURPOSE = "password_change";
 export async function POST(request: NextRequest) {
   const auth = await requireBearer(request, ["CUSTOMER"]);
   if (!auth.ok) return auth.response;
+  if (auth.serviceId) {
+    return fail(403, "license_session_not_allowed", "برای دریافت کد تغییر گذرواژه باید با حساب کاربری وارد شوید");
+  }
 
   const user = await db.user.findFirst({
     where: { id: auth.userId, status: "ACTIVE" },
