@@ -10,6 +10,9 @@ export async function GET(
   const auth = await requireBearer(request);
   if (!auth.ok) return auth.response;
   const { serviceId } = await context.params;
+  if (auth.serviceId && auth.serviceId !== serviceId) {
+    return fail(403, "service_scope_mismatch", "This license cannot access the requested service");
+  }
   const nodeId = request.nextUrl.searchParams.get("nodeId");
   if (!nodeId) return fail(400, "node_required", "A server must be selected");
   const service = await db.service.findFirst({
