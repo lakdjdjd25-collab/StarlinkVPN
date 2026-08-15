@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +76,8 @@ fun AccountScreen(
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var repeatedNewPassword by remember { mutableStateOf("") }
+    var showNewPassword by remember { mutableStateOf(false) }
+    var showRepeatedNewPassword by remember { mutableStateOf(false) }
     var deletionPassword by remember { mutableStateOf("") }
 
     QuickPingScreen {
@@ -109,6 +112,8 @@ fun AccountScreen(
                     currentPassword = ""
                     newPassword = ""
                     repeatedNewPassword = ""
+                    showNewPassword = false
+                    showRepeatedNewPassword = false
                     showPasswordSheet = true
                 },
                 onDelete = {
@@ -195,7 +200,16 @@ fun AccountScreen(
                     singleLine = true,
                     label = { Text(quickText("گذرواژهٔ جدید", "New password")) },
                     leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
-                    visualTransformation = PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Icon(
+                            painter = painterResource(if (showNewPassword) R.drawable.ic_eye_off else R.drawable.ic_eye_open),
+                            contentDescription = if (showNewPassword) quickText("مخفی کردن گذرواژه", "Hide password") else quickText("نمایش گذرواژه", "Show password"),
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable { showNewPassword = !showNewPassword },
+                        )
+                    },
+                    visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     shape = RoundedCornerShape(16.dp),
                     colors = accountFieldColors(),
                 )
@@ -207,7 +221,16 @@ fun AccountScreen(
                     singleLine = true,
                     label = { Text(quickText("تکرار گذرواژهٔ جدید", "Repeat new password")) },
                     leadingIcon = { Icon(painterResource(R.drawable.ic_key), null) },
-                    visualTransformation = PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Icon(
+                            painter = painterResource(if (showRepeatedNewPassword) R.drawable.ic_eye_off else R.drawable.ic_eye_open),
+                            contentDescription = if (showRepeatedNewPassword) quickText("مخفی کردن گذرواژه", "Hide password") else quickText("نمایش گذرواژه", "Show password"),
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable { showRepeatedNewPassword = !showRepeatedNewPassword },
+                        )
+                    },
+                    visualTransformation = if (showRepeatedNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     shape = RoundedCornerShape(16.dp),
                     colors = accountFieldColors(),
                 )
