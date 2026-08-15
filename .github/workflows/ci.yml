@@ -78,6 +78,13 @@ jobs:
           path: apps/android/libs/libbox.aar
           key: libbox-android-v1.13.18-${{ hashFiles('scripts/build-sing-box-android.sh') }}
       - run: python3 scripts/apply-login-fixes-2.6.11.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NimHUB-2.6.11-patched-source
+          path: |
+            apps/android/src/main/java/org/quickping/app/ui/screens/ReferenceLoginScreen.kt
+            apps/android/src/test/java/org/quickping/app/ui/screens/ReferenceLoginLicenseTest.kt
+          if-no-files-found: error
       - run: ./gradlew :apps:android:assembleDebug :apps:android:testDebugUnitTest --stacktrace
       - uses: actions/cache/save@v4
         if: steps.debug-keystore-cache.outputs.cache-hit != 'true'
