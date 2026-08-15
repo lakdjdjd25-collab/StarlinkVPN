@@ -19,8 +19,10 @@ const STALE_AFTER_MS = 5 * 60 * 1000;
 
 export type BindPasarGuardOptions = {
   isFree?: boolean;
+  planId?: string;
   planName?: string;
   serviceName?: string;
+  license?: string;
   allowAdditionalBinding?: boolean;
   expectedQuotaBytes?: bigint;
 };
@@ -60,15 +62,20 @@ async function applyPasarGuardSync(
   return db.$transaction(async (tx) => {
     const binding = await tx.pasarGuardBinding.findUnique({
       where: { id: bindingId },
-      select: { id: true, serviceId: true },
+      select: {
+        id: true,
+        serviceId: true,
+        service: { select: { status: true } },
+      },
     });
     if (!binding) throw new PasarGuardError("invalid_response", "اتصال پاسارگارد در QuickPing پیدا نشد");
 
     await tx.service.update({
       where: { id: binding.serviceId },
       data: {
-        name: user.username,
-        status: state.status,
+        status: binding.service.status === "CANCELLED" && state.status === "SUSPENDED"
+          ? "CANCELLED"
+          : state.status,
         quotaBytes: state.quotaBytes,
         usedBytes: state.usedBytes,
         expiresAt: state.expiresAt,
@@ -222,36 +229,39 @@ export async function bindPasarGuardUser(
   let bindingId = existing?.id;
   if (!bindingId) {
     const isFree = options.isFree ?? false;
-    const planName = options.planName ?? "PasarGuard";
     const binding = await db.$transaction(async (tx) => {
-      const plan = await tx.plan.upsert({
-        where: { name: planName },
-        update: {
-          interval: isFree ? "FREE" : "CUSTOM",
-          price: 0,
-          dataLimitBytes: state.quotaBytes,
-          durationDays: 3650,
-          maxDevices: state.maxDevices,
-          isActive: true,
-          isPublic: false,
-        },
-        create: {
-          name: planName,
-          interval: isFree ? "FREE" : "CUSTOM",
-          price: 0,
-          durationDays: 3650,
-          dataLimitBytes: state.quotaBytes,
-          maxDevices: state.maxDevices,
-          isActive: true,
-          isPublic: false,
-        },
-      });
+      const plan = options.planId
+        ? await tx.plan.findFirst({ where: { id: options.planId, isActive: true } })
+        : await tx.plan.upsert({
+            where: { name: options.planName ?? "PasarGuard" },
+            update: {
+              interval: isFree ? "FREE" : "CUSTOM",
+              price: 0,
+              dataLimitBytes: state.quotaBytes,
+              durationDays: 3650,
+              maxDevices: state.maxDevices,
+              isActive: true,
+              isPublic: false,
+            },
+            create: {
+              name: options.planName ?? "PasarGuard",
+              interval: isFree ? "FREE" : "CUSTOM",
+              price: 0,
+              durationDays: 3650,
+              dataLimitBytes: state.quotaBytes,
+              maxDevices: state.maxDevices,
+              isActive: true,
+              isPublic: false,
+            },
+          });
+      if (!plan) throw new PasarGuardError("invalid_response", "پلن انتخاب‌شده برای سرویس پاسارگارد فعال نیست");
+
       const service = await tx.service.create({
         data: {
           userId: quickPingUser.id,
           planId: plan.id,
           name: options.serviceName ?? user.username,
-          license: `${isFree ? "FREE" : "PG"}-${randomBytes(12).toString("hex").toUpperCase()}`,
+          license: options.license ?? `${isFree ? "FREE" : "PG"}-${randomBytes(12).toString("hex").toUpperCase()}`,
           status: state.status,
           quotaBytes: state.quotaBytes,
           usedBytes: state.usedBytes,
