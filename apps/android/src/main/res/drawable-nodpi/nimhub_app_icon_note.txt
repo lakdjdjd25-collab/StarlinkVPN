@@ -1,1 +1,0 @@
-NimHUB Vpn launcher icon source: approved crowned blue/white 3D N emblem. Binary launcher resource is stored as drawable-nodpi/ic_app.webp.
