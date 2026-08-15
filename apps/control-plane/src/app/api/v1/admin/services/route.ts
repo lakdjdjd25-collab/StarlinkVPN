@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import {
   createPasarGuardClient,
   PasarGuardError,
+  type PasarGuardClient,
   type PasarGuardUser,
 } from "@/lib/pasarguard/client";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
@@ -84,13 +85,14 @@ export async function POST(request: NextRequest) {
     return fail(400, "finite_quota_required", "برای سرویس مدیریت‌شده پاسارگارد باید حجم پلن بیشتر از صفر باشد");
   }
 
-  const client = createPasarGuardClient();
   const username = remoteUsername(user.id, input.data.license);
   const expiresAt = new Date(Date.now() + input.data.days * 86_400_000);
+  let client: PasarGuardClient | null = null;
   let remote: PasarGuardUser | null = null;
   let createdRemote = false;
 
   try {
+    client = createPasarGuardClient();
     const visibleUsers = await client.listUsers();
     const groups = remoteGroupIds(visibleUsers);
     remote = visibleUsers.find((item) => item.username === username) ?? null;
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest) {
       if (partial?.service.userId === user.id && partial.service.license === input.data.license) {
         await db.service.delete({ where: { id: partial.service.id } }).catch(() => undefined);
       }
-      if (createdRemote) await client.deleteUser(remote.username).catch(() => undefined);
+      if (createdRemote && client) await client.deleteUser(remote.username).catch(() => undefined);
     }
     return providerFailure(error);
   }
