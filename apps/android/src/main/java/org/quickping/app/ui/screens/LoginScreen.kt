@@ -1,7 +1,11 @@
 package org.quickping.app.ui.screens
 
 import android.net.Uri
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -45,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -131,6 +136,16 @@ fun LoginScreen(
         tween(LOGIN_MOTION_MS),
         label = "loginLowerGap",
     )
+    val cursorTransition = rememberInfiniteTransition(label = "welcomeCursor")
+    val cursorAlpha by cursorTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(560),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "welcomeCursorAlpha",
+    )
 
     val scannerOptions = remember {
         GmsBarcodeScannerOptions.Builder()
@@ -198,7 +213,7 @@ fun LoginScreen(
             Spacer(Modifier.height(heroTop))
             Image(
                 painter = painterResource(R.drawable.ic_logo_welcome),
-                contentDescription = "QuickPing",
+                contentDescription = "NimHUB Vpn",
                 modifier = Modifier.size(logoWidth, logoHeight),
                 contentScale = ContentScale.Fit,
             )
@@ -208,6 +223,7 @@ fun LoginScreen(
                     Modifier
                         .width(2.dp)
                         .height(18.dp)
+                        .alpha(cursorAlpha)
                         .background(Color(0xFF347BFF), CircleShape),
                 )
                 Spacer(Modifier.width(7.dp))
