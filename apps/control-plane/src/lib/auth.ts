@@ -11,6 +11,7 @@ export type SessionClaims = JWTPayload & {
   sub: string;
   role: UserRole;
   kind: "access" | "admin";
+  serviceId?: string;
 };
 
 function secret(): Uint8Array {
@@ -28,8 +29,9 @@ export async function issueToken(
   userId: string,
   role: UserRole,
   kind: "access" | "admin" = "access",
+  serviceId?: string,
 ): Promise<string> {
-  return new SignJWT({ role, kind })
+  return new SignJWT({ role, kind, ...(kind === "access" && serviceId ? { serviceId } : {}) })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuer(issuer)
@@ -51,6 +53,9 @@ export async function verifyToken(
   if (expectedKind && payload.kind !== expectedKind) {
     throw new Error("Unexpected token kind");
   }
+  if (payload.serviceId !== undefined && (typeof payload.serviceId !== "string" || !payload.serviceId)) {
+    throw new Error("Invalid service scope");
+  }
   return payload;
 }
 
@@ -65,9 +70,17 @@ export async function verifyPassword(
   return compare(password, passwordHash);
 }
 
-export function createOpaqueToken(): { raw: string; hash: string } {
-  const raw = randomBytes(48).toString("base64url");
+export function createOpaqueToken(serviceId?: string): { raw: string; hash: string } {
+  const entropy = randomBytes(48).toString("base64url");
+  const raw = serviceId ? `${serviceId}.${entropy}` : entropy;
   return { raw, hash: hashOpaqueToken(raw) };
+}
+
+export function opaqueTokenServiceId(raw: string): string | null {
+  const separator = raw.indexOf(".");
+  if (separator <= 0) return null;
+  const serviceId = raw.slice(0, separator);
+  return /^[A-Za-z0-9_-]{1,128}$/.test(serviceId) ? serviceId : null;
 }
 
 export function hashOpaqueToken(raw: string): string {
