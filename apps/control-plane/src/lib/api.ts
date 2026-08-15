@@ -36,7 +36,7 @@ export async function requireBearer(
   request: Request,
   roles?: UserRole[],
 ): Promise<
-  | { ok: true; userId: string; role: UserRole }
+  | { ok: true; userId: string; role: UserRole; serviceId: string | null }
   | { ok: false; response: NextResponse }
 > {
   const token = bearerToken(request);
@@ -54,7 +54,12 @@ export async function requireBearer(
         response: fail(403, "forbidden", "This account cannot perform the action"),
       };
     }
-    return { ok: true, userId: claims.sub, role: claims.role };
+    return {
+      ok: true,
+      userId: claims.sub,
+      role: claims.role,
+      serviceId: claims.serviceId ?? null,
+    };
   } catch {
     return {
       ok: false,
