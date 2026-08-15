@@ -29,20 +29,59 @@ export async function POST(request: NextRequest) {
     : service?.user ?? null;
 
   if (!user || user.status !== "ACTIVE") {
-    return fail(401, emailLogin ? "invalid_credentials" : "invalid_license", emailLogin ? "Email or password is incorrect" : "License is invalid or inactive");
+    return fail(
+      401,
+      emailLogin ? "invalid_credentials" : "invalid_license",
+      emailLogin ? "Email or password is incorrect" : "License is invalid or inactive",
+    );
   }
 
   if (emailLogin) {
     if (!user.passwordHash || !(await verifyPassword(input.data.password, user.passwordHash))) {
       return fail(401, "invalid_credentials", "Email or password is incorrect");
     }
-  } else if (!service || service.status !== "ACTIVE" || service.expiresAt.getTime() <= Date.now()) {
-    return fail(401, "invalid_license", "License is invalid or inactive");
+  } else if (
+    !service ||
+    service.status !== "ACTIVE" ||
+    service.expiresAt.getTime() <= Date.now() ||
+    service.usedBytes >= service.quotaBytes
+  ) {
+    return fail(401, "invalid_license", "License is invalid, expired, or has no remaining quota");
   }
 
-  const opaque = createOpaqueToken();
+  if (service) {
+    const now = new Date();
+    const [existingInstallation, activeDeviceCount] = await Promise.all([
+      db.device.findUnique({
+        where: { installationId: input.data.installationId },
+        select: { userId: true, revokedAt: true },
+      }),
+      db.device.count({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+          refreshTokens: {
+            some: {
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+          },
+        },
+      }),
+    ]);
+    const sameActiveInstallation = existingInstallation?.userId === user.id && !existingInstallation.revokedAt;
+    if (!sameActiveInstallation && activeDeviceCount >= service.maxDevices) {
+      return fail(
+        409,
+        "device_limit_reached",
+        `This license allows up to ${service.maxDevices} active device${service.maxDevices === 1 ? "" : "s"}`,
+      );
+    }
+  }
+
+  const opaque = createOpaqueToken(service?.id);
   const expiresAt = new Date(Date.now() + 30 * 86_400_000);
-  const accessToken = await issueToken(user.id, user.role);
+  const accessToken = await issueToken(user.id, user.role, "access", service?.id);
   await db.$transaction(async (transaction) => {
     const device = await transaction.device.upsert({
       where: { installationId: input.data.installationId },
