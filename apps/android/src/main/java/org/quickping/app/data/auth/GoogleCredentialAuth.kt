@@ -17,40 +17,32 @@ class GoogleCredentialAuth(private val activity: Activity) {
     private val credentialManager by lazy { CredentialManager.create(activity) }
 
     suspend fun getIdToken(challenge: GoogleNonceChallenge): String {
-        // The user explicitly tapped the Google button, so start with Google's
-        // dedicated button flow.  Do not turn an actual user cancellation into
-        // a second unexpected account picker.
+        // Prefer Google's explicit button flow because the user tapped the
+        // Google button. Some provider/device combinations reject that option
+        // even though the regular Google account picker is available, so any
+        // non-cancellation credential failure falls back to the picker.
+        var directFailure: GetCredentialException? = null
         try {
             return requestDirectGoogleSignIn(challenge)
         } catch (_: GetCredentialCancellationException) {
-            throw ApiException(
-                status = 0,
-                code = "google_cancelled",
-                message = "Google sign-in was cancelled",
-            )
-        } catch (_: NoCredentialException) {
-            // Google documents NoCredentialException as the signal to retry with
-            // non-authorized accounts enabled. This covers first-time sign-ins.
+            throw cancelled()
         } catch (error: GetCredentialException) {
-            throw credentialFailure(error)
+            directFailure = error
         }
 
         try {
             return requestGoogleAccountPicker(challenge)
         } catch (_: GetCredentialCancellationException) {
-            throw ApiException(
-                status = 0,
-                code = "google_cancelled",
-                message = "Google sign-in was cancelled",
-            )
-        } catch (_: NoCredentialException) {
+            throw cancelled()
+        } catch (error: NoCredentialException) {
+            if (directFailure != null) throw credentialFailure(error, directFailure)
             throw ApiException(
                 status = 0,
                 code = "google_no_account",
                 message = "No available Google account was found on this device",
             )
         } catch (error: GetCredentialException) {
-            throw credentialFailure(error)
+            throw credentialFailure(error, directFailure)
         }
     }
 
@@ -77,11 +69,26 @@ class GoogleCredentialAuth(private val activity: Activity) {
         return credentialManager.getCredential(activity, request).credential.toIdToken()
     }
 
-    private fun credentialFailure(error: GetCredentialException) = ApiException(
+    private fun cancelled() = ApiException(
         status = 0,
-        code = "google_credential_failed",
-        message = "Google sign-in could not be opened (${error.javaClass.simpleName})",
+        code = "google_cancelled",
+        message = "Google sign-in was cancelled",
     )
+
+    private fun credentialFailure(
+        error: GetCredentialException,
+        firstFailure: GetCredentialException? = null,
+    ): ApiException {
+        val failures = listOfNotNull(firstFailure, error)
+            .map { it.javaClass.simpleName }
+            .distinct()
+            .joinToString(" → ")
+        return ApiException(
+            status = 0,
+            code = "google_credential_failed",
+            message = "Google sign-in could not be opened ($failures)",
+        )
+    }
 
     private fun androidx.credentials.Credential.toIdToken(): String {
         if (this !is CustomCredential || type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
