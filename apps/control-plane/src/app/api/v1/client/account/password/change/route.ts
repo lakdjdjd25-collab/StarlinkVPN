@@ -10,7 +10,10 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireBearer(request, ["CUSTOMER"]);
+  // Account owners must be able to rotate their own password regardless of
+  // whether the account is a customer or the primary administrator. Support
+  // accounts intentionally remain excluded from this self-service endpoint.
+  const auth = await requireBearer(request, ["CUSTOMER", "ADMIN"]);
   if (!auth.ok) return auth.response;
 
   const input = schema.safeParse(await request.json().catch(() => null));
