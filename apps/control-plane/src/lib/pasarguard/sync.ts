@@ -35,17 +35,20 @@ function safeSyncError(error: unknown): string {
   return "همگام‌سازی پاسارگارد با خطای پیش‌بینی‌نشده متوقف شد";
 }
 
-function serviceState(user: PasarGuardUser) {
+function serviceState(user: PasarGuardUser, usageOffsetBytes = 0n, fallbackQuotaBytes?: bigint) {
   const now = Date.now();
   const expired = user.expiresAt ? user.expiresAt.getTime() <= now : false;
   const active = user.status.toLowerCase() === "active" && !expired;
-  const quotaBytes = user.dataLimit ?? (user.usedTraffic > UNLIMITED_QUOTA_BYTES
+  const remoteQuotaBytes = user.dataLimit ?? (user.usedTraffic > UNLIMITED_QUOTA_BYTES
     ? user.usedTraffic + 1024n ** 4n
     : UNLIMITED_QUOTA_BYTES);
+  const quotaBytes = user.dataLimit === null && usageOffsetBytes > 0n && fallbackQuotaBytes !== undefined
+    ? fallbackQuotaBytes
+    : usageOffsetBytes + remoteQuotaBytes;
   return {
     status: expired ? "EXPIRED" as const : active ? "ACTIVE" as const : "SUSPENDED" as const,
     quotaBytes,
-    usedBytes: user.usedTraffic,
+    usedBytes: usageOffsetBytes + user.usedTraffic,
     expiresAt: user.expiresAt ?? UNLIMITED_EXPIRY,
     maxDevices: user.maxDevices ?? 1,
   };
@@ -61,17 +64,18 @@ async function applyPasarGuardSync(
   user: PasarGuardUser,
   normalized: NormalizedPasarGuardConfig,
 ) {
-  const state = serviceState(user);
   return db.$transaction(async (tx) => {
     const binding = await tx.pasarGuardBinding.findUnique({
       where: { id: bindingId },
       select: {
         id: true,
         serviceId: true,
-        service: { select: { status: true } },
+        usageOffsetBytes: true,
+        service: { select: { status: true, quotaBytes: true } },
       },
     });
     if (!binding) throw new PasarGuardError("invalid_response", "اتصال پاسارگارد در QuickPing پیدا نشد");
+    const state = serviceState(user, binding.usageOffsetBytes, binding.service.quotaBytes);
 
     await tx.service.update({
       where: { id: binding.serviceId },
@@ -331,26 +335,21 @@ export async function syncPasarGuardBinding(
 export async function refreshPasarGuardBindingsForUser(userId: string): Promise<void> {
   if (!await isPasarGuardConfigured()) return;
   try {
+    // Creating the active client also imports a legacy ENV provider once when needed.
+    const client = await createPasarGuardClient();
+    if (!client.providerId) return;
     const staleBefore = new Date(Date.now() - STALE_AFTER_MS);
     const bindings = await db.pasarGuardBinding.findMany({
       where: {
         service: { userId },
+        providerId: client.providerId,
         OR: [{ lastSyncAt: null }, { lastSyncAt: { lt: staleBefore } }],
       },
-      select: { id: true, providerId: true },
+      select: { id: true },
     });
     if (!bindings.length) return;
-    const clients = new Map<string, PasarGuardClient>();
-    await Promise.allSettled(bindings.map(async (binding) => {
-      const key = binding.providerId ?? "active";
-      let client = clients.get(key);
-      if (!client) {
-        client = await createPasarGuardClientForProvider(binding.providerId);
-        clients.set(key, client);
-      }
-      await syncPasarGuardBinding(binding.id, client);
-    }));
+    await Promise.allSettled(bindings.map((binding) => syncPasarGuardBinding(binding.id, client)));
   } catch {
-    // A stale provider must not prevent the client from receiving its last known-good bootstrap.
+    // A provider outage must not prevent the client from receiving its last known-good bootstrap.
   }
 }

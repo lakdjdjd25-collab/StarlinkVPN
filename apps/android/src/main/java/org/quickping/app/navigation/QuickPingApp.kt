@@ -40,6 +40,7 @@ import org.quickping.app.ui.screens.SplashScreen
 import org.quickping.app.ui.screens.SplitTunnelingScreen
 import org.quickping.app.ui.screens.VersionScreen
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -210,6 +211,13 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Home) {
+                LaunchedEffect(Unit) {
+                    quickPingViewModel.refreshAccountState()
+                    while (true) {
+                        delay(60_000)
+                        quickPingViewModel.refreshAccountState()
+                    }
+                }
                 LaunchedEffect(
                     state.settings.autoPing,
                     state.servers.joinToString(separator = ",", transform = { it.id }),

@@ -260,6 +260,7 @@ model PasarGuardBinding {
   providerId        String?
   externalUserId    BigInt
   externalUsername  String
+  usageOffsetBytes  BigInt    @default(0)
   configFingerprint String?
   lastSyncAt        DateTime?
   lastError         String?
