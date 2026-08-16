@@ -1,3 +1,4 @@
+-- Create an in-app notification whenever an account transitions to SUSPENDED.
 CREATE OR REPLACE FUNCTION "nimhub_notify_suspended_user"()
 RETURNS trigger AS $$
 DECLARE
