@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "@/vendor/qrcode";
 
-type Template = {
+type ProviderProfile = {
+  key: string;
+  kind: "template" | "group";
   id: number;
   name: string;
   groupIds: number[];
@@ -64,7 +66,7 @@ function qrSvg(value: string): string {
 
 export function ManagedLicenseForm() {
   const router = useRouter();
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [profiles, setProfiles] = useState<ProviderProfile[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -76,12 +78,16 @@ export function ManagedLicenseForm() {
     void fetch("/api/v1/admin/licenses", { cache: "no-store" })
       .then(async (response) => {
         const body = await response.json().catch(() => null) as {
-          data?: { templates?: Template[] };
+          data?: { profiles?: ProviderProfile[] };
           error?: { message?: string };
         } | null;
         if (!active) return;
         if (!response.ok) setError(body?.error?.message ?? "دریافت قالب‌های پاسارگارد انجام نشد");
-        else setTemplates(body?.data?.templates ?? []);
+        else {
+          const items = body?.data?.profiles ?? [];
+          setProfiles(items);
+          if (!items.length) setError("هیچ قالب یا گروه قابل‌استفاده‌ای در پاسارگارد پیدا نشد");
+        }
       })
       .catch(() => {
         if (active) setError("ارتباط با سرور برای دریافت قالب‌ها برقرار نشد");
@@ -110,7 +116,7 @@ export function ManagedLicenseForm() {
           quotaGb: Number(data.get("quotaGb")),
           days: Number(data.get("days")),
           maxDevices: Number(data.get("maxDevices")),
-          templateId: Number(data.get("templateId")),
+          profileKey: data.get("profileKey"),
           note: data.get("note"),
         }),
       });
@@ -167,15 +173,21 @@ export function ManagedLicenseForm() {
           <div className="field"><label>تعداد دستگاه متصل</label><input className="input" name="maxDevices" type="number" min="1" max="1000" defaultValue="2" required /></div>
           <div className="field">
             <label>قالب/گروه پاسارگارد</label>
-            <select className="select" name="templateId" required disabled={loadingTemplates || !templates.length}>
-              {templates.map((template) => <option value={template.id} key={template.id}>{template.name} — گروه {template.groupIds.join("،")}</option>)}
+            <select className="select" name="profileKey" required disabled={loadingTemplates || !profiles.length}>
+              {loadingTemplates ? <option value="">در حال دریافت از پاسارگارد…</option> : null}
+              {!loadingTemplates && !profiles.length ? <option value="">قالب یا گروهی موجود نیست</option> : null}
+              {profiles.map((profile) => (
+                <option value={profile.key} key={profile.key}>
+                  {profile.kind === "template" ? "قالب" : "گروه"}: {profile.name} — گروه {profile.groupIds.join("،")}
+                </option>
+              ))}
             </select>
           </div>
         </div>
         <div className="field"><label>یادداشت (اختیاری)</label><input className="input" name="note" maxLength={500} /></div>
         {error ? <p className="error">{error}</p> : null}
         {message ? <p style={{ color: "var(--success)", fontSize: 13 }}>{message}</p> : null}
-        <button className="button" disabled={busy || loadingTemplates || !templates.length} style={{ marginTop: 14 }}>
+        <button className="button" disabled={busy || loadingTemplates || !profiles.length} style={{ marginTop: 14 }}>
           {busy ? "در حال ساخت و همگام‌سازی…" : "افزودن کاربر و صدور مجوز"}
         </button>
       </form>
