@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       include: { user: true, pasarGuardBinding: { select: { id: true } } },
     });
   }
-  const user = emailLogin
+  let user = emailLogin
     ? await db.user.findUnique({ where: { email: credential.toLowerCase() } })
     : service?.user ?? null;
 
@@ -55,13 +55,38 @@ export async function POST(request: NextRequest) {
     if (!user.passwordHash || !(await verifyPassword(input.data.password, user.passwordHash))) {
       return fail(401, "invalid_credentials", "Email or password is incorrect");
     }
-  } else if (
+    if (user.managedAccount) {
+      service = await db.service.findFirst({
+        where: {
+          userId: user.id,
+          pasarGuardBinding: { isNot: null },
+        },
+        orderBy: { createdAt: "desc" },
+        include: { user: true, pasarGuardBinding: { select: { id: true } } },
+      });
+      if (service?.pasarGuardBinding) {
+        await syncPasarGuardBinding(service.pasarGuardBinding.id).catch(() => undefined);
+        service = await db.service.findUnique({
+          where: { id: service.id },
+          include: { user: true, pasarGuardBinding: { select: { id: true } } },
+        });
+        user = service?.user ?? user;
+      }
+    }
+  }
+  if ((!emailLogin || user.managedAccount) && (
     !service ||
     service.status !== "ACTIVE" ||
     service.expiresAt.getTime() <= Date.now() ||
     service.usedBytes >= service.quotaBytes
-  ) {
-    return fail(401, "invalid_license", "License is invalid, expired, or has no remaining quota");
+  )) {
+    return fail(
+      401,
+      emailLogin ? "service_unavailable" : "invalid_license",
+      emailLogin
+        ? "The managed service is inactive, expired, or has no remaining quota"
+        : "License is invalid, expired, or has no remaining quota",
+    );
   }
 
   if (service) {
