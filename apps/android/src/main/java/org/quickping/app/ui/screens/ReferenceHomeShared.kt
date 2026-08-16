@@ -97,7 +97,7 @@ internal fun ReferencePingChip(pingMs: Int?) {
             modifier = Modifier.size(17.dp),
         )
         Text(
-            text = pingMs?.let { "$it ms" } ?: "click",
+            text = pingMs?.let { "$it ms" } ?: quickText("بررسی", "Check"),
             color = if (pingMs == null) Color(0xFF8B8F99) else QuickPingColors.TextSecondary,
             fontFamily = MonaSans,
             fontSize = 11.sp,
@@ -120,7 +120,7 @@ internal fun ReferenceMiniPingChip(pingMs: Int?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = pingMs?.let { "$it ms" } ?: "retry",
+                text = pingMs?.let { "$it ms" } ?: quickText("تلاش مجدد", "Retry"),
                 color = Color(0xFF7A7F8A),
                 fontFamily = MonaSans,
                 fontSize = 10.sp,

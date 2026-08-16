@@ -1,26 +1,16 @@
 import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import {
-  createPasarGuardClient,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
   type PasarGuardUserTemplate,
 } from "@/lib/pasarguard/client";
+import { createPasarGuardClient, createPasarGuardClientForProvider } from "@/lib/pasarguard/provider";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 export const GOOGLE_FREE_QUOTA_BYTES = 10n * 1024n ** 3n;
 export const GOOGLE_FREE_PLAN_NAME = "Google Free 10GB";
-
-function configuredTemplateId(): number | null {
-  const raw = process.env.PASARGUARD_FREE_TEMPLATE_ID?.trim();
-  if (!raw) return null;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new PasarGuardError("not_configured", "شناسه قالب سرویس رایگان پاسارگارد معتبر نیست");
-  }
-  return value;
-}
 
 function eligible(template: PasarGuardUserTemplate): boolean {
   return template.dataLimit === GOOGLE_FREE_QUOTA_BYTES
@@ -39,10 +29,9 @@ function chooseTemplate(templates: PasarGuardUserTemplate[]): number | null {
 }
 
 async function optionalTemplateId(client: PasarGuardClient): Promise<number | null> {
-  const configured = configuredTemplateId();
-  if (configured) return configured;
-
   try {
+    // Never trust a template id from the previous provider. The template must
+    // exist and satisfy the free-plan policy on the currently selected panel.
     return chooseTemplate(await client.listUserTemplates());
   } catch (error) {
     // PasarGuard operators can have permission to list/create users while the
@@ -74,9 +63,10 @@ function groupIdsFromVisibleUsers(users: PasarGuardUser[]): number[] {
 }
 
 export async function preflightGoogleFreeProvisioning(
-  client: PasarGuardClient = createPasarGuardClient(),
+  client?: PasarGuardClient,
 ): Promise<void> {
-  groupIdsFromVisibleUsers(await client.listUsers());
+  const resolved = client ?? await createPasarGuardClient();
+  groupIdsFromVisibleUsers(await resolved.listUsers());
 }
 
 function assertFreeUser(user: PasarGuardUser): void {
@@ -119,8 +109,9 @@ async function createRemote(
 export async function ensureGoogleFreeService(
   quickPingUserId: string,
   googleSubject: string,
-  client: PasarGuardClient = createPasarGuardClient(),
+  client?: PasarGuardClient,
 ) {
+  const resolvedClient = client ?? await createPasarGuardClient();
   const existing = await db.pasarGuardBinding.findFirst({
     where: {
       service: {
@@ -129,31 +120,34 @@ export async function ensureGoogleFreeService(
         plan: { name: GOOGLE_FREE_PLAN_NAME },
       },
     },
-    select: { id: true, externalUserId: true },
+    select: { id: true, externalUserId: true, providerId: true },
   });
   if (existing) {
     const externalUserId = Number(existing.externalUserId);
     if (!Number.isSafeInteger(externalUserId)) throw new PasarGuardError("invalid_response", "شناسه سرویس رایگان پاسارگارد معتبر نیست");
-    const remote = await client.getUser(externalUserId);
+    const bindingClient = existing.providerId
+      ? await createPasarGuardClientForProvider(existing.providerId)
+      : resolvedClient;
+    const remote = await bindingClient.getUser(externalUserId);
     if (remote.dataLimit !== GOOGLE_FREE_QUOTA_BYTES) throw new PasarGuardError("invalid_response", "حجم سرویس رایگان پاسارگارد تغییر کرده است");
-    return syncPasarGuardBinding(existing.id, client);
+    return syncPasarGuardBinding(existing.id, bindingClient);
   }
 
   const stableUsername = googleFreeUsername(googleSubject);
-  const visibleUsers = await client.listUsers();
+  const visibleUsers = await resolvedClient.listUsers();
   let remote = findRemote(visibleUsers, stableUsername);
   if (!remote) {
     try {
-      remote = await createRemote(client, stableUsername, visibleUsers);
+      remote = await createRemote(resolvedClient, stableUsername, visibleUsers);
     } catch (error) {
-      remote = findRemote(await client.listUsers(), stableUsername);
+      remote = findRemote(await resolvedClient.listUsers(), stableUsername);
       if (!remote) throw error;
     }
   }
   assertFreeUser(remote);
 
   try {
-    return await bindPasarGuardUser(quickPingUserId, remote.id, client, {
+    return await bindPasarGuardUser(quickPingUserId, remote.id, resolvedClient, {
       isFree: true,
       planName: GOOGLE_FREE_PLAN_NAME,
       serviceName: "Google 10GB",
@@ -161,11 +155,11 @@ export async function ensureGoogleFreeService(
       expectedQuotaBytes: GOOGLE_FREE_QUOTA_BYTES,
     });
   } catch (error) {
-    const recovered = await db.pasarGuardBinding.findUnique({
-      where: { externalUserId: BigInt(remote.id) },
+    const recovered = await db.pasarGuardBinding.findFirst({
+      where: { providerId: resolvedClient.providerId, externalUserId: BigInt(remote.id) },
       include: { service: { select: { userId: true, isFree: true } } },
     });
-    if (recovered?.service.userId === quickPingUserId && recovered.service.isFree) return syncPasarGuardBinding(recovered.id, client);
+    if (recovered?.service.userId === quickPingUserId && recovered.service.isFree) return syncPasarGuardBinding(recovered.id, resolvedClient);
     throw error;
   }
 }

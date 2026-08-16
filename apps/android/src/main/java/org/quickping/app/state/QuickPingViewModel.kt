@@ -47,13 +47,14 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     private var pingJob: Job? = null
     private var accountJob: Job? = null
     private var restartJob: Job? = null
-    private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load()))
+    private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load(), management = settingsStore.loadManagement()))
     val state: StateFlow<QuickPingUiState> = _state.asStateFlow()
 
     init {
         viewModelScope.launch {
             _state.update { it.copy(busy = true) }
             val bootstrap = repository.restoreSession()
+            bootstrap?.let { settingsStore.saveManagement(it.management) }
             _state.update { current ->
                 val restored = bootstrap?.let { current.withBootstrap(it, mergeGuardian(it)) } ?: current
                 restored.copy(
@@ -200,6 +201,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             }
             runCatching { repository.loginWithPassword(email, password) }
                 .onSuccess { bootstrap ->
+                    settingsStore.saveManagement(bootstrap.management)
                     val guardian = mergeGuardian(bootstrap)
                     _state.update {
                         it.withBootstrap(bootstrap, guardian).copy(
@@ -237,6 +239,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                     idToken = idToken,
                     language = _state.value.settings.language.code,
                 )
+                settingsStore.saveManagement(bootstrap.management)
                 val guardian = mergeGuardian(bootstrap)
                 _state.update {
                     it.withBootstrap(bootstrap, guardian).copy(
@@ -264,6 +267,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             _state.update { it.copy(busy = true, loginError = null) }
             runCatching { repository.verifyEmailCode(challengeId, code) }
                 .onSuccess { bootstrap ->
+                    settingsStore.saveManagement(bootstrap.management)
                     val guardian = mergeGuardian(bootstrap)
                     _state.update {
                         it.withBootstrap(bootstrap, guardian).copy(
@@ -306,15 +310,37 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     fun signOut() {
         disconnectVpn()
         repository.signOut()
-        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load())
+        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load(), management = settingsStore.loadManagement())
     }
 
     fun refreshAccountState() {
         viewModelScope.launch {
             val bootstrap = repository.restoreSession() ?: return@launch
+            settingsStore.saveManagement(bootstrap.management)
             val guardian = mergeGuardian(bootstrap)
             if (bootstrap.user.status == "SUSPENDED") disconnectVpn()
             _state.update { state -> state.withBootstrap(bootstrap, guardian) }
+        }
+    }
+
+    fun refreshNotificationsAndMarkRead() {
+        viewModelScope.launch {
+            val bootstrap = repository.restoreSession() ?: return@launch
+            settingsStore.saveManagement(bootstrap.management)
+            val guardian = mergeGuardian(bootstrap)
+            if (bootstrap.user.status == "SUSPENDED") disconnectVpn()
+            _state.update { state -> state.withBootstrap(bootstrap, guardian) }
+            val unreadIds = bootstrap.notifications.filterNot { it.read }.map { it.id }
+            if (unreadIds.isNotEmpty()) {
+                runCatching { repository.markNotificationsRead(unreadIds) }
+                    .onSuccess {
+                        _state.update { state ->
+                            state.copy(notifications = state.notifications.map { notification ->
+                                if (notification.id in unreadIds) notification.copy(read = true) else notification
+                            })
+                        }
+                    }
+            }
         }
     }
 
@@ -536,6 +562,7 @@ private fun QuickPingUiState.withBootstrap(
         selectedServerId = servers.firstOrNull()?.id.orEmpty(),
         guardianCategories = guardian,
         notifications = payload.notifications,
+        management = payload.management,
         release = payload.release,
     )
 }

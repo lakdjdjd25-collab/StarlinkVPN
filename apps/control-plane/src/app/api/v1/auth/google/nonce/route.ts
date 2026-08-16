@@ -4,7 +4,8 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { GoogleAuthError, googleWebClientId } from "@/lib/google-auth";
-import { isPasarGuardConfigured, PasarGuardError } from "@/lib/pasarguard/client";
+import { PasarGuardError } from "@/lib/pasarguard/client";
+import { isPasarGuardConfigured } from "@/lib/pasarguard/provider";
 import { preflightDirectGoogleFreeUser } from "@/lib/pasarguard/direct-free-user";
 
 const schema = z.object({
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const serverClientId = googleWebClientId();
-    if (!isPasarGuardConfigured()) {
+    if (!await isPasarGuardConfigured()) {
       throw new PasarGuardError("not_configured", "اتصال پاسارگارد برای سرویس رایگان تنظیم نشده است");
     }
     // Read-only preflight. A free user can be provisioned directly, so template-create permission is not required.

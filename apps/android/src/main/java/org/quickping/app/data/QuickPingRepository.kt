@@ -111,6 +111,12 @@ class QuickPingRepository(context: Context) {
         authenticatedRequest { accessToken -> api.deleteAccount(accessToken, password) }
     }
 
+    suspend fun markNotificationsRead(notificationIds: List<String>) = withContext(Dispatchers.IO) {
+        if (notificationIds.isNotEmpty()) {
+            authenticatedRequest { accessToken -> api.markNotificationsRead(accessToken, notificationIds) }
+        }
+    }
+
     fun signOut() = tokens.clear()
 
     private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {

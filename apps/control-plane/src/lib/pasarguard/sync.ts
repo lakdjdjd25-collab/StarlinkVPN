@@ -2,12 +2,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { encryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
 import {
-  createPasarGuardClient,
-  isPasarGuardConfigured,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
 } from "@/lib/pasarguard/client";
+import {
+  createPasarGuardClient,
+  createPasarGuardClientForProvider,
+  isPasarGuardConfigured,
+} from "@/lib/pasarguard/provider";
 import {
   normalizePasarGuardConfig,
   type NormalizedPasarGuardConfig,
@@ -188,12 +191,13 @@ async function applyPasarGuardSync(
 export async function bindPasarGuardUser(
   quickPingUserId: string,
   externalUserId: number,
-  client: PasarGuardClient = createPasarGuardClient(),
+  client: PasarGuardClient | undefined = undefined,
   options: BindPasarGuardOptions = {},
 ) {
+  const resolvedClient = client ?? await createPasarGuardClient();
   const [user, rawConfig] = await Promise.all([
-    client.getUser(externalUserId),
-    client.getSingBoxConfig(externalUserId),
+    resolvedClient.getUser(externalUserId),
+    resolvedClient.getSingBoxConfig(externalUserId),
   ]);
   const state = serviceState(user);
   if (options.expectedQuotaBytes !== undefined && state.quotaBytes !== options.expectedQuotaBytes) {
@@ -209,8 +213,8 @@ export async function bindPasarGuardUser(
   });
   if (!quickPingUser) throw new PasarGuardError("invalid_response", "کاربر فعال QuickPing پیدا نشد");
 
-  const existing = await db.pasarGuardBinding.findUnique({
-    where: { externalUserId: BigInt(user.id) },
+  const existing = await db.pasarGuardBinding.findFirst({
+    where: { providerId: resolvedClient.providerId, externalUserId: BigInt(user.id) },
     include: { service: { select: { userId: true } } },
   });
   if (existing && existing.service.userId !== quickPingUser.id) {
@@ -284,6 +288,7 @@ export async function bindPasarGuardUser(
       return tx.pasarGuardBinding.create({
         data: {
           serviceId: service.id,
+          providerId: resolvedClient.providerId,
           externalUserId: BigInt(user.id),
           externalUsername: user.username,
         },
@@ -296,11 +301,11 @@ export async function bindPasarGuardUser(
 
 export async function syncPasarGuardBinding(
   bindingId: string,
-  client: PasarGuardClient = createPasarGuardClient(),
+  client?: PasarGuardClient,
 ) {
   const binding = await db.pasarGuardBinding.findUnique({
     where: { id: bindingId },
-    select: { id: true, externalUserId: true },
+    select: { id: true, externalUserId: true, providerId: true },
   });
   if (!binding) throw new PasarGuardError("invalid_response", "اتصال پاسارگارد پیدا نشد");
   const externalUserId = Number(binding.externalUserId);
@@ -308,9 +313,10 @@ export async function syncPasarGuardBinding(
     throw new PasarGuardError("invalid_response", "شناسهٔ کاربر پاسارگارد قابل استفاده نیست");
   }
   try {
+    const resolvedClient = client ?? await createPasarGuardClientForProvider(binding.providerId);
     const [user, rawConfig] = await Promise.all([
-      client.getUser(externalUserId),
-      client.getSingBoxConfig(externalUserId),
+      resolvedClient.getUser(externalUserId),
+      resolvedClient.getSingBoxConfig(externalUserId),
     ]);
     return await applyPasarGuardSync(binding.id, user, normalizePasarGuardConfig(rawConfig));
   } catch (error) {
@@ -323,7 +329,7 @@ export async function syncPasarGuardBinding(
 }
 
 export async function refreshPasarGuardBindingsForUser(userId: string): Promise<void> {
-  if (!isPasarGuardConfigured()) return;
+  if (!await isPasarGuardConfigured()) return;
   try {
     const staleBefore = new Date(Date.now() - STALE_AFTER_MS);
     const bindings = await db.pasarGuardBinding.findMany({
@@ -331,11 +337,19 @@ export async function refreshPasarGuardBindingsForUser(userId: string): Promise<
         service: { userId },
         OR: [{ lastSyncAt: null }, { lastSyncAt: { lt: staleBefore } }],
       },
-      select: { id: true },
+      select: { id: true, providerId: true },
     });
     if (!bindings.length) return;
-    const client = createPasarGuardClient();
-    await Promise.allSettled(bindings.map((binding) => syncPasarGuardBinding(binding.id, client)));
+    const clients = new Map<string, PasarGuardClient>();
+    await Promise.allSettled(bindings.map(async (binding) => {
+      const key = binding.providerId ?? "active";
+      let client = clients.get(key);
+      if (!client) {
+        client = await createPasarGuardClientForProvider(binding.providerId);
+        clients.set(key, client);
+      }
+      await syncPasarGuardBinding(binding.id, client);
+    }));
   } catch {
     // A stale provider must not prevent the client from receiving its last known-good bootstrap.
   }

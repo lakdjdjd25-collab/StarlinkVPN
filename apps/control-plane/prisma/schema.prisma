@@ -176,6 +176,7 @@ model Plan {
   updatedAt      DateTime     @updatedAt
 
   services Service[]
+  pasarGuardMappings PasarGuardPlanMapping[]
 }
 
 model Service {
@@ -256,7 +257,8 @@ model VpnNode {
 model PasarGuardBinding {
   id                String    @id @default(cuid())
   serviceId         String    @unique
-  externalUserId    BigInt    @unique
+  providerId        String?
+  externalUserId    BigInt
   externalUsername  String
   configFingerprint String?
   lastSyncAt        DateTime?
@@ -264,10 +266,53 @@ model PasarGuardBinding {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  service Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  nodes   VpnNode[]
+  service  Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  provider PasarGuardProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  nodes    VpnNode[]
 
+  @@unique([providerId, externalUserId])
+  @@index([providerId, lastSyncAt])
   @@index([lastSyncAt])
+}
+
+
+model PasarGuardProvider {
+  id                 String   @id @default(cuid())
+  sourceKey          String   @unique
+  name               String   @default("PasarGuard")
+  baseUrl            String
+  username           String
+  passwordCiphertext String
+  active             Boolean  @default(false)
+  lastTestAt         DateTime?
+  lastSyncAt         DateTime?
+  lastError          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  bindings PasarGuardBinding[]
+  mappings PasarGuardPlanMapping[]
+
+  @@index([active, updatedAt])
+}
+
+model PasarGuardPlanMapping {
+  id              String   @id @default(cuid())
+  providerId      String
+  planId          String
+  profileKey      String
+  profileName     String
+  groupIds        Json
+  valid           Boolean  @default(true)
+  lastValidatedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  provider PasarGuardProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  plan     Plan               @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, planId])
+  @@index([planId, valid])
 }
 
 model ServiceNode {
@@ -322,6 +367,7 @@ model Notification {
   id          String               @id @default(cuid())
   title       String
   body        String
+  category    String               @default("SYSTEM")
   audience    NotificationAudience @default(ALL)
   actionUrl   String?
   publishedAt DateTime?

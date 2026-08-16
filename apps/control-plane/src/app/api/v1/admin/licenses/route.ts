@@ -12,12 +12,16 @@ import {
   managedIdentity,
 } from "@/lib/managed-account";
 import {
-  createPasarGuardClient,
-  isPasarGuardConfigured,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
 } from "@/lib/pasarguard/client";
+import {
+  createPasarGuardClient,
+  discoverPasarGuardProfiles,
+  isPasarGuardConfigured,
+  savePasarGuardPlanMapping,
+} from "@/lib/pasarguard/provider";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 const createSchema = z.object({
@@ -43,6 +47,11 @@ const patchSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("reset_credentials"),
     serviceId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("migrate_provider"),
+    serviceId: z.string().min(1),
+    profileKey: z.string().regex(/^(template|group):[1-9]\d*$/, "قالب یا گروه پاسارگارد معتبر نیست"),
   }),
 ]);
 
@@ -71,40 +80,7 @@ function sameGroups(left: number[], right: number[]): boolean {
 }
 
 async function availableProfiles(client: PasarGuardClient): Promise<ProviderProfile[]> {
-  const [templatesResult, groupsResult] = await Promise.allSettled([
-    client.listUserTemplates(),
-    client.listGroups(),
-  ]);
-  const profiles: ProviderProfile[] = [];
-
-  if (templatesResult.status === "fulfilled") {
-    profiles.push(...templatesResult.value
-      .filter((template) => !template.isDisabled && template.status === "active" && template.groupIds.length > 0)
-      .map((template) => ({
-        key: `template:${template.id}`,
-        kind: "template" as const,
-        id: template.id,
-        name: template.name,
-        groupIds: template.groupIds,
-        dataLimit: template.dataLimit,
-        expireDurationSeconds: template.expireDurationSeconds,
-      })));
-  }
-  if (groupsResult.status === "fulfilled") {
-    profiles.push(...groupsResult.value.map((group) => ({
-      key: `group:${group.id}`,
-      kind: "group" as const,
-      id: group.id,
-      name: group.name,
-      groupIds: [group.id],
-      dataLimit: null,
-      expireDurationSeconds: null,
-    })));
-  }
-  if (templatesResult.status === "rejected" && groupsResult.status === "rejected") {
-    throw groupsResult.reason ?? templatesResult.reason;
-  }
-  return profiles;
+  return discoverPasarGuardProfiles(client);
 }
 
 async function nextUniqueLicense(): Promise<string> {
@@ -171,11 +147,11 @@ function providerFailure(error: unknown) {
 export async function GET(request: NextRequest) {
   const admin = await adminFromRequest(request);
   if (!admin) return fail(401, "unauthorized", "ورود مدیر لازم است");
-  if (!isPasarGuardConfigured()) {
+  if (!await isPasarGuardConfigured()) {
     return fail(503, "pasarguard_not_configured", "اتصال پاسارگارد در Secretهای سرور کامل نشده است");
   }
   try {
-    const client = createPasarGuardClient();
+    const client = await createPasarGuardClient();
     const [profiles, remoteUsers, bindings] = await Promise.all([
       availableProfiles(client),
       client.listUsers(),
@@ -189,12 +165,14 @@ export async function GET(request: NextRequest) {
             },
           },
           nodes: { select: { id: true } },
+          provider: { select: { id: true, name: true, active: true } },
         },
       }),
     ]);
     const remoteById = new Map(remoteUsers.map((user) => [user.id, user]));
     const licenses = bindings.map((binding) => {
-      const remote = remoteById.get(Number(binding.externalUserId));
+      const onActiveProvider = binding.providerId === client.providerId;
+      const remote = onActiveProvider ? remoteById.get(Number(binding.externalUserId)) : undefined;
       const profile = remote
         ? profiles.find((candidate) => sameGroups(candidate.groupIds, remote.groupIds))
         : undefined;
@@ -215,6 +193,9 @@ export async function GET(request: NextRequest) {
         serverCount: binding.nodes.length,
         lastSyncAt: binding.lastSyncAt,
         lastError: binding.lastError,
+        providerId: binding.providerId,
+        providerName: binding.provider?.name ?? "PasarGuard قبلی",
+        needsMigration: !onActiveProvider,
       };
     });
     return ok({ profiles, licenses });
@@ -231,7 +212,7 @@ export async function POST(request: NextRequest) {
   if (!input.success) {
     return fail(400, "invalid_input", input.error.issues[0]?.message ?? "اطلاعات مجوز معتبر نیست");
   }
-  if (!isPasarGuardConfigured()) {
+  if (!await isPasarGuardConfigured()) {
     return fail(503, "pasarguard_not_configured", "اتصال پاسارگارد در Secretهای سرور کامل نشده است");
   }
 
@@ -254,7 +235,7 @@ export async function POST(request: NextRequest) {
   } | null = null;
 
   try {
-    client = createPasarGuardClient();
+    client = await createPasarGuardClient();
     const [profiles, users] = await Promise.all([availableProfiles(client), client.listUsers()]);
     const profile = profiles.find((item) => item.key === input.data.profileKey);
     if (!profile || !profile.groupIds.length) {
@@ -263,8 +244,8 @@ export async function POST(request: NextRequest) {
 
     remote = users.find((user) => user.username.toLowerCase() === identity.remoteUsername) ?? null;
     if (remote) {
-      const existingBinding = await db.pasarGuardBinding.findUnique({
-        where: { externalUserId: BigInt(remote.id) },
+      const existingBinding = await db.pasarGuardBinding.findFirst({
+        where: { providerId: client.providerId, externalUserId: BigInt(remote.id) },
         include: { service: { include: { user: { select: { email: true } } } } },
       });
       if (existingBinding) {
@@ -333,6 +314,7 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     });
     createdPlan = !existingPlan;
+    await savePasarGuardPlanMapping(plan.id, profile.key);
 
     const providerNote = [`NimHUB: ${input.data.customerName}`, input.data.note]
       .filter(Boolean)
@@ -390,8 +372,8 @@ export async function POST(request: NextRequest) {
     ), { status: 201 });
   } catch (error) {
     if (remote) {
-      const partial = await db.pasarGuardBinding.findUnique({
-        where: { externalUserId: BigInt(remote.id) },
+      const partial = await db.pasarGuardBinding.findFirst({
+        where: { providerId: client?.providerId ?? null, externalUserId: BigInt(remote.id) },
         include: { service: { select: { id: true, userId: true } } },
       }).catch(() => null);
       if (partial?.service.userId === quickPingUserId) {
@@ -484,9 +466,113 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  if (!isPasarGuardConfigured()) {
+  if (!await isPasarGuardConfigured()) {
     return fail(503, "pasarguard_not_configured", "اتصال پاسارگارد در Secretهای سرور کامل نشده است");
   }
+
+  if (input.data.action === "migrate_provider") {
+    const client = await createPasarGuardClient();
+    try {
+      const binding = await db.pasarGuardBinding.findUnique({
+        where: { id: before.pasarGuardBinding.id },
+        select: { id: true, providerId: true, externalUserId: true, externalUsername: true },
+      });
+      if (!binding) return fail(404, "managed_license_not_found", "اتصال پاسارگارد این سرویس پیدا نشد");
+      const profiles = await availableProfiles(client);
+      const profile = profiles.find((item) => item.key === input.data.profileKey);
+      if (!profile || !profile.groupIds.length) {
+        return fail(400, "template_unavailable", "قالب یا گروه انتخاب‌شده در پنل فعال وجود ندارد");
+      }
+      if (binding.providerId === client.providerId) {
+        await savePasarGuardPlanMapping(before.planId, profile.key);
+        return ok({ migrated: false, alreadyActiveProvider: true });
+      }
+
+      const visibleUsers = await client.listUsers();
+      let remote = visibleUsers.find((item) => item.username === binding.externalUsername) ?? null;
+      const remoteSnapshot = remote;
+      let createdRemote = false;
+      if (remote) {
+        const conflicting = await db.pasarGuardBinding.findFirst({
+          where: { providerId: client.providerId, externalUserId: BigInt(remote.id), id: { not: binding.id } },
+          select: { id: true },
+        });
+        if (conflicting) return fail(409, "provider_user_conflict", "این کاربر در پنل جدید قبلاً به سرویس دیگری متصل شده است");
+        remote = await client.updateUser(remote.username, {
+          dataLimit: before.quotaBytes,
+          expiresAt: before.expiresAt,
+          maxDevices: before.maxDevices,
+          status: before.status === "ACTIVE" ? "active" : "disabled",
+          groupIds: profile.groupIds,
+          note: "NimHUB provider migration",
+        });
+      } else {
+        remote = await client.createUser(
+          binding.externalUsername,
+          before.quotaBytes,
+          profile.groupIds,
+          "NimHUB provider migration",
+          before.maxDevices,
+          before.expiresAt,
+        );
+        createdRemote = true;
+        if (before.status !== "ACTIVE") {
+          remote = await client.updateUser(remote.username, { status: "disabled" });
+        }
+      }
+
+      try {
+        await db.pasarGuardBinding.update({
+          where: { id: binding.id },
+          data: {
+            providerId: client.providerId,
+            externalUserId: BigInt(remote.id),
+            externalUsername: remote.username,
+            lastSyncAt: null,
+            lastError: null,
+          },
+        });
+        await syncPasarGuardBinding(binding.id, client);
+        await savePasarGuardPlanMapping(before.planId, profile.key);
+      } catch (error) {
+        await db.pasarGuardBinding.update({
+          where: { id: binding.id },
+          data: {
+            providerId: binding.providerId,
+            externalUserId: binding.externalUserId,
+            externalUsername: binding.externalUsername,
+          },
+        }).catch(() => undefined);
+        if (createdRemote) {
+          await client.deleteUser(remote.username).catch(() => undefined);
+        } else if (remoteSnapshot) {
+          await client.updateUser(remoteSnapshot.username, {
+            dataLimit: remoteSnapshot.dataLimit ?? before.quotaBytes,
+            expiresAt: remoteSnapshot.expiresAt,
+            maxDevices: remoteSnapshot.maxDevices ?? before.maxDevices,
+            status: remoteSnapshot.status,
+            ...(remoteSnapshot.groupIds.length ? { groupIds: remoteSnapshot.groupIds } : {}),
+          }).catch(() => undefined);
+        }
+        throw error;
+      }
+
+      await db.auditLog.create({
+        data: {
+          actorId: admin.sub,
+          action: "managed_license.migrateProvider",
+          entityType: "Service",
+          entityId: before.id,
+          before: { providerId: binding.providerId, externalUserId: String(binding.externalUserId) },
+          after: { providerId: client.providerId, externalUserId: String(remote.id), providerProfile: profile.key },
+        },
+      });
+      return ok({ migrated: true });
+    } catch (error) {
+      return providerFailure(error);
+    }
+  }
+
   const update = input.data;
   const quotaBytes = BigInt(Math.round(update.quotaGb * 1024 ** 3));
   const expiresAt = new Date(Date.now() + update.daysFromNow * 86_400_000);
@@ -496,9 +582,16 @@ export async function PATCH(request: NextRequest) {
     update.daysFromNow,
     update.maxDevices,
   );
-  const client = createPasarGuardClient();
+  const client = await createPasarGuardClient();
   let remoteBefore: PasarGuardUser | null = null;
   try {
+    const currentBinding = await db.pasarGuardBinding.findUnique({
+      where: { id: before.pasarGuardBinding.id },
+      select: { providerId: true },
+    });
+    if (!currentBinding || currentBinding.providerId !== client.providerId) {
+      return fail(409, "provider_migration_required", "این سرویس به پنل قبلی متصل است؛ ابتدا آن را به پنل فعال منتقل کنید");
+    }
     const profiles = await availableProfiles(client);
     const profile = profiles.find((item) => item.key === update.profileKey);
     if (!profile || !profile.groupIds.length) {
@@ -518,7 +611,7 @@ export async function PATCH(request: NextRequest) {
     await syncPasarGuardBinding(before.pasarGuardBinding.id, client);
 
     const now = new Date();
-    await db.$transaction(async (transaction) => {
+    const updatedPlanId = await db.$transaction(async (transaction) => {
       const plan = await transaction.plan.upsert({
         where: { name: managedPlanName },
         update: {
@@ -559,7 +652,9 @@ export async function PATCH(request: NextRequest) {
           }),
         ]);
       }
+      return plan.id;
     });
+    await savePasarGuardPlanMapping(updatedPlanId, profile.key);
     await db.auditLog.create({
       data: {
         actorId: admin.sub,

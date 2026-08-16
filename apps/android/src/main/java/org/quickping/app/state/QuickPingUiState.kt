@@ -6,6 +6,7 @@ import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.GuardianCategory
 import org.quickping.app.model.InstalledApp
 import org.quickping.app.model.NotificationItem
+import org.quickping.app.model.ManagementInfo
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
 import org.quickping.app.model.UserInfo
@@ -20,6 +21,7 @@ data class QuickPingUiState(
     val settings: AppSettings = AppSettings(),
     val guardianCategories: List<GuardianCategory> = defaultGuardian,
     val notifications: List<NotificationItem> = emptyList(),
+    val management: ManagementInfo = ManagementInfo(),
     val release: AppRelease? = null,
     val signedIn: Boolean = false,
     val busy: Boolean = false,

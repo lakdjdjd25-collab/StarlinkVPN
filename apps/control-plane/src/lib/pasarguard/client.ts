@@ -76,8 +76,8 @@ export type PasarGuardUserUpdate = {
   note?: string;
 };
 
-type PasarGuardCredentials = { baseUrl: URL; username: string; password: string };
-type PasarGuardClientOptions = PasarGuardCredentials & { fetch?: typeof fetch; timeoutMs?: number };
+export type PasarGuardCredentials = { baseUrl: URL; username: string; password: string };
+type PasarGuardClientOptions = PasarGuardCredentials & { fetch?: typeof fetch; timeoutMs?: number; providerId?: string | null };
 
 export class PasarGuardError extends Error {
   constructor(
@@ -175,16 +175,18 @@ export function pasarGuardCredentialsFromEnv(): PasarGuardCredentials {
   return { baseUrl: normalizePasarGuardBaseUrl(baseUrl), username, password };
 }
 
-export function isPasarGuardConfigured(): boolean {
+export function isPasarGuardEnvConfigured(): boolean {
   return Boolean(process.env.PASARGUARD_BASE_URL?.trim() && process.env.PASARGUARD_USERNAME?.trim() && process.env.PASARGUARD_PASSWORD);
 }
 
 export class PasarGuardClient {
+  readonly providerId: string | null;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
   private tokenPromise?: Promise<string>;
 
   constructor(private readonly options: PasarGuardClientOptions) {
+    this.providerId = options.providerId ?? null;
     this.fetcher = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
@@ -385,5 +387,3 @@ export class PasarGuardClient {
     try { return JSON.parse(text) as unknown; } catch { throw new PasarGuardError("invalid_response", "اشتراک sing-box دریافتی از پاسارگارد JSON معتبر نیست"); }
   }
 }
-
-export function createPasarGuardClient(): PasarGuardClient { return new PasarGuardClient(pasarGuardCredentialsFromEnv()); }

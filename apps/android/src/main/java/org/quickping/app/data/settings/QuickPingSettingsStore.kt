@@ -6,6 +6,7 @@ import org.quickping.app.model.AppLanguage
 import org.quickping.app.model.AppSettings
 import org.quickping.app.model.DnsProvider
 import org.quickping.app.model.GuardianCategory
+import org.quickping.app.model.ManagementInfo
 import org.quickping.app.model.SplitTunnelMode
 
 class QuickPingSettingsStore(context: Context) {
@@ -37,6 +38,22 @@ class QuickPingSettingsStore(context: Context) {
             ipv6Enabled = preferences.getBoolean(KEY_IPV6, true),
             mtu = preferences.getInt(KEY_MTU, 1500).coerceIn(1280, 9000),
         )
+    }
+
+    fun loadManagement(): ManagementInfo = ManagementInfo(
+        telegramUsername = preferences.getString(KEY_MANAGER_TELEGRAM, "Folwn")
+            .orEmpty()
+            .trim()
+            .removePrefix("@")
+            .takeIf { it.matches(Regex("[A-Za-z0-9_]{5,32}")) }
+            ?: "Folwn",
+    )
+
+    fun saveManagement(info: ManagementInfo) {
+        val normalized = info.telegramUsername.trim().removePrefix("@").takeIf {
+            it.matches(Regex("[A-Za-z0-9_]{5,32}"))
+        } ?: "Folwn"
+        preferences.edit().putString(KEY_MANAGER_TELEGRAM, normalized).apply()
     }
 
     fun save(settings: AppSettings) {
@@ -146,6 +163,7 @@ class QuickPingSettingsStore(context: Context) {
         private const val KEY_DNS_PROVIDER = "dns_provider"
         private const val KEY_PROXY_PORT = "proxy_port"
         private const val KEY_LANGUAGE = "language"
+        private const val KEY_MANAGER_TELEGRAM = "manager_telegram"
         private const val KEY_RECONNECT = "reconnect_on_network_change"
         private const val KEY_STRICT_ROUTE = "strict_route"
         private const val KEY_IPV6 = "ipv6_enabled"
