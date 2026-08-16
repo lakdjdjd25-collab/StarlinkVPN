@@ -30,8 +30,8 @@ android {
         applicationId = "org.quickping"
         minSdk = 23
         targetSdk = 36
-        versionCode = 160177
-        versionName = "2.6.14"
+        versionCode = 160178
+        versionName = "2.6.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
