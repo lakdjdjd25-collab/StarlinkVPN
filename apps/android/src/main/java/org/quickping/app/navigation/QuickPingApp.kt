@@ -14,7 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.currentStateFlow
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
@@ -36,8 +36,9 @@ import org.quickping.app.ui.screens.SplashScreen
 import org.quickping.app.ui.screens.SplitTunnelingScreen
 import org.quickping.app.ui.screens.VersionScreen
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 private object Route {
     const val Splash = "splash"
@@ -52,6 +53,21 @@ private object Route {
     const val Version = "update/latest"
 }
 
+private suspend fun Lifecycle.awaitResumed() {
+    if (currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+    suspendCancellableCoroutine { continuation ->
+        lateinit var observer: LifecycleEventObserver
+        observer = LifecycleEventObserver { source, _ ->
+            if (source.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && continuation.isActive) {
+                source.lifecycle.removeObserver(observer)
+                continuation.resume(Unit)
+            }
+        }
+        continuation.invokeOnCancellation { removeObserver(observer) }
+        addObserver(observer)
+    }
+}
+
 private suspend fun NavHostController.openSettingsWhenHomeIsReady() {
     val homeEntry = currentBackStackEntry?.takeIf { it.destination.route == Route.Home } ?: return
 
@@ -59,9 +75,7 @@ private suspend fun NavHostController.openSettingsWhenHomeIsReady() {
     // entry reaches RESUMED. Navigating during that short lifecycle window can
     // leave the new Settings entry transparent. Wait for the actual lifecycle
     // event instead of adding an arbitrary time delay.
-    homeEntry.lifecycle.currentStateFlow.first {
-        it.isAtLeast(Lifecycle.State.RESUMED)
-    }
+    homeEntry.lifecycle.awaitResumed()
     if (currentBackStackEntry == homeEntry && currentDestination?.route == Route.Home) {
         navigate(Route.Settings) {
             launchSingleTop = true

@@ -138,6 +138,7 @@ fun ReferenceLoginScreen(
     val qrFailedText = quickText("اسکن QR انجام نشد", "QR scan failed")
     val licenseInvalidText = quickText("کد مجوز معتبر نیست", "License code is not valid")
     val clipboardEmptyText = quickText("متن مجوز در حافظهٔ کپی پیدا نشد", "No license was found in the clipboard")
+    val qrPromptText = quickText("کیوآرکد مجوز را داخل کادر قرار دهید", "Place the license QR code inside the frame")
 
     fun submitLicense(raw: String, fromQr: Boolean = false) {
         val parsed = referenceExtractLicense(raw)
@@ -160,7 +161,7 @@ fun ReferenceLoginScreen(
     fun launchFallbackScanner() {
         val options = ScanOptions()
             .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            .setPrompt(quickText("کیوآرکد مجوز را داخل کادر قرار دهید", "Place the license QR code inside the frame"))
+            .setPrompt(qrPromptText)
             .setBeepEnabled(false)
             .setOrientationLocked(true)
         runCatching { fallbackScannerLauncher.launch(options) }
