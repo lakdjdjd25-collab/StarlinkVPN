@@ -28,32 +28,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/railway-auth-public.pem <<'EOF'
-          -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA41IUAPmg992w55hWHaFh
-          NN4LKu8VS02g5+Pa2wOXjMSD8GEflDJrfQWoRvMBjJbGtNFmX4snSuQd4F2TQMV0
-          2AKYnKAknjXZRxYFFGjCbCOSIIFf/aEl28qTeKXkXVALDPzoz9mIql4NLBNlXzSF
-          MIoH7Yb/ImSHOYRfejY1OcdfNbZbeTIYEaujE32FrL83ausGaHGwho1qvnlXutgZ
-          4fj6yUh874goosGqXesw3wKF5KKD3dLTL/l7X+53R37lkTItWfb10YmlQVQfuXox
-          KFEljKTUHFJq9RNWjiuna4AdqStYy6lQizqkXZgnBE6Lgl8F7K01b4Afolgta7U2
-          UjOY1xNv46ZdaLqosu2BvdPoM5cR/dAWKUVSRVrUemyXp1CggEbvomNliNvokztp
-          W3Ije7APOAgEMCOle5kmx+IIZebG/waKwH66HcUp8NrhT5zCjgDE3lPBrRqjJuxP
-          SOW6gjdwFi1BSqJR4MzYeWQcCv8yXDz+Ehb5hqxgFgtis3GRE8do79mjqvtUeFZm
-          txis1Pa4i3senVZD4JglWyZGaxYxjRbKKRQSHtuBEsgHQ8StaCO6KJd6iejZ/IF
-          pFE3ab32MbR58hiZf8XQ27c/LZ1tbu3frpu5Kcnp28uQh3z1/0Prpsht678klpXK
-          WOa9D90daJWpRd9NvICqumsCAwEAAQ==
-          -----END PUBLIC KEY-----
-          EOF
+          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUE0MUlVQVBtZzk5Mnc1NWhXSGFGaApOTjRMS3U4VlMwMmc1K1BhMndPWGpNU0Q4R0VmbERKcmZRV29Sdk1CakpiR3RORm1YNHNuU3VRZDRGMlRRTVYwCjJBS1luS0FrbmpYWlJ4WUZGR2pDYkNPU0lJRmYvYUVsMjhxVGVLWGtYVkFMRFB6b3o5bUlxbDROTEJObFh6U0YKTUlvSDdZYi9JbVNIT1lSZmVqWTFPY2RmTmJaYmVUSVlFYXVqRTMyRnJMODNhdXNHYUhHd2hvMXF2bmxYdXRnWgo0Zmo2eVVoODc0Z29vc0dxWGVzdzN3S0Y1S0tEM2RMVEwvbDdYKzUzUjM3bGtUSXRXZmIxMFltbFFWUWZ1WG94CktGRWxqS1RVSEZKcTlSTldqaXVuYTRBZHFTdFl5NmxRaXpxa1haZ25CRTZMZ2w4RjdLMDFiNEFmb2xndGE3VTIKVWpPWTF4TnY0NlpkYUxxb3N1MkJ2ZFBvTTVjUi9kQVdLVVZTUlZyVWVteVhwMUNnZ0Vidm9tTmxpTnZva3p0cApXM0lqZTdBUE9BZ0VNQ09sZTVrbXgrSUlaZWJHL3dhS3dINjZIY1VwOE5yaFQ1ekNqZ0RFM2xQQnJScWpKdXhQClNPVzZnamR3RmkxQlNxSlI0TXpZZVdRY0N2OHlYRHorRWhiNWhxeGdGZ3RpczNHUkU4ZG83OW1qcXZ0VWVGWm0KdHhzaXMxUGE0aTNzZW5WWkQ0SmdsV3laR2F4WXhqUmJLS1JRU0h0dUJFc2dIUThTdGFDTzZLSmQ2aWVqWi9JRgpwRkUzYWIzMk1iUjU4aGlaZjhYUTI3Yy9MWjF0YnUzZnJwdTVLY25wMjh1UWgzejEvMFBycHNodDY3OGtscFhLCldPYTlEOTBkYUpXcFJkOU52SUNxdW1zQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
+          openssl pkey -pubin -in /tmp/railway-auth-public.pem -noout
           : > /tmp/railway-login.log
           RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
           echo $! > /tmp/railway-login.pid
           for i in $(seq 1 45); do
             if grep -Eq 'https?://|code|Code|pair|Pair|sign in|Sign in' /tmp/railway-login.log; then break; fi
             PID=$(cat /tmp/railway-login.pid)
-            if ! kill -0 "$PID" 2>/dev/null; then exit 1; fi
+            if ! kill -0 "$PID" 2>/dev/null; then cat /tmp/railway-login.log; exit 1; fi
             sleep 1
           done
           tail -c 400 /tmp/railway-login.log > /tmp/railway-login-prompt.txt
+          test -s /tmp/railway-login-prompt.txt
           openssl pkeyutl -encrypt -pubin -inkey /tmp/railway-auth-public.pem \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
             -in /tmp/railway-login-prompt.txt -out /tmp/railway-login-prompt.bin
