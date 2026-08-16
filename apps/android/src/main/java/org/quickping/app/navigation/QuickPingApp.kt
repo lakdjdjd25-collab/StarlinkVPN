@@ -17,32 +17,32 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.quickping.app.core.design.QuickPingTheme
 import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.state.QuickPingViewModel
 import org.quickping.app.ui.screens.AccountScreenWithSignOutConfirmation
 import org.quickping.app.ui.screens.GuardianScreen
 import org.quickping.app.ui.screens.HomeScreen
-import org.quickping.app.ui.screens.ReferenceLoginScreen
 import org.quickping.app.ui.screens.NotificationsScreen
+import org.quickping.app.ui.screens.PolishedLoginScreen
 import org.quickping.app.ui.screens.ServicesScreen
 import org.quickping.app.ui.screens.SettingsScreen
 import org.quickping.app.ui.screens.SplashScreen
 import org.quickping.app.ui.screens.SplitTunnelingScreen
 import org.quickping.app.ui.screens.VersionScreen
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 private fun openTelegramManager(context: Context, username: String) {
@@ -86,33 +86,39 @@ private suspend fun Lifecycle.awaitResumed() {
     }
 }
 
-private suspend fun NavHostController.openSettingsWhenHomeIsReady() {
-    val homeEntry = currentBackStackEntry?.takeIf { it.destination.route == Route.Home } ?: return
+/**
+ * Top-level pages all have Home as their canonical parent. If a user taps a new top-level action
+ * while the previous page is still popping, first collapse the stack to Home, then wait for the
+ * real Home back-stack entry to be RESUMED before pushing the requested destination. This avoids
+ * transparent/blank entries without introducing arbitrary timing delays.
+ */
+private suspend fun NavHostController.openTopLevelWhenHomeIsReady(route: String) {
+    if (currentDestination?.route == route) return
 
-    // A quick Back followed by Settings can render Home before its back-stack
-    // entry reaches RESUMED. Navigating during that short lifecycle window can
-    // leave the new Settings entry transparent. Wait for the actual lifecycle
-    // event instead of adding an arbitrary time delay.
+    if (currentDestination?.route != Route.Home) {
+        val returnedHome = popBackStack(Route.Home, inclusive = false)
+        if (!returnedHome && currentDestination?.route != Route.Home) {
+            navigate(Route.Home) {
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val homeEntry = runCatching { getBackStackEntry(Route.Home) }.getOrNull() ?: return
     homeEntry.lifecycle.awaitResumed()
     if (currentBackStackEntry == homeEntry && currentDestination?.route == Route.Home) {
-        navigate(Route.Settings) {
+        navigate(route) {
+            popUpTo(Route.Home) { inclusive = false }
             launchSingleTop = true
         }
     }
 }
 
-private fun NavHostController.closeSettingsSafely() {
+private fun NavHostController.returnToHomeSafely() {
     if (currentDestination?.route == Route.Home) return
-
-    // Settings is always opened from Home. Pop explicitly to Home instead of
-    // using a generic popBackStack(), which can pop Home as well if two back
-    // callbacks arrive while the previous navigation transition is settling.
     val returnedHome = popBackStack(Route.Home, inclusive = false)
     if (!returnedHome && currentDestination?.route != Route.Home) {
-        // Defensive recovery for an already-corrupted/empty route history: make
-        // Home the visible destination instead of leaving NavHost with no page.
         navigate(Route.Home) {
-            popUpTo(Route.Settings) { inclusive = true }
             launchSingleTop = true
         }
     }
@@ -126,12 +132,11 @@ fun QuickPingApp(
     val state by quickPingViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val navigationScope = rememberCoroutineScope()
-    var settingsNavigationJob by remember { mutableStateOf<Job?>(null) }
-    val onOpenSettings: () -> Unit = {
-        if (settingsNavigationJob?.isActive != true) {
-            settingsNavigationJob = navigationScope.launch {
-                navController.openSettingsWhenHomeIsReady()
-            }
+    var topLevelNavigationJob by remember { mutableStateOf<Job?>(null) }
+    val openTopLevel: (String) -> Unit = { route ->
+        topLevelNavigationJob?.cancel()
+        topLevelNavigationJob = navigationScope.launch {
+            navController.openTopLevelWhenHomeIsReady(route)
         }
     }
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
@@ -147,6 +152,7 @@ fun QuickPingApp(
             currentRoute != null &&
             currentRoute !in setOf(Route.Splash, Route.Login)
         ) {
+            topLevelNavigationJob?.cancel()
             navController.navigate(Route.Login) {
                 popUpTo(Route.Home) { inclusive = true }
                 launchSingleTop = true
@@ -186,7 +192,7 @@ fun QuickPingApp(
                         }
                     }
                 }
-                ReferenceLoginScreen(
+                PolishedLoginScreen(
                     language = state.settings.language,
                     busy = state.busy,
                     challengeId = state.loginChallengeId,
@@ -210,7 +216,13 @@ fun QuickPingApp(
                     onHelpRequested = quickPingViewModel::notifyLoginHelp,
                 )
             }
-            composable(Route.Home) {
+            composable(
+                route = Route.Home,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 LaunchedEffect(Unit) {
                     quickPingViewModel.refreshAccountState()
                     while (true) {
@@ -228,18 +240,14 @@ fun QuickPingApp(
                     state = state,
                     onToggleConnection = onToggleVpn,
                     onSelectServer = quickPingViewModel::selectServer,
-                    onSettings = onOpenSettings,
-                    onAccount = { navController.navigate(Route.Account) },
-                    onNotifications = { navController.navigate(Route.Notifications) },
+                    onSettings = { openTopLevel(Route.Settings) },
+                    onAccount = { openTopLevel(Route.Account) },
+                    onNotifications = { openTopLevel(Route.Notifications) },
                     onUpgrade = { openTelegramManager(context, state.management.telegramUsername) },
                 )
             }
             composable(
                 route = Route.Settings,
-                // The Settings page is frequently opened again immediately after
-                // Back. Removing its cross-fade keeps a previous exit transition
-                // from racing a fresh Settings back-stack entry and rendering a
-                // fully transparent/blank NavHost frame.
                 enterTransition = { EnterTransition.None },
                 exitTransition = { ExitTransition.None },
                 popEnterTransition = { EnterTransition.None },
@@ -249,11 +257,11 @@ fun QuickPingApp(
                     settings = state.settings,
                     onUpdateSettings = quickPingViewModel::updateSetting,
                     onResetSettings = quickPingViewModel::resetSettings,
-                    onBack = navController::closeSettingsSafely,
+                    onBack = navController::returnToHomeSafely,
                     onSplitTunneling = { navController.navigate(Route.SplitTunneling) },
                     onGuardian = { navController.navigate(Route.Guardian) },
-                    onAccount = { navController.navigate(Route.Account) },
-                    onNotifications = { navController.navigate(Route.Notifications) },
+                    onAccount = { openTopLevel(Route.Account) },
+                    onNotifications = { openTopLevel(Route.Notifications) },
                     onVersion = { navController.navigate(Route.Version) },
                 )
             }
@@ -278,7 +286,13 @@ fun QuickPingApp(
                     onBack = navController::popBackStack,
                 )
             }
-            composable(Route.Account) {
+            composable(
+                route = Route.Account,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }
                 AccountScreenWithSignOutConfirmation(
                     user = state.user,
@@ -288,7 +302,7 @@ fun QuickPingApp(
                     onConfirmPasswordChange = quickPingViewModel::changePassword,
                     onDeleteAccount = quickPingViewModel::deleteAccount,
                     onClearAction = quickPingViewModel::clearAccountAction,
-                    onBack = navController::popBackStack,
+                    onBack = navController::returnToHomeSafely,
                     onSignOut = quickPingViewModel::signOut,
                     onServices = { navController.navigate(Route.Services) },
                 )
@@ -299,11 +313,17 @@ fun QuickPingApp(
                     onBack = navController::popBackStack,
                 )
             }
-            composable(Route.Notifications) {
+            composable(
+                route = Route.Notifications,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 LaunchedEffect(Unit) { quickPingViewModel.refreshNotificationsAndMarkRead() }
                 NotificationsScreen(
                     notifications = state.notifications,
-                    onBack = navController::popBackStack,
+                    onBack = navController::returnToHomeSafely,
                 )
             }
             composable(Route.Version) {
