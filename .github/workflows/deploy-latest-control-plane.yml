@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   deploy:
@@ -24,10 +23,8 @@ jobs:
           node-version: 24
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Authenticate Railway and relay encrypted device prompt
+      - name: Start Railway device authentication
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cat > /tmp/railway-auth-public.pem <<'EOF'
@@ -48,16 +45,17 @@ jobs:
           EOF
 
           : > /tmp/railway-login.log
-          railway login --browserless > /tmp/railway-login.log 2>&1 &
-          LOGIN_PID=$!
+          RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
+          echo $! > /tmp/railway-login.pid
 
           for i in $(seq 1 45); do
             if grep -Eq 'https?://|code|Code|pair|Pair|sign in|Sign in' /tmp/railway-login.log; then
               break
             fi
-            if ! kill -0 "$LOGIN_PID" 2>/dev/null; then
+            PID=$(cat /tmp/railway-login.pid)
+            if ! kill -0 "$PID" 2>/dev/null; then
               cat /tmp/railway-login.log
-              wait "$LOGIN_PID"
+              exit 1
             fi
             sleep 1
           done
@@ -66,11 +64,28 @@ jobs:
           openssl pkeyutl -encrypt -pubin -inkey /tmp/railway-auth-public.pem \
             -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
             -in /tmp/railway-login-prompt.txt -out /tmp/railway-login-prompt.bin
-          CIPHERTEXT=$(base64 -w0 /tmp/railway-login-prompt.bin)
-          gh api repos/${GITHUB_REPOSITORY}/issues/29/comments \
-            -f body="RAILWAY_DEVICE_PROMPT_ENCRYPTED:${CIPHERTEXT}" >/dev/null
-
-          wait "$LOGIN_PID"
+          base64 -w0 /tmp/railway-login-prompt.bin > /tmp/railway-login-prompt.b64
+      - name: Upload encrypted Railway device prompt
+        uses: actions/upload-artifact@v4
+        with:
+          name: railway-device-prompt-encrypted
+          path: /tmp/railway-login-prompt.b64
+          if-no-files-found: error
+          retention-days: 1
+      - name: Wait for Railway authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          PID=$(cat /tmp/railway-login.pid)
+          for i in $(seq 1 300); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              railway whoami --json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/railway-login.log
+          exit 1
       - name: Link production service
         run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
       - name: Deploy exact source to production
