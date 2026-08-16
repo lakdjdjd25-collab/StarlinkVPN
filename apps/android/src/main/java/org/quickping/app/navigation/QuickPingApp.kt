@@ -36,8 +36,9 @@ import org.quickping.app.state.QuickPingViewModel
 import org.quickping.app.ui.screens.AccountScreenWithSignOutConfirmation
 import org.quickping.app.ui.screens.GuardianScreen
 import org.quickping.app.ui.screens.HomeScreen
+import org.quickping.app.ui.screens.NimHubFullScreenLoading
 import org.quickping.app.ui.screens.NotificationsScreen
-import org.quickping.app.ui.screens.PolishedLoginScreen
+import org.quickping.app.ui.screens.ReferenceLoginScreen
 import org.quickping.app.ui.screens.ServicesScreen
 import org.quickping.app.ui.screens.SettingsScreen
 import org.quickping.app.ui.screens.SplashScreen
@@ -192,29 +193,33 @@ fun QuickPingApp(
                         }
                     }
                 }
-                PolishedLoginScreen(
-                    language = state.settings.language,
-                    busy = state.busy,
-                    challengeId = state.loginChallengeId,
-                    debugCode = state.loginDebugCode,
-                    error = state.loginError,
-                    onLanguageChange = { language ->
-                        quickPingViewModel.updateSetting { it.copy(language = language) }
-                    },
-                    onRequestEmailCode = quickPingViewModel::requestEmailCode,
-                    onPasswordLogin = quickPingViewModel::loginWithPassword,
-                    onVerifyCode = quickPingViewModel::verifyEmailCode,
-                    onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
-                    onGoogleRequested = {
-                        val activity = context as? Activity
-                        if (activity != null) {
-                            quickPingViewModel.loginWithGoogle(activity)
-                        } else {
-                            quickPingViewModel.notifyGoogleLoginRequiresConfiguration()
-                        }
-                    },
-                    onHelpRequested = quickPingViewModel::notifyLoginHelp,
-                )
+                if (state.busy) {
+                    NimHubFullScreenLoading()
+                } else {
+                    ReferenceLoginScreen(
+                        language = state.settings.language,
+                        busy = false,
+                        challengeId = state.loginChallengeId,
+                        debugCode = state.loginDebugCode,
+                        error = state.loginError,
+                        onLanguageChange = { language ->
+                            quickPingViewModel.updateSetting { it.copy(language = language) }
+                        },
+                        onRequestEmailCode = quickPingViewModel::requestEmailCode,
+                        onPasswordLogin = quickPingViewModel::loginWithPassword,
+                        onVerifyCode = quickPingViewModel::verifyEmailCode,
+                        onCancelChallenge = quickPingViewModel::cancelLoginChallenge,
+                        onGoogleRequested = {
+                            val activity = context as? Activity
+                            if (activity != null) {
+                                quickPingViewModel.loginWithGoogle(activity)
+                            } else {
+                                quickPingViewModel.notifyGoogleLoginRequiresConfiguration()
+                            }
+                        },
+                        onHelpRequested = quickPingViewModel::notifyLoginHelp,
+                    )
+                }
             }
             composable(
                 route = Route.Home,
