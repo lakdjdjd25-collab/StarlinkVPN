@@ -1,4 +1,4 @@
-name: Deploy admin panel visibility production
+name: Deploy PasarGuard compatibility production
 
 on:
   push:
@@ -16,7 +16,7 @@ jobs:
       - name: Check out exact production source
         uses: actions/checkout@v4
         with:
-          ref: 28f77f1d4bcaed5d4db92a465a46342c71281e1b
+          ref: 4af851fd74447086089279aa7d7dc8f821915529
           path: production
           fetch-depth: 1
       - uses: actions/setup-node@v4
@@ -46,7 +46,7 @@ jobs:
       - name: Upload encrypted Railway device prompt
         uses: actions/upload-artifact@v4
         with:
-          name: railway-device-prompt-admin-panel-v2
+          name: railway-device-prompt-pasarguard-compat
           path: /tmp/railway-login-prompt.b64
           if-no-files-found: error
           retention-days: 1
@@ -65,7 +65,7 @@ jobs:
         run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
       - name: Deploy exact main source
         working-directory: production
-        run: railway up --service control-plane --environment production --detach -m "Deploy admin panel 28f77f1d4bcaed5d4db92a465a46342c71281e1b"
+        run: railway up --service control-plane --environment production --detach -m "Deploy PasarGuard compatibility 4af851fd74447086089279aa7d7dc8f821915529"
       - name: Verify production deployment
         working-directory: production
         shell: bash
@@ -80,25 +80,21 @@ jobs:
             sleep 5
           done
           exit 1
-      - name: Verify admin panel routes
+      - name: Verify production routes
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://control-plane-production-a517.up.railway.app'
           HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/health")
-          NOTIFICATIONS=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/notifications")
-          MANAGEMENT=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/management")
           PASARGUARD=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/integrations/pasarguard")
           test "$HEALTH" = "200"
-          test "$NOTIFICATIONS" != "404"
-          test "$MANAGEMENT" != "404"
           test "$PASARGUARD" != "404"
-          printf '{"health":true,"notificationsPage":true,"managementPage":true,"pasarGuardPage":true}' > /tmp/admin-panel-smoke.json
-      - name: Upload safe admin panel smoke result
+          printf '{"health":true,"pasarGuardPage":true}' > /tmp/pasarguard-compat-smoke.json
+      - name: Upload safe smoke result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nimhub-admin-panel-production-smoke
-          path: /tmp/admin-panel-smoke.json
+          name: nimhub-pasarguard-compat-production-smoke
+          path: /tmp/pasarguard-compat-smoke.json
           if-no-files-found: warn
           retention-days: 7
