@@ -1,4 +1,4 @@
-name: NimHUB direct PasarGuard final probe
+name: Deploy admin panel visibility production
 
 on:
   push:
@@ -9,10 +9,16 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
+      - name: Check out exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: 28f77f1d4bcaed5d4db92a465a46342c71281e1b
+          path: production
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -22,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUF6cHpwSmUveGlmMGQ0elBlV1h0RQpkNnByT2dYSnZEaENmRHNDWlI0TERuVHh2RHdXK1N3Y1lUVEFwcEVGRzlhTGxwUU5GV0I1em0zMDBUWWZTc0oyCnhhcWVlQVZUUnFpZUswTHpKQ3k2NGtzTEM1YXFGYkJsU2tsSVRPWXNuRjFUZUpNM2JYaEZZWUxuY3hoRHhVMXUKdGlwdnc5eWFSRjZEQ3VOczV3TG93KzBOT0FSVEZIcnk4SjMwb3g5NGsvelZIY2MzYmVnWGpjdTBnUjZYQ2NoWgprYWpOeksyK09McUFTL1QyVkNIZUxZK1Q1Qngwa2VhSHhCckQ1RDVoUHhOT2hsckMrM1p1aWxGTmxPdDkwU2hlCkJkeWI1M0JGSXpPS0RsU1NReTZsaXcvZjJQV3dmNTBGb1RrUldhdjJRaFV0RmdKOW9HeG9tdFphc3hJSTBqZG0KeHlGUWlwOGkvZXhDSU9ZVXdFYWZRODlvVUJOSmtNUjhDejlNWFBDb01PZUVrZHhKNldEY1IwMFhMTjhrSXpOQQo0U0Z1SDQvTFMxYUhUbkVaWXNTOTgzNlhnUDY2OEhNMDhsRERnMDh1RXlqaEEwY2FqN3JaaFljcTBYdzZCblBvCnEvbTY2YVdUU0xzaldSeFNDcnQ4NTdPVGNkL3BOank4UWhBUHdBUzQwa1Z6Sm5obDE5K1h3dXpKRG1nQ2hmYkMKRE5xQzEzdGlGVzk1aG03eElUQUpzWnlHTk5MTDFPTVZqU3dxSU10YnMrS1FsSmV3b0J1SkNJek9TdjduRWwrSQpHLzdPUXE4dUZDbURGeW5tdnZOUlFpY3hoUU1ocmNGdmdSd2VJKzNvRVJUSm5uWko4ZktYTVFUdnJsTGhnQ1pQCnh6Z2hsbFJFZi9ZcE40VjhiOWhkQ2s4Q0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
+          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFyd21FR3MrdTVPalpzRFZ6amdQagprNUVIcUxhUTlRQWxBdGlqQm9POGVMc3pRT3M4T0NObXY0K3ZTSit6TFZueEMzMkNOblN2aGdnbkhqZEJ4RXBzCmpReDcvSmxHWm5Bd0ZadkxFY3NvZG5BV05yWG9Za0JpcWZRcFJ5N0NXQ0ZJcXpiVWdONTBGRUNLcHFBTkFidysKUlUxRVk5M214OGhmUE9CK04xWWliREszdmVIdzJGYVE2Qk9qajJYYjFGYS9kNHN3SldUd3F6NGlMZDJ4djVjNwpvdHdZTHBOaWtKT3EyN0FaY0xzbm5ERlFzZjhsV3VvenBCM0dnUjUxOFpKOWFiSkF1MzlXL3d6RkdiY1dtd01WCkVZa05wc2lRQlVMenduSWprclFNV1RWY0R6aVdHQktUYS8xdEpSVmhjZVMxUUE5YVo5b0J6dFJGTlhHWTRBT2kKQ2lHY1pGWnVsR3ltTFkyalM3QzAyVVZIUUVVbnI1WUJoU0dUbWU0cURVaDdVWmNTOFV5bkFvZkwxSnEwTkJRcApmYWFxcDQxTjlHZkJBeENLSmt0cm03SEFSRHZ2aC9vcG5qbkY3Tk1ZeHk3aGVTYlpDVVVXdDdveVdlRXVzb0x4CldGVEV0L0o3MjZDZWdkQkcxUXd6eHRSNTZYRUlBOG1UYVNaMFM0UmpESEdkKzFoeGV3THd2WWNqNW9Tczc3dUQKWkFXVFZHVTlpTlh2K2FjMlc4c2Iwa3VXZGZtRXJNeUw2eC9SNld0dFpTbk02TGk5bkFEUVBkUUZ1WWQyY0Z5VApPcjJJVEJPaCt5djkveTkvdVJ3K0c4ZVFvMzFJOG1aQytSMGR5YjNvMXJDclZkN0JMQ1RqOEg3WFRsSHhCblozCmUrVnpLN3o2SnZBaTBrajgrcmtpYkVNQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
           openssl pkey -pubin -in /tmp/railway-auth-public.pem -noout
           : > /tmp/railway-login.log
           RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
@@ -40,7 +46,7 @@ jobs:
       - name: Upload encrypted Railway device prompt
         uses: actions/upload-artifact@v4
         with:
-          name: railway-device-prompt-direct-pg
+          name: railway-device-prompt-admin-panel
           path: /tmp/railway-login-prompt.b64
           if-no-files-found: error
           retention-days: 1
@@ -54,52 +60,45 @@ jobs:
             sleep 2
           done
           exit 1
-      - name: Direct read-only PasarGuard probe
+      - name: Link production service
+        working-directory: production
+        run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
+      - name: Deploy exact main source
+        working-directory: production
+        run: railway up --service control-plane --environment production --detach -m "Deploy admin panel 28f77f1d4bcaed5d4db92a465a46342c71281e1b"
+      - name: Verify production deployment
+        working-directory: production
         shell: bash
         run: |
           set -euo pipefail
-          railway run --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --service control-plane --environment production --no-local node - <<'NODE'
-          const fs = require('fs');
-          (async () => {
-            const baseValue = process.env.PASARGUARD_BASE_URL;
-            const username = process.env.PASARGUARD_USERNAME;
-            const password = process.env.PASARGUARD_PASSWORD;
-            if (!baseValue || !username || !password) throw new Error('pasarguard_env_missing');
-            let base = new URL(baseValue.trim());
-            const idx = base.pathname.toLowerCase().indexOf('/dashboard');
-            if (idx >= 0) base.pathname = base.pathname.slice(0, idx) || '/';
-            base.pathname = base.pathname.replace(/\/+$/, '') + '/';
-            base.search = ''; base.hash = ''; base.username = ''; base.password = '';
-            const tokenBody = new URLSearchParams({grant_type:'password', username, password});
-            const tokenRes = await fetch(new URL('api/admin/token', base), {method:'POST', headers:{'content-type':'application/x-www-form-urlencoded'}, body:tokenBody});
-            if (!tokenRes.ok) throw new Error(`pasarguard_auth_${tokenRes.status}`);
-            const tokenJson = await tokenRes.json().catch(() => null);
-            if (!tokenJson?.access_token) throw new Error('pasarguard_token_invalid');
-            const headers = {authorization:`Bearer ${tokenJson.access_token}`, accept:'application/json'};
-            const groupsRes = await fetch(new URL('api/groups/simple?limit=100&offset=0', base), {headers});
-            if (!groupsRes.ok) throw new Error(`pasarguard_groups_${groupsRes.status}`);
-            const groupsJson = await groupsRes.json().catch(() => null);
-            if (!Array.isArray(groupsJson?.groups)) throw new Error('pasarguard_groups_invalid');
-            const templatesRes = await fetch(new URL('api/user_templates', base), {headers});
-            if (!templatesRes.ok && templatesRes.status !== 403) throw new Error(`pasarguard_templates_${templatesRes.status}`);
-            let templateCount = null;
-            if (templatesRes.ok) {
-              const templatesJson = await templatesRes.json().catch(() => null);
-              if (!Array.isArray(templatesJson)) throw new Error('pasarguard_templates_invalid');
-              templateCount = templatesJson.length;
-            }
-            const usersRes = await fetch(new URL('api/users?load_sub=false&limit=1&offset=0', base), {headers});
-            if (!usersRes.ok) throw new Error(`pasarguard_users_${usersRes.status}`);
-            const usersJson = await usersRes.json().catch(() => null);
-            if (!Array.isArray(usersJson?.users)) throw new Error('pasarguard_users_invalid');
-            fs.writeFileSync('/tmp/pasarguard-direct-safe.json', JSON.stringify({pasarGuardAuth:true,groupsReadable:true,groupCount:groupsJson.groups.length,templatesReachable:true,templateCount,usersReadable:true}));
-          })().catch((error) => { console.error(error instanceof Error ? error.message : 'pasarguard_probe_failed'); process.exit(1); });
-          NODE
-      - name: Upload safe probe result
+          for i in $(seq 1 120); do
+            STATUS=$(railway deployment list --service control-plane --environment production --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.status||"")})')
+            case "$STATUS" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|SKIPPED|REMOVED) exit 1 ;;
+            esac
+            sleep 5
+          done
+          exit 1
+      - name: Verify admin panel routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://control-plane-production-a517.up.railway.app'
+          HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/health")
+          NOTIFICATIONS=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/notifications")
+          MANAGEMENT=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/management")
+          PASARGUARD=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/admin/integrations/pasarguard")
+          test "$HEALTH" = "200"
+          test "$NOTIFICATIONS" != "404"
+          test "$MANAGEMENT" != "404"
+          test "$PASARGUARD" != "404"
+          printf '{"health":true,"notificationsPage":true,"managementPage":true,"pasarGuardPage":true}' > /tmp/admin-panel-smoke.json
+      - name: Upload safe admin panel smoke result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nimhub-pasarguard-direct-safe
-          path: /tmp/pasarguard-direct-safe.json
+          name: nimhub-admin-panel-production-smoke
+          path: /tmp/admin-panel-smoke.json
           if-no-files-found: warn
           retention-days: 7
