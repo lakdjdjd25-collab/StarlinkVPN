@@ -39,6 +39,7 @@ data class UserInfo(
     val telegramBound: Boolean,
     val balance: Long,
     val language: String,
+    val status: String = "ACTIVE",
 )
 
 data class NotificationItem(

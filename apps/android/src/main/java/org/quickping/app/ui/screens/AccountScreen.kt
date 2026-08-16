@@ -377,9 +377,18 @@ private fun ProfileCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(7.dp))
+                val suspended = user.status == "SUSPENDED"
                 StatusPill(
-                    text = if (user.emailVerified) quickText("تأیید شده", "Verified") else quickText("تأیید نشده", "Unverified"),
-                    color = if (user.emailVerified) QuickPingColors.Success else QuickPingColors.Warning,
+                    text = when {
+                        suspended -> quickText("مسدود شده", "Blocked")
+                        user.emailVerified -> quickText("تأیید شده", "Verified")
+                        else -> quickText("تأیید نشده", "Unverified")
+                    },
+                    color = when {
+                        suspended -> QuickPingColors.Danger
+                        user.emailVerified -> QuickPingColors.Success
+                        else -> QuickPingColors.Warning
+                    },
                 )
             }
         }

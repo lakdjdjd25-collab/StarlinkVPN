@@ -309,6 +309,15 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
         _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load())
     }
 
+    fun refreshAccountState() {
+        viewModelScope.launch {
+            val bootstrap = repository.restoreSession() ?: return@launch
+            val guardian = mergeGuardian(bootstrap)
+            if (bootstrap.user.status == "SUSPENDED") disconnectVpn()
+            _state.update { state -> state.withBootstrap(bootstrap, guardian) }
+        }
+    }
+
     fun requestPasswordChange() {
         accountJob?.cancel()
         accountJob = viewModelScope.launch {

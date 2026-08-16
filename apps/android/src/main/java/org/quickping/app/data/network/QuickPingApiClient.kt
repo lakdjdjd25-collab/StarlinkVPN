@@ -342,6 +342,7 @@ private fun JSONObject.toUserInfo() = UserInfo(
     telegramBound = optBoolean("telegramBound"),
     balance = optLongFlexible("balance"),
     language = optString("language", "fa"),
+    status = optString("status", "ACTIVE"),
 )
 
 private fun JSONObject.toService(): Service {
