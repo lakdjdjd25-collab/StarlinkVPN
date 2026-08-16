@@ -479,7 +479,8 @@ export async function PATCH(request: NextRequest) {
       });
       if (!binding) return fail(404, "managed_license_not_found", "اتصال پاسارگارد این سرویس پیدا نشد");
       const profiles = await availableProfiles(client);
-      const profile = profiles.find((item) => item.key === input.data.profileKey);
+      const profileKey = input.data.profileKey;
+      const profile = profiles.find((item) => item.key === profileKey);
       if (!profile || !profile.groupIds.length) {
         return fail(400, "template_unavailable", "قالب یا گروه انتخاب‌شده در پنل فعال وجود ندارد");
       }
