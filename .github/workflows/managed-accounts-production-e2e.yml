@@ -28,7 +28,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFyd21FR3MrdTVPalpzRFZ6amdQagprNUVIcUxhUTlRQWxBdGlqQm9POGVMc3pRT3M4T0NObXY0K3ZTSit6TFZueEMzMkNOblN2aGdnbkhqZEJ4RXBzCmpReDcvSmxHWm5Bd0ZadkxFY3NvZG5BV05yWG9Za0JpcWZRcFJ5N0NXQ0ZJcXpiVWdONTBGRUNLcHFBTkFidysKUlUxRVk5M214OGhmUE9CK04xWWliREszdmVIdzJGYVE2Qk9qajJYYjFGYS9kNHN3SldUd3F6NGlMZDJ4djVjNwpvdHdZTHBOaWtKT3EyN0FaY0xzbm5ERlFzZjhsV3VvenBCM0dnUjUxOFpKOWFiSkF1MzlXL3d6RkdiY1dtd01WCkVZa05wc2lRQlVMenduSWprclFNV1RWY0R6aVdHQktUYS8xdEpSVmhjZVMxUUE5YVo5b0J6dFJGTlhHWTRBT2kKQ2lHY1pGWnVsR3ltTFkyalM3QzAyVVZIUUVVbnI1WUJoU0dUbWU0cURVaDdVWmNTOFV5bkFvZkwxSnEwTkJRcApmYWFxcDQxTjlHZkJBeENLSmt0cm03SEFSRHZ2aC9vcG5qbkY3Tk1ZeHk3aGVTYlpDVVVXdDdveVdlRXVzb0x4CldGVEV0L0o3MjZDZWdkQkcxUXd6eHRSNTZYRUlBOG1UYVNaMFM0UmpESEdkKzFoeGV3THd2WWNqNW9Tczc3dUQKWkFXVFZHVTlpTlh2K2FjMlc4c2Iwa3VXZGZtRXJNeUw2eC9SNld0dFpTbk02TGk5bkFEUVBkUUZ1WWQyY0Z5VApPcjJJVEJPaCt5djkveTkvdVJ3K0c4ZVFvMzFJOG1aQytSMGR5YjNvMXJDclZkN0JMQ1RqOEg3WFRsSHhCblozCmUrVnpLN3o2SnZBaTBrajgrcmtpYkVNQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
+          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFyd21FR3MrdTVpalpzRFZ6amdQagprNUVIcUxhUTlRQWxBdGlqQm9POGVMc3pRT3M4T0NObXY0K3ZTSit6TFZueEMzMkNOblN2aGdnbkhqZEJ4RXBzCmpReDcvSmxHWm5Bd0ZadkxFY3NvZG5BV05yWG9Za0JpcWZRcFJ5N0NXQ0ZJcXpiVWdONTBGRUNLcHFBTkFidysKUlUxRVk5M214OGhmUE9CK04xWWliREszdmVIdzJGYVE2Qk9qajJYYjFGYS9kNHN3SldUd3F6NGlMZDJ4djVjNwpvdHdZTHBOaWtKT3EyN0FaY0xzbm5ERlFzZjhsV3VvenBCM0dnUjUxOFpKOWFiSkF1MzlXL3d6RkdiY1dtd01WCkVZa05wc2lRQlVMenduSWprclFNV1RWY0R6aVdHQktUYS8xdEpSVmhjZVMxUUE5YVo5b0J6dFJGTlhHWTRBT2kKQ2lHY1pGWnVsR3ltTFkyalM3QzAyVVZIUUVVbnI1WUJoU0dUbWU0cURVaDdVWmNTOFV5bkFvZkwxSnEwTkJRcApmYWFxcDQxTjlHZkJBeENLSmt0cm03SEFSRHZ2aC9vcG5qbkY3Tk1ZeHk3aGVTYlpDVVVXdDdveVdlRXVzb0x4CldGVEV0L0o3MjZDZWdkQkcxUXd6eHRSNTZYRUlBOG1UYVNaMFM0UmpESEdkKzFoeGV3THd2WWNqNW9Tczc3dUQKWkFXVFZHVTlpTlh2K2FjMlc4c2Iwa3VXZGZtRXJNeUw2eC9SNld0dFpTbk02TGk5bkFEUVBkUUZ1WWQyY0Z5VApPcjJJVEJPaCt5djkveTkvdVJ3K0c4ZVFvMzFJOG1aQytSMGR5YjNvMXJDclZkN0JMQ1RqOEg3WFRsSHhCblozCmUrVnpLN3o2SnZBaTBrajgrcmtpYkVNQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
           openssl pkey -pubin -in /tmp/railway-auth-public.pem -noout
           : > /tmp/railway-login.log
           RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
@@ -46,7 +46,7 @@ jobs:
       - name: Upload encrypted Railway device prompt
         uses: actions/upload-artifact@v4
         with:
-          name: railway-device-prompt-admin-panel
+          name: railway-device-prompt-admin-panel-v2
           path: /tmp/railway-login-prompt.b64
           if-no-files-found: error
           retention-days: 1
