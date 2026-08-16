@@ -253,6 +253,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Account) {
+                LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }
                 AccountScreenWithSignOutConfirmation(
                     user = state.user,
                     service = state.service,
@@ -273,6 +274,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Notifications) {
+                LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }
                 NotificationsScreen(
                     notifications = state.notifications,
                     onBack = navController::popBackStack,
