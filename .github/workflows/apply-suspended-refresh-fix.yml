@@ -1,0 +1,64 @@
+name: Apply blocked account live refresh
+
+on:
+  push:
+    branches:
+      - fix/suspended-account-status-notification
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Prepare blocked account live refresh'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/suspended-account-status-notification
+          fetch-depth: 0
+
+      - name: Apply live refresh changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          vm = "apps/android/src/main/java/org/quickping/app/state/QuickPingViewModel.kt"
+          replace_once(
+              vm,
+              '    fun signOut() {\n        disconnectVpn()\n        repository.signOut()\n        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load())\n    }\n\n    fun requestPasswordChange() {\n',
+              '    fun signOut() {\n        disconnectVpn()\n        repository.signOut()\n        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load())\n    }\n\n    fun refreshAccountState() {\n        viewModelScope.launch {\n            val bootstrap = repository.restoreSession() ?: return@launch\n            val guardian = mergeGuardian(bootstrap)\n            if (bootstrap.user.status == "SUSPENDED") disconnectVpn()\n            _state.update { state -> state.withBootstrap(bootstrap, guardian) }\n        }\n    }\n\n    fun requestPasswordChange() {\n',
+          )
+
+          nav = "apps/android/src/main/java/org/quickping/app/navigation/QuickPingApp.kt"
+          replace_once(
+              nav,
+              '            composable(Route.Account) {\n                AccountScreenWithSignOutConfirmation(\n',
+              '            composable(Route.Account) {\n                LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }\n                AccountScreenWithSignOutConfirmation(\n',
+          )
+          replace_once(
+              nav,
+              '            composable(Route.Notifications) {\n                NotificationsScreen(\n',
+              '            composable(Route.Notifications) {\n                LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }\n                NotificationsScreen(\n',
+          )
+          PY
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "NimHUB Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/apply-suspended-refresh-fix.yml
+          git add apps/android
+          git commit -m "Refresh blocked account state in app"
+          git push origin HEAD:fix/suspended-account-status-notification
