@@ -38,22 +38,3 @@ CREATE TRIGGER "nimhub_user_suspension_notification"
 AFTER UPDATE OF "status" ON "User"
 FOR EACH ROW
 EXECUTE FUNCTION "nimhub_notify_suspended_user"();
-
-CREATE OR REPLACE FUNCTION "nimhub_cleanup_suspension_notification"()
-RETURNS trigger AS $$
-BEGIN
-  IF OLD."notificationId" LIKE 'susp_%'
-     AND NOT EXISTS (
-       SELECT 1 FROM "NotificationDelivery" WHERE "notificationId" = OLD."notificationId"
-     ) THEN
-    DELETE FROM "Notification" WHERE "id" = OLD."notificationId";
-  END IF;
-  RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS "nimhub_suspension_notification_cleanup" ON "NotificationDelivery";
-CREATE TRIGGER "nimhub_suspension_notification_cleanup"
-AFTER DELETE ON "NotificationDelivery"
-FOR EACH ROW
-EXECUTE FUNCTION "nimhub_cleanup_suspension_notification"();
