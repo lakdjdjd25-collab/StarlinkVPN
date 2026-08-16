@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrationTransferShape } from "./migration";
+import { migrationTransferShape } from "./migration-shape";
 
 const GB = 1024n ** 3n;
 
