@@ -12,6 +12,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN || secrets.RAILWAY_API_TOKEN }}
     steps:
       - name: Check out exact production source
         uses: actions/checkout@v4
@@ -23,8 +25,9 @@ jobs:
           node-version: 24
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Sign in to Railway
-        run: railway login --browserless
+      - name: Verify Railway token is configured
+        shell: bash
+        run: test -n "$RAILWAY_TOKEN"
       - name: Link production service
         run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
       - name: Deploy exact source to production
