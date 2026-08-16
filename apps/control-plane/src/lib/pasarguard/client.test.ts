@@ -117,6 +117,39 @@ describe("PasarGuard API client", () => {
     expect(templatesUrl.pathname).toBe("/api/user_templates");
   });
 
+  it("loads every PasarGuard group page from the permission-safe simple endpoint", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "group-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        total: 3,
+        groups: [{ id: 2, name: "Direct" }, { id: 5, name: "Premium" }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        total: 3,
+        groups: [{ id: 9, name: null }],
+      }), { status: 200 }));
+    const client = new PasarGuardClient({
+      baseUrl: normalizePasarGuardBaseUrl("https://panel.example.com/dashboard"),
+      username: "admin",
+      password: "test-password",
+      fetch: fetcher as unknown as typeof fetch,
+    });
+
+    const groups = await client.listGroups();
+
+    expect(groups).toEqual([
+      { id: 2, name: "Direct" },
+      { id: 5, name: "Premium" },
+      { id: 9, name: "Group 9" },
+    ]);
+    const [firstPageUrl] = fetcher.mock.calls[1] as [URL, RequestInit];
+    const [secondPageUrl] = fetcher.mock.calls[2] as [URL, RequestInit];
+    expect(firstPageUrl.pathname).toBe("/api/groups/simple");
+    expect(firstPageUrl.searchParams.get("limit")).toBe("100");
+    expect(firstPageUrl.searchParams.get("offset")).toBe("0");
+    expect(secondPageUrl.searchParams.get("offset")).toBe("2");
+  });
+
   it("creates a finite service with quota, expiry, groups and HWID limit", async () => {
     const expire = new Date("2026-09-14T08:30:00.000Z");
     const remote = {
