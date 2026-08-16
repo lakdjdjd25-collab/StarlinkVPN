@@ -4,6 +4,7 @@ import {
   PasarGuardProviderForm,
   PasarGuardSyncButton,
 } from "@/components/EntityForms";
+import { PasarGuardMigrationPanel } from "@/components/PasarGuardMigrationPanel";
 import { db } from "@/lib/db";
 import { formatBytes, formatDate } from "@/lib/format";
 import {
@@ -13,6 +14,18 @@ import {
 } from "@/lib/pasarguard/provider";
 
 export const dynamic = "force-dynamic";
+
+type PlanLabelInput = {
+  name: string;
+  dataLimitBytes: bigint;
+  durationDays: number;
+  maxDevices: number;
+};
+
+function planLabel(plan: PlanLabelInput): string {
+  const details = `${formatBytes(plan.dataLimitBytes)} • ${plan.durationDays} روز • ${plan.maxDevices} دستگاه`;
+  return plan.name.startsWith("NimHUB Managed ") ? details : `${plan.name} — ${details}`;
+}
 
 export default async function PasarGuardPage() {
   const configured = await isPasarGuardConfigured();
@@ -27,14 +40,26 @@ export default async function PasarGuardPage() {
       orderBy: { createdAt: "desc" },
       include: {
         provider: { select: { id: true, name: true, baseUrl: true, active: true } },
-        service: { include: { user: { select: { email: true } }, plan: { select: { id: true, name: true } } } },
+        service: {
+          include: {
+            user: { select: { email: true } },
+            plan: { select: { id: true, name: true, dataLimitBytes: true, durationDays: true, maxDevices: true } },
+          },
+        },
         nodes: { select: { id: true, name: true, status: true } },
       },
     }),
-    db.plan.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.plan.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, dataLimitBytes: true, durationDays: true, maxDevices: true },
+    }),
     db.pasarGuardPlanMapping.findMany({
       orderBy: { updatedAt: "desc" },
-      include: { provider: { select: { id: true, name: true, active: true } }, plan: { select: { id: true, name: true } } },
+      include: {
+        provider: { select: { id: true, name: true, active: true } },
+        plan: { select: { id: true, name: true, dataLimitBytes: true, durationDays: true, maxDevices: true } },
+      },
     }),
   ]);
 
@@ -52,12 +77,29 @@ export default async function PasarGuardPage() {
     }
   }
 
+  const activeMappings = activeProvider
+    ? mappings.filter((mapping) => mapping.providerId === activeProvider.id)
+    : [];
+  const mappedPlanIds = new Set(activeMappings.filter((mapping) => mapping.valid).map((mapping) => mapping.planId));
+  const now = Date.now();
+  const pendingBindings = activeProvider
+    ? bindings.filter((binding) =>
+        binding.providerId !== activeProvider.id
+        && ["ACTIVE", "SUSPENDED"].includes(binding.service.status)
+        && binding.service.expiresAt.getTime() > now,
+      )
+    : [];
+  const readyBindings = pendingBindings.filter((binding) =>
+    mappedPlanIds.has(binding.service.planId) && binding.service.usedBytes < binding.service.quotaBytes,
+  );
+  const blockedBindings = pendingBindings.filter((binding) => !readyBindings.includes(binding));
+
   return (
     <>
       <header className="page-header">
         <div>
-          <h1>اتصال پاسارگارد</h1>
-          <p>تعویض امن Provider، Sync پویا و Mapping مستقل پلن‌ها</p>
+          <h1>مدیریت پنل VPN</h1>
+          <p>تعویض پنل، انتخاب گروه پلن‌ها و انتقال خودکار کاربران</p>
         </div>
         <span className={configured && activeProvider ? "badge green" : "badge red"}>
           {configured && activeProvider ? "پنل فعال متصل است" : "نیازمند تنظیم اتصال"}
@@ -65,16 +107,15 @@ export default async function PasarGuardPage() {
       </header>
 
       <section className="card section">
-        <div className="section-title"><h2>پنل فعال و تعویض Provider</h2></div>
+        <div className="section-title"><h2>پنل فعال</h2></div>
         {activeProvider ? (
           <div style={{ marginBottom: 16, color: "var(--muted)" }}>
             <strong style={{ color: "var(--text)" }}>{activeProvider.name}</strong><br />
             <span dir="ltr">{activeProvider.baseUrl}</span><br />
-            <span dir="ltr">{activeProvider.username}</span><br />
             آخرین تست: {formatDate(activeProvider.lastTestAt)} — آخرین Sync: {formatDate(activeProvider.lastSyncAt)}
             {activeProvider.lastError ? <><br /><span className="error">{activeProvider.lastError}</span></> : null}
           </div>
-        ) : <div className="empty" style={{ marginBottom: 16 }}>هنوز Provider فعالی ثبت نشده است.</div>}
+        ) : <div className="empty" style={{ marginBottom: 16 }}>هنوز پنل فعالی ثبت نشده است.</div>}
         <PasarGuardProviderForm
           configured={configured}
           baseUrl={activeProvider?.baseUrl ?? ""}
@@ -84,55 +125,61 @@ export default async function PasarGuardPage() {
       </section>
 
       <section className="card section">
-        <div className="section-title"><h2>Mapping پلن NimHUB به Group / Template</h2></div>
+        <div className="section-title"><h2>پلن‌های پنل فعال</h2></div>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          نام و IDهای PasarGuard در کد ثابت نیستند. بعد از تعویض پنل، Mapping نامعتبر باید صریحاً به Group/Template جدید متصل شود.
+          فقط یک‌بار مشخص کن هر پلن NimHUB در پنل فعال داخل کدام گروه یا قالب ساخته شود.
         </p>
         <PasarGuardPlanMappingForm
-          plans={plans.map((plan) => ({ id: plan.id, label: plan.name }))}
+          plans={plans.map((plan) => ({ id: plan.id, label: planLabel(plan) }))}
           profiles={profiles}
         />
-        <div className="table-wrap" style={{ marginTop: 18 }}><table>
-          <thead><tr><th>پلن NimHUB</th><th>Provider</th><th>Group / Template</th><th>وضعیت</th><th>بررسی</th></tr></thead>
-          <tbody>{mappings.map((mapping) => <tr key={mapping.id}>
-            <td>{mapping.plan.name}</td>
-            <td>{mapping.provider.name}</td>
-            <td>{mapping.profileName}<br /><small dir="ltr">{mapping.profileKey}</small></td>
-            <td><span className={mapping.valid && mapping.provider.active ? "badge green" : "badge red"}>{mapping.valid && mapping.provider.active ? "معتبر" : "نیازمند تنظیم مجدد"}</span></td>
-            <td>{formatDate(mapping.lastValidatedAt)}</td>
-          </tr>)}</tbody>
-        </table></div>
-      </section>
-
-      <section className="card section">
-        <div className="section-title"><h2>اتصال دستی کاربر پنل به حساب NimHUB</h2></div>
-        <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          عملیات روی Provider فعال انجام می‌شود. رمز مدیر و Config خام هیچ‌وقت به مرورگر یا Android ارسال نمی‌شود.
-        </p>
-        <PasarGuardIntegrationForm configured={configured} quickPingUsers={users.map((user) => ({ id: user.id, label: user.email }))} />
-      </section>
-
-      <section className="card section">
-        <div className="section-title"><h2>Bindingهای سرویس</h2></div>
-        {bindings.length ? (
-          <div className="table-wrap"><table>
-            <thead><tr><th>کاربر پاسارگارد</th><th>حساب NimHUB</th><th>پلن</th><th>Provider</th><th>مصرف</th><th>سرورها</th><th>Sync</th><th>کنترل</th></tr></thead>
-            <tbody>{bindings.map((binding) => {
-              const needsMigration = Boolean(activeProvider && binding.providerId !== activeProvider.id);
-              return <tr key={binding.id}>
-                <td><strong dir="ltr">{binding.externalUsername}</strong><br /><small dir="ltr">#{String(binding.externalUserId)}</small></td>
-                <td dir="ltr">{binding.service.user.email}</td>
-                <td>{binding.service.plan.name}</td>
-                <td>{binding.provider?.name ?? "Legacy"}<br />{needsMigration ? <span className="badge red">نیازمند انتقال</span> : <span className="badge green">فعال</span>}</td>
-                <td>{formatBytes(binding.service.usedBytes)} / {formatBytes(binding.service.quotaBytes)}</td>
-                <td><span className="badge blue">{binding.nodes.length} سرور</span></td>
-                <td>{formatDate(binding.lastSyncAt)}{binding.lastError ? <><br /><span className="error">{binding.lastError}</span></> : null}</td>
-                <td><PasarGuardSyncButton bindingId={binding.id} /></td>
-              </tr>;
-            })}</tbody>
+        {activeMappings.length ? (
+          <div className="table-wrap" style={{ marginTop: 18 }}><table>
+            <thead><tr><th>پلن</th><th>گروه / قالب پنل فعال</th><th>وضعیت</th></tr></thead>
+            <tbody>{activeMappings.map((mapping) => <tr key={mapping.id}>
+              <td>{planLabel(mapping.plan)}</td>
+              <td>{mapping.profileName}</td>
+              <td><span className={mapping.valid ? "badge green" : "badge red"}>{mapping.valid ? "آماده" : "نیازمند انتخاب دوباره"}</span></td>
+            </tr>)}</tbody>
           </table></div>
-        ) : <div className="empty">هنوز کاربری از پاسارگارد متصل نشده است.</div>}
+        ) : <div className="empty" style={{ marginTop: 16 }}>هنوز برای پنل فعال، گروهی به پلن‌ها اختصاص داده نشده است.</div>}
       </section>
+
+      <PasarGuardMigrationPanel
+        pendingCount={pendingBindings.length}
+        readyCount={readyBindings.length}
+        blockedCount={blockedBindings.length}
+      />
+
+      <details className="card section">
+        <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: 18 }}>تنظیمات پیشرفته و عیب‌یابی</summary>
+        <p style={{ color: "var(--muted)" }}>
+          این بخش برای اتصال دستی یا بررسی فنی است و برای انتقال عادی کاربران لازم نیست.
+        </p>
+        <div style={{ marginTop: 20 }}>
+          <h3>اتصال دستی یک کاربر</h3>
+          <PasarGuardIntegrationForm configured={configured} quickPingUsers={users.map((user) => ({ id: user.id, label: user.email }))} />
+        </div>
+        <div style={{ marginTop: 28 }}>
+          <h3>وضعیت فنی سرویس‌ها</h3>
+          {bindings.length ? (
+            <div className="table-wrap"><table>
+              <thead><tr><th>حساب NimHUB</th><th>پلن</th><th>وضعیت پنل</th><th>مصرف</th><th>سرورها</th><th>کنترل</th></tr></thead>
+              <tbody>{bindings.map((binding) => {
+                const needsMigration = Boolean(activeProvider && binding.providerId !== activeProvider.id);
+                return <tr key={binding.id}>
+                  <td dir="ltr">{binding.service.user.email}</td>
+                  <td>{planLabel(binding.service.plan)}</td>
+                  <td>{needsMigration ? <span className="badge red">در حال بررسی</span> : <span className="badge green">تأیید شده</span>}</td>
+                  <td>{formatBytes(binding.service.usedBytes)} / {formatBytes(binding.service.quotaBytes)}</td>
+                  <td><span className="badge blue">{needsMigration ? 0 : binding.nodes.length} سرور</span></td>
+                  <td><PasarGuardSyncButton bindingId={binding.id} /></td>
+                </tr>;
+              })}</tbody>
+            </table></div>
+          ) : <div className="empty">سرویسی متصل نشده است.</div>}
+        </div>
+      </details>
     </>
   );
 }

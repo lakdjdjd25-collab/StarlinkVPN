@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
             orderBy: { priority: "desc" },
           },
           guardianProfile: { include: { rules: true } },
+          pasarGuardBinding: { select: { providerId: true, lastSyncAt: true } },
         },
       },
     },
@@ -44,9 +45,10 @@ export async function GET(request: NextRequest) {
   if (auth.serviceId && visibleServices.length !== 1) {
     return fail(403, "license_unavailable", "The licensed service is no longer available");
   }
-  const [settings, management, release, notifications] = await Promise.all([
+  const [settings, management, activeProvider, release, notifications] = await Promise.all([
     db.globalSetting.findUnique({ where: { key: "client.bootstrap" } }),
     db.globalSetting.findUnique({ where: { key: "client.management" } }),
+    db.pasarGuardProvider.findFirst({ where: { active: true }, select: { id: true } }),
     db.appRelease.findFirst({
       where: { platform: "ANDROID", publishedAt: { not: null } },
       orderBy: { versionCode: "desc" },
@@ -90,34 +92,43 @@ export async function GET(request: NextRequest) {
       language: user.language,
       status: user.status,
     },
-    services: visibleServices.map((service) => ({
-      id: service.id,
-      name: service.name,
-      plan: service.plan.name,
-      license: service.license,
-      size: service.quotaBytes,
-      usedSize: service.usedBytes,
-      remainSize: service.quotaBytes > service.usedBytes
-        ? service.quotaBytes - service.usedBytes
-        : 0n,
-      expiryTime: service.expiresAt,
-      usersCount: service.maxDevices,
-      isFree: service.isFree,
-      autoPay: service.autoPay,
-      servers: user.status === "SUSPENDED" ? [] : service.nodes.map(({ node }) => ({
-        id: node.id,
-        location: node.region.name,
-        countryCode: node.region.countryCode,
-        remarks: node.name,
-        host: node.host,
-        port: node.port,
-        coreType: node.coreType,
-        freeAllowed: node.freeAllowed,
-        unmetered: node.unmetered,
-        status: node.status,
-      })),
-      guardian: service.guardianProfile,
-    })),
+    services: visibleServices.map((service) => {
+      const providerReview = Boolean(
+        service.pasarGuardBinding
+        && (!activeProvider
+          || service.pasarGuardBinding.providerId !== activeProvider.id
+          || !service.pasarGuardBinding.lastSyncAt),
+      );
+      return {
+        id: service.id,
+        name: service.name,
+        plan: service.plan.name,
+        license: service.license,
+        size: service.quotaBytes,
+        usedSize: service.usedBytes,
+        remainSize: service.quotaBytes > service.usedBytes
+          ? service.quotaBytes - service.usedBytes
+          : 0n,
+        expiryTime: service.expiresAt,
+        usersCount: service.maxDevices,
+        isFree: service.isFree,
+        autoPay: service.autoPay,
+        providerState: providerReview ? "REVIEW" : "READY",
+        servers: user.status === "SUSPENDED" || providerReview ? [] : service.nodes.map(({ node }) => ({
+          id: node.id,
+          location: node.region.name,
+          countryCode: node.region.countryCode,
+          remarks: node.name,
+          host: node.host,
+          port: node.port,
+          coreType: node.coreType,
+          freeAllowed: node.freeAllowed,
+          unmetered: node.unmetered,
+          status: node.status,
+        })),
+        guardian: service.guardianProfile,
+      };
+    }),
     global: settings?.value ?? {},
     management: management?.value ?? { telegramUsername: "Folwn" },
     release,

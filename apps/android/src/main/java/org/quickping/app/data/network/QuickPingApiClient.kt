@@ -374,6 +374,7 @@ private fun JSONObject.toService(): Service {
         daysLeft = daysLeft.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         usersCount = optInt("usersCount", 1),
         isFree = optBoolean("isFree"),
+        providerState = optString("providerState", "READY"),
     )
 }
 

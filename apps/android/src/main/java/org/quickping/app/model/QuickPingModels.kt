@@ -27,7 +27,9 @@ data class Service(
     val usersCount: Int,
     val isFree: Boolean = false,
     val banned: Boolean = false,
+    val providerState: String = "READY",
 ) {
+    val pendingReview: Boolean get() = providerState == "REVIEW"
     val remainingBytes: Long get() = (totalBytes - usedBytes).coerceAtLeast(0)
     val usedFraction: Float get() = if (totalBytes == 0L) 0f else usedBytes.toFloat() / totalBytes
 }

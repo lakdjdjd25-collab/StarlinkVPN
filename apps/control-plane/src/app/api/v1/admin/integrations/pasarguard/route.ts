@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
@@ -13,6 +14,7 @@ import {
   syncActivePasarGuardProfiles,
   testPasarGuardProvider,
 } from "@/lib/pasarguard/provider";
+import { migratePasarGuardBindingToActiveProvider } from "@/lib/pasarguard/migration";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 const credentials = z.object({
@@ -35,6 +37,11 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("map_plan"),
     planId: z.string().min(1),
     profileKey: z.string().regex(/^(template|group):[1-9]\d*$/),
+  }),
+  z.object({
+    action: z.literal("migrate_batch"),
+    limit: z.number().int().min(1).max(50).default(20),
+    excludeBindingIds: z.array(z.string().min(1)).max(1000).default([]),
   }),
 ]);
 
@@ -194,6 +201,79 @@ export async function POST(request: NextRequest) {
         },
       });
       return ok({ mapped: true, mapping });
+    }
+
+    if (input.data.action === "migrate_batch") {
+      const client = await createPasarGuardClient();
+      if (!client.providerId) return fail(503, "pasarguard_not_configured", "Provider فعال شناسه معتبر ندارد");
+      const mappings = await db.pasarGuardPlanMapping.findMany({
+        where: { providerId: client.providerId, valid: true },
+        select: { planId: true },
+      });
+      const mappedPlanIds = [...new Set(mappings.map((mapping) => mapping.planId))];
+      if (!mappedPlanIds.length) {
+        return fail(409, "plan_mapping_required", "ابتدا گروه پنل فعال را برای پلن‌های NimHUB مشخص کنید");
+      }
+      const excluded = [...new Set(input.data.excludeBindingIds)];
+      const baseWhere: Prisma.PasarGuardBindingWhereInput = {
+        OR: [{ providerId: null }, { providerId: { not: client.providerId } }],
+        service: {
+          planId: { in: mappedPlanIds },
+          status: { in: ["ACTIVE", "SUSPENDED"] },
+          expiresAt: { gt: new Date() },
+        },
+      };
+      const candidates = await db.pasarGuardBinding.findMany({
+        where: { ...baseWhere, ...(excluded.length ? { id: { notIn: excluded } } : {}) },
+        orderBy: { createdAt: "asc" },
+        take: input.data.limit,
+        select: { id: true },
+      });
+      const visibleUsers = await client.listUsers();
+      const migratedIds: string[] = [];
+      const failed: Array<{ bindingId: string; message: string }> = [];
+      for (const candidate of candidates) {
+        try {
+          const result = await migratePasarGuardBindingToActiveProvider(candidate.id, { client, visibleUsers });
+          migratedIds.push(candidate.id);
+          if (result.remoteUser) {
+            const index = visibleUsers.findIndex((user) => user.id === result.remoteUser!.id);
+            if (index >= 0) visibleUsers[index] = result.remoteUser;
+            else visibleUsers.push(result.remoteUser);
+          }
+        } catch (error) {
+          failed.push({
+            bindingId: candidate.id,
+            message: error instanceof PasarGuardError ? error.message : "انتقال این سرویس انجام نشد",
+          });
+        }
+      }
+      const skippedNow = [...new Set([...excluded, ...candidates.map((candidate) => candidate.id)])];
+      const remainingEligible = await db.pasarGuardBinding.count({
+        where: { ...baseWhere, ...(skippedNow.length ? { id: { notIn: skippedNow } } : {}) },
+      });
+      await db.auditLog.create({
+        data: {
+          actorId: admin.sub,
+          action: "pasarguard.migrateBatch",
+          entityType: "PasarGuardProvider",
+          entityId: client.providerId,
+          after: {
+            processed: candidates.length,
+            migrated: migratedIds.length,
+            failed: failed.length,
+            remainingEligible,
+          },
+        },
+      });
+      return ok({
+        processed: candidates.length,
+        migratedCount: migratedIds.length,
+        migratedIds,
+        failed,
+        remainingEligible,
+        hasMoreEligible: remainingEligible > 0,
+      });
     }
 
     if (input.data.action === "bind") {

@@ -63,6 +63,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                     busy = false,
                 )
             }
+            if (bootstrap?.services?.firstOrNull()?.pendingReview == true) disconnectVpn()
         }
         viewModelScope.launch {
             QuickPingVpnService.status.collect { serviceStatus ->
@@ -88,8 +89,10 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             _state.update {
                 it.copy(
                     connectionStatus = ConnectionStatus.Error,
-                    connectionError = "هیچ سرور فعالی برای اتصال وجود ندارد",
-                    connectionErrorCode = "no_server",
+                    connectionError = if (current.service.pendingReview)
+                        "سرویس در حال بررسی انتقال به پنل جدید است"
+                    else "هیچ سرور فعالی برای اتصال وجود ندارد",
+                    connectionErrorCode = if (current.service.pendingReview) "service_pending_review" else "no_server",
                 )
             }
             return
@@ -318,7 +321,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             val bootstrap = repository.restoreSession() ?: return@launch
             settingsStore.saveManagement(bootstrap.management)
             val guardian = mergeGuardian(bootstrap)
-            if (bootstrap.user.status == "SUSPENDED") disconnectVpn()
+            if (bootstrap.user.status == "SUSPENDED" || bootstrap.services.firstOrNull()?.pendingReview == true) disconnectVpn()
             _state.update { state -> state.withBootstrap(bootstrap, guardian) }
         }
     }
@@ -585,6 +588,7 @@ private fun Throwable.connectionMessage(): String = when (this) {
         "node_unavailable" -> "سرور انتخاب‌شده موقتاً در دسترس نیست"
         "service_not_found" -> "سرویس فعال پیدا نشد؛ حساب را دوباره همگام کنید"
         "quota_exhausted" -> "حجم سرویس به پایان رسیده است"
+        "service_pending_review" -> "سرویس در حال بررسی انتقال به پنل جدید است"
         "invalid_config" -> "پیکربندی سرور ناقص یا ناسازگار است"
         else -> message.ifBlank { "دریافت پیکربندی سرور ناموفق بود" }
     }

@@ -416,7 +416,13 @@ private fun ReferenceServiceCard(service: Service, onServices: () -> Unit) {
                     Text(service.license, color = QuickPingColors.TextMuted, style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(Modifier.weight(1f))
-                StatusPill(service.plan, QuickPingColors.TextSecondary)
+                StatusPill(
+                    if (service.pendingReview) quickText(
+                        "در حال بررسی", "Under review", nl = "Wordt beoordeeld", ar = "قيد المراجعة",
+                        tr = "İnceleniyor", ru = "На проверке", hi = "समीक्षा में", zh = "审核中", ur = "زیرِ جائزہ",
+                    ) else service.plan,
+                    if (service.pendingReview) QuickPingColors.Warning else QuickPingColors.TextSecondary,
+                )
             }
             Spacer(Modifier.height(8.dp))
             Text("$remainingPercent٪", modifier = Modifier.fillMaxWidth(), color = QuickPingColors.TextPrimary, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)

@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok, requireBearer } from "@/lib/api";
 import { decryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
+import { activePasarGuardProviderSummary } from "@/lib/pasarguard/provider";
 
 export async function GET(
   request: NextRequest,
@@ -24,6 +25,7 @@ export async function GET(
       expiresAt: { gt: new Date() },
     },
     include: {
+      pasarGuardBinding: { select: { providerId: true, lastSyncAt: true } },
       nodes: {
         where: {
           enabled: true,
@@ -36,6 +38,14 @@ export async function GET(
     },
   });
   if (!service) return fail(404, "service_not_found", "No active service was found");
+  if (service.pasarGuardBinding) {
+    const activeProvider = await activePasarGuardProviderSummary();
+    if (!activeProvider
+      || service.pasarGuardBinding.providerId !== activeProvider.id
+      || !service.pasarGuardBinding.lastSyncAt) {
+      return fail(409, "service_pending_review", "The service is waiting for provider migration");
+    }
+  }
   if (service.usedBytes >= service.quotaBytes) {
     return fail(403, "quota_exhausted", "The service quota is exhausted");
   }

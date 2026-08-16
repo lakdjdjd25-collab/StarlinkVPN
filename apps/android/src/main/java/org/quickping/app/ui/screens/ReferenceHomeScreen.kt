@@ -39,6 +39,8 @@ internal fun ReferenceHomeScreen(
     onUpgrade: () -> Unit,
 ) {
     val connected = state.connectionStatus == ConnectionStatus.Connected
+    val pendingReview = state.service.pendingReview
+    val toggleConnection: () -> Unit = if (pendingReview) ({}) else onToggleConnection
     Box(Modifier.fillMaxSize().background(QuickPingColors.Background)) {
         Image(
             painter = painterResource(if (connected) R.drawable.bg_home_connected else R.drawable.bg_home_disconnected),
@@ -65,7 +67,7 @@ internal fun ReferenceHomeScreen(
         )
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ReferenceHomeHeader(state, onSettings, onAccount, onNotifications, onUpgrade)
-            ReferenceConnectionPanel(state, false, onToggleConnection)
+            ReferenceConnectionPanel(state, false, toggleConnection)
             ReferenceServerList(
                 modifier = Modifier.weight(1f).background(QuickPingColors.Background),
                 state = state,
@@ -139,7 +141,10 @@ private fun ReferenceHomeHeader(
             }
             Spacer(Modifier.height(2.dp))
             Text(
-                when (state.connectionStatus) {
+                if (state.service.pendingReview) quickText(
+                    "در حال بررسی", "Under review", nl = "Wordt beoordeeld", ar = "قيد المراجعة",
+                    tr = "İnceleniyor", ru = "На проверке", hi = "समीक्षा में", zh = "审核中", ur = "زیرِ جائزہ",
+                ) else when (state.connectionStatus) {
                     ConnectionStatus.Connected -> quickText("متصل است", "is Connected")
                     ConnectionStatus.Connecting -> quickText("در حال اتصال", "is Connecting")
                     ConnectionStatus.Error -> quickText("خطای اتصال", "Connection Error")
