@@ -175,7 +175,7 @@ private fun tcpConnectPing(network: Network?, host: String, port: Int): Int? = r
         val socket = network?.socketFactory?.createSocket() ?: Socket()
         socket.use {
             val started = System.nanoTime()
-            val endpoint = InetSocketAddress(address ?: host, port)
+            val endpoint = if (address != null) InetSocketAddress(address, port) else InetSocketAddress(host, port)
             it.connect(endpoint, STABLE_PING_CONNECT_TIMEOUT_MS)
             val elapsed = ((System.nanoTime() - started) / 1_000_000.0)
                 .roundToInt()
