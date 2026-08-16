@@ -1,0 +1,32 @@
+name: Fix PR32 lint narrowing
+on:
+  push:
+    branches: [agent/final-admin-improvements]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fix narrowing and remove helper
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('apps/control-plane/src/app/api/v1/admin/licenses/route.ts')
+          s=p.read_text()
+          old='''      const profiles = await availableProfiles(client);\n      const profile = profiles.find((item) => item.key === input.data.profileKey);'''
+          new='''      const profiles = await availableProfiles(client);\n      const profileKey = input.data.profileKey;\n      const profile = profiles.find((item) => item.key === profileKey);'''
+          if old not in s: raise SystemExit('target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          rm -f .github/workflows/fix-pr32-lint.yml
+          git config user.name "NimHUB Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Fix provider migration type narrowing"
+          git push origin HEAD:agent/final-admin-improvements
