@@ -1,0 +1,20 @@
+name: Source snapshot final
+on:
+  push:
+    branches:
+      - agent/final-admin-improvements
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nimhub-source-snapshot-final
+          path: |
+            .
+            !.git/**
+          include-hidden-files: true
+          retention-days: 1
