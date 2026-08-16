@@ -1,0 +1,29 @@
+name: Apply final NimHUB patch
+on:
+  push:
+    branches:
+      - agent/final-admin-improvements
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply validated source bundle
+        run: |
+          set -euo pipefail
+          test -s .nimhub-final-patch.tar.gz
+          tar -tzf .nimhub-final-patch.tar.gz >/dev/null
+          tar -xzf .nimhub-final-patch.tar.gz
+          rm -f .nimhub-final-patch.tar.gz
+          rm -f .github/workflows/source-snapshot-final.yml
+          rm -f .github/workflows/apply-final-patch.yml
+          git config user.name "NimHUB Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Implement dynamic admin, notifications, localization and PasarGuard switching"
+          git push origin HEAD:agent/final-admin-improvements
