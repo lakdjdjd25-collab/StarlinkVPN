@@ -2,7 +2,6 @@ package org.quickping.app.ui.screens
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -55,6 +54,9 @@ import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.json.JSONObject
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import org.quickping.app.model.AppLanguage
 
 private const val REFERENCE_LOGIN_MOTION_MS = 300
@@ -668,10 +670,28 @@ internal fun referenceExtractLicense(raw: String): String {
 
     if (!value.contains("://")) return ""
     return runCatching {
-        val uri = Uri.parse(value)
+        val uri = URI(value)
+        val scheme = uri.scheme?.lowercase().orEmpty()
+        if (scheme !in setOf("https", "http", "nimhub")) return@runCatching ""
+
+        val host = uri.host?.lowercase().orEmpty()
+        if (scheme in setOf("https", "http") && !host.contains("nimhub")) {
+            return@runCatching ""
+        }
+
+        val query = uri.rawQuery.orEmpty()
+            .split('&')
+            .mapNotNull { pair ->
+                val separator = pair.indexOf('=')
+                if (separator <= 0) return@mapNotNull null
+                val key = URLDecoder.decode(pair.substring(0, separator), StandardCharsets.UTF_8.name())
+                val content = URLDecoder.decode(pair.substring(separator + 1), StandardCharsets.UTF_8.name())
+                key.lowercase() to content
+            }
+            .toMap()
         val candidate = listOf("license", "code", "key")
-            .firstNotNullOfOrNull { uri.getQueryParameter(it)?.trim()?.takeIf(String::isNotBlank) }
-            ?: uri.lastPathSegment?.trim().orEmpty()
+            .firstNotNullOfOrNull { query[it]?.trim()?.takeIf(String::isNotBlank) }
+            ?: uri.path?.substringAfterLast('/')?.trim().orEmpty()
         normalizeReferenceLicense(candidate)
     }.getOrDefault("")
 }
