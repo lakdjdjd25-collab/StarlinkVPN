@@ -1,4 +1,4 @@
-name: NimHUB final production deploy
+name: NimHUB final production verification
 
 on:
   push:
@@ -9,9 +9,9 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     steps:
       - name: Check out exact production source
         uses: actions/checkout@v4
@@ -22,13 +22,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Install project dependencies
+        working-directory: production
+        run: npm ci
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
       - name: Start Railway device authentication
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUE0MUlVQVBtZzk5Mnc1NWhXSGFGaApOTjRMS3U4VlMwMmc1K1BhMndPWGpNU0Q4R0VmbERKcmZRV29Sdk1CakpiR3RORm1YNHNuU3VRZDRGMlRRTVYwCjJBS1luS0FrbmpYWlJ4WUZGR2pDYkNPU0lJRmYvYUVsMjhxVGVLWGtYVkFMRFB6b3o5bUlxbDROTEJObFh6U0YKTUlvSDdZYi9JbVNIT1lSZmVqWTFPY2RmTmJaYmVUSVlFYXVqRTMyRnJMODNhdXNHYUhHd2hvMXF2bmxYdXRnWgo0Zmo2eVVoODc0Z29vc0dxWGVzdzN3S0Y1S0tEM2RMVEwvbDdYKzUzUjM3bGtUSXRXZmIxMFltbFFWUWZ1WG94CktGRWxqS1RVSEZKcTlSTldqaXVuYTRBZHFTdFl5NmxRaXpxa1haZ25CRTZMZ2w4RjdLMDFiNEFmb2xndGE3VTIKVWpPWTF4TnY0NlpkYUxxb3N1MkJ2ZFBvTTVjUi9kQVdLVVZTUlZyVWVteVhwMUNnZ0Vidm9tTmxpTnZva3p0cApXM0lqZTdBUE9BZ0VNQ09sZTVrbXgrSUlaZWJHL3dhS3dINjZIY1VwOE5yaFQ1ekNqZ0RFM2xQQnJScWpKdXhQClNPVzZnamR3RmkxQlNxSlI0TXpZZVdRY0N2OHlYRHorRWhiNWhxeGdGZ3RpczNHUkU4ZG83OW1qcXZ0VWVGWm0KdHhzaXMxUGE0aTNzZW5WWkQ0SmdsV3laR2F4WXhqUmJLS1JRU0h0dUJFc2dIUThTdGFDTzZLSmQ2aWVqWi9JRgpwRkUzYWIzMk1iUjU4aGlaZjhYUTI3Yy9MWjF0YnUzZnJwdTVLY25wMjh1UWgzejEvMFBycHNodDY3OGtscFhLCldPYTlEOTBkYUpXcFJkOU52SUNxdW1zQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
+          printf '%s' 'LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnOEFNSUlDQ2dLQ0FnRUFzNzBhdjAzWW1jb3U4RGtWa1dSMQpkRDNaVkFPRnp3QWlLc1I4ZURJVmlLWXRmd3pJMVdoaFNEa05iTHUyNXdqL2xvVDY3anZlbWN2VUs5MERJekJICjNONldjT2pzeENwUy9BcHBGa2ZORGpibWUxL3FIc0pxdEVUT3FLZjVqRnl6NTNsdDFvTk9WbDh1MUtYeU1xWjYKc05SbCtRbFI2R2JCbVBtazdXUTJPRXZ2RC8vMlgxd1pDMTZOM09tVW1oT1hLQ2JlN3ZCMm0xUjZML2pXNFNRVApVU0NpL0VlaUNxN2FLMzNvNnhISTVxcnBCaXF4aXA0YXovd1g1N25lY0ZkTHdtYURralRnUVNWbnBvQXBkTy9UClBZb2VsdWM2NG9LYi9LaFJ4clhKK0ZVcDlWMUpYN0FNR2ExbjV2bnkvaHlDSUdaTFR0SFhCQ2pxQWZvdDdyS2EKSW5LdXFzMzRwd2pNZURsWlQvZmZtTkE2dFFRR000MlJkVjlIWUVyR3UvREVnWUpXSi9FNjZJdWhPbmJjZDhPMwpNekVVbjFxbTJISVRXWm5UQWJ3aDl4b3ZoVTN5dHc2RzZsRjRZdmlFd2VSZFUzbURCeUZJeTY0eHVGM3RqRkpJCmtpVm1zRVhwOFZGT20yMVhBZ1VReGZxZUkybzJYenJmM1pGa0FVNWg2V3RKemcvaXJqeG1oSlVJTk5UR0M0UEoKZy9GeXd4dm14eFFScWgzUG9QOEFTTFhxZ0p0NXdyNXRzdVZJTTI1QVdUNXVKdTlhRmJUS256S2ZNRU5tNUNSNgpZYmpUdzNRYlprWGYrKzFGT1BVdi8xT01aaVFPZHpVb015MzNpWHppd294MnlIY1Y4ajd6YS9hNWhPVXZEVGZqCjJodWVPRE1aSGNWNHk3aERKNk9zbXRjQ0F3RUFBUT09Ci0tLS0tRU5EIFBVQkxJQyBLRVktLS0tLQo=' | base64 -d > /tmp/railway-auth-public.pem
           openssl pkey -pubin -in /tmp/railway-auth-public.pem -noout
           : > /tmp/railway-login.log
           RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
@@ -48,7 +51,7 @@ jobs:
       - name: Upload encrypted Railway device prompt
         uses: actions/upload-artifact@v4
         with:
-          name: railway-device-prompt-encrypted-2613
+          name: railway-device-prompt-encrypted-final-smoke
           path: /tmp/railway-login-prompt.b64
           if-no-files-found: error
           retention-days: 1
@@ -62,71 +65,52 @@ jobs:
             sleep 2
           done
           exit 1
-      - name: Link production service
-        working-directory: production
-        run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
-      - name: Deploy exact main source
-        working-directory: production
-        run: railway up --service control-plane --environment production --detach -m "Deploy NimHUB 2.6.13 68780e32a0117b49489a29373d1affc50e1e800d"
-      - name: Verify production deployment
-        working-directory: production
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 120); do
-            STATUS=$(railway deployment list --service control-plane --environment production --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.status||"")})')
-            case "$STATUS" in
-              SUCCESS) exit 0 ;;
-              FAILED|CRASHED|SKIPPED|REMOVED) exit 1 ;;
-            esac
-            sleep 5
-          done
-          exit 1
-      - name: Verify new production routes
+      - name: Correct production route smoke
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://control-plane-production-a517.up.railway.app'
-          HEALTH=$(curl -sS -o /tmp/health.json -w '%{http_code}' "$BASE/api/v1/health")
-          MANAGEMENT=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/client/management")
-          READ_ROUTE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$BASE/api/v1/client/notifications/test/read")
+          HEALTH=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/health")
+          BOOTSTRAP=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/client/bootstrap")
+          NOTIFICATIONS=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH -H 'content-type: application/json' --data '{}' "$BASE/api/v1/client/notifications")
           ADMIN_PG=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/api/v1/admin/integrations/pasarguard")
           test "$HEALTH" = "200"
-          test "$MANAGEMENT" != "404"
-          test "$READ_ROUTE" != "404"
+          test "$BOOTSTRAP" != "404"
+          test "$NOTIFICATIONS" != "404"
           test "$ADMIN_PG" != "404"
-          printf '{"health":true,"managementRoute":true,"notificationReadRoute":true,"pasarGuardAdminRoute":true}' > /tmp/final-smoke.json
-      - name: Safe PasarGuard connectivity probe
+          printf '{"health":true,"bootstrapRoute":true,"notificationReadRoute":true,"pasarGuardAdminRoute":true}' > /tmp/http-smoke.json
+      - name: Safe active PasarGuard connectivity probe
+        working-directory: production/apps/control-plane
         shell: bash
         run: |
           set -euo pipefail
-          railway run --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --service control-plane --environment production --no-local node - <<'NODE'
-          const baseValue = process.env.PASARGUARD_BASE_URL;
-          const username = process.env.PASARGUARD_USERNAME;
-          const password = process.env.PASARGUARD_PASSWORD;
-          if (!baseValue || !username || !password) process.exit(10);
-          const base = new URL(baseValue.endsWith('/') ? baseValue : `${baseValue}/`);
-          const body = new URLSearchParams({grant_type:'password', username, password});
-          const tokenResponse = await fetch(new URL('api/admin/token', base), {method:'POST', headers:{'content-type':'application/x-www-form-urlencoded'}, body});
-          if (!tokenResponse.ok) process.exit(11);
-          const tokenJson = await tokenResponse.json().catch(() => null);
-          if (!tokenJson?.access_token) process.exit(12);
-          const headers = {authorization:`Bearer ${tokenJson.access_token}`, accept:'application/json'};
-          const groupResponse = await fetch(new URL('api/groups/simple?limit=100&offset=0', base), {headers});
-          if (!groupResponse.ok) process.exit(13);
-          const groupJson = await groupResponse.json().catch(() => null);
-          const groupCount = Array.isArray(groupJson?.groups) ? groupJson.groups.length : -1;
-          if (groupCount < 0) process.exit(14);
-          const templateResponse = await fetch(new URL('api/user_templates', base), {headers});
-          const templateReachable = templateResponse.ok || templateResponse.status === 403;
-          if (!templateReachable) process.exit(15);
-          console.log(JSON.stringify({pasarGuardAuth:true, groupsReadable:true, groupCount, templatesReachable:templateReachable}));
+          railway run --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --service control-plane --environment production --no-local npx tsx -e '
+            import { writeFileSync } from "node:fs";
+            import { createPasarGuardClient, discoverPasarGuardProfiles } from "./src/lib/pasarguard/provider.ts";
+            (async () => {
+              const client = await createPasarGuardClient();
+              const profiles = await discoverPasarGuardProfiles(client);
+              if (!profiles.length) throw new Error("no_usable_profiles");
+              await client.listUsers();
+              const groupCount = profiles.filter((p) => p.kind === "group").length;
+              const templateCount = profiles.filter((p) => p.kind === "template").length;
+              writeFileSync("/tmp/pasarguard-smoke.json", JSON.stringify({pasarGuardAuth:true, profilesReadable:true, groupCount, templateCount, usersReadable:true}));
+            })().catch((error) => { console.error(error instanceof Error ? error.message : "provider_smoke_failed"); process.exit(1); });
+          '
+      - name: Combine safe result
+        if: always()
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const read = (p) => { try { return JSON.parse(fs.readFileSync(p,'utf8')); } catch { return {}; } };
+          fs.writeFileSync('/tmp/final-smoke.json', JSON.stringify({...read('/tmp/http-smoke.json'), ...read('/tmp/pasarguard-smoke.json')}));
           NODE
       - name: Upload safe final smoke result
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: nimhub-2613-production-smoke
+          name: nimhub-2613-production-final-smoke
           path: /tmp/final-smoke.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
