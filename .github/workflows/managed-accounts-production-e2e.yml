@@ -1,0 +1,113 @@
+name: Managed accounts production E2E
+
+on:
+  push:
+    branches: ["agent/managed-accounts-production-e2e"]
+    paths: [".github/workflows/managed-accounts-production-e2e.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: 994298f9918c97a76e26b9bd91e3e888127468dd
+          path: production
+          fetch-depth: 1
+      - name: Check out E2E harness
+        uses: actions/checkout@v4
+        with:
+          ref: agent/managed-accounts-production-e2e
+          path: harness
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Start Railway device authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/railway-auth-public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAlZJsyCx0v2maM4rARlTe
+          i31Fvqfmjov4S3isAQhS49IEx1txgnWGOzA6M8uJ4KSIX2fOE5fXf7KRmhg1piFU
+          BFWH9vvgcHwqnO9X1fiACYl42cdQCHLeNlsBk0/jMrq/rMjyJOwxkjoSrt/rA6XB
+          PQqqU6sJSXXcAa68zGeYMhZcrTDovBTizNWtbpasEemRKe4crhrEQfw8aZ+iGvIR
+          cncUFeCcg+7xDd8rA4hgH0tbi+NN+nlEQ6dhDgf+nOvLmn7BGojdJOyd8evtVfNY
+          qwAHuggrr4bfUZITBE73wPE4QTlpndpiIA3PDlf4pPDb+w6TfEyIAGMr15/MjlAX
+          gY1HGSLOYmBHjWtrtqg+KQscJM6eWT58ijU+7JhZaaBM/j/WGuIeg0hTOkfjWqjM
+          vK7m/ksgTQaHXNmPGT7K4zvvmxeW0oP8TziTcwnw3y+BH+eJVIMNFgZAJJPfqgEu
+          XEtpHhom2+tuVx3RLdmglozkAHE9XKJIg0ntVUSdQrXEOWkjpJeNbPeGGWGgeHJu
+          r9rCkiBdtnfN4VksPHo8EeaPAO+XR8wSB7zZsHVVbmDBtaX/whAsOGgQOidQWyh2
+          +mdIxEWkqut7HaxeJLsKzIV5nDtVxZbor52iMNbNNl27ryDYp9TuFR1nQf94/V1O
+          2taN7Lhap7ClT+56HtseG0MCAwEAAQ==
+          -----END PUBLIC KEY-----
+          EOF
+          : > /tmp/railway-login.log
+          RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
+          echo $! > /tmp/railway-login.pid
+          for i in $(seq 1 45); do
+            if grep -Eq 'https?://|code|Code|pair|Pair|sign in|Sign in' /tmp/railway-login.log; then break; fi
+            PID=$(cat /tmp/railway-login.pid)
+            if ! kill -0 "$PID" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          tail -c 400 /tmp/railway-login.log > /tmp/railway-login-prompt.txt
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/railway-auth-public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/railway-login-prompt.txt -out /tmp/railway-login-prompt.bin
+          base64 -w0 /tmp/railway-login-prompt.bin > /tmp/railway-login-prompt.b64
+      - name: Upload encrypted Railway device prompt
+        uses: actions/upload-artifact@v4
+        with:
+          name: railway-device-prompt-encrypted
+          path: /tmp/railway-login-prompt.b64
+          if-no-files-found: error
+          retention-days: 1
+      - name: Wait for Railway authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          PID=$(cat /tmp/railway-login.pid)
+          for i in $(seq 1 300); do
+            if ! kill -0 "$PID" 2>/dev/null; then railway whoami --json >/dev/null; exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Link production service
+        working-directory: production
+        run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
+      - name: Deploy exact final source
+        working-directory: production
+        run: railway up --service control-plane --environment production --detach -m "Deploy managed license cleanup 994298f9918c97a76e26b9bd91e3e888127468dd"
+      - name: Verify final production deployment
+        working-directory: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            STATUS=$(railway deployment list --service control-plane --environment production --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.status||"")})')
+            case "$STATUS" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|SKIPPED|REMOVED) exit 1 ;;
+            esac
+            sleep 5
+          done
+          exit 1
+      - name: Run controlled production E2E
+        run: railway run --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --service control-plane --environment production --no-local node harness/scripts/managed-accounts-production-e2e-v2.mjs
+      - name: Upload safe E2E result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nimhub-managed-accounts-e2e-result
+          path: /tmp/nimhub-e2e-result.json
+          if-no-files-found: warn
+          retention-days: 7
