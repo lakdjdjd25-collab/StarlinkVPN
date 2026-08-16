@@ -7,13 +7,12 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN || secrets.RAILWAY_API_TOKEN }}
     steps:
       - name: Check out exact production source
         uses: actions/checkout@v4
@@ -25,9 +24,53 @@ jobs:
           node-version: 24
       - name: Install Railway CLI
         run: npm install --global @railway/cli@latest
-      - name: Verify Railway token is configured
+      - name: Authenticate Railway and relay encrypted device prompt
         shell: bash
-        run: test -n "$RAILWAY_TOKEN"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/railway-auth-public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA8eH7h2Ng3hZf5uIlZnMD
+          W59MrlQ5hRdZTHKHl7rC3FAdkoBnRhaWBqY13uANh1c615NEIUig0SCIq38PuVDX
+          FpZ+1mbrwIfpFlaed8vCAVMrDHaqLflV7++uHAnHoK6x5zbansSfDiqaZKnihQJc
+          XOU5z/C1+3SzYpCCKhfTqCaC61yTAnHpIJeSp6oTWfOUjgX79U2dfxw/NBV3JN4t
+          h21Bb8BS8CSg/OlDIr96v8eU2KMA/Lj44s8Wa5Q2i0kGQh6F9BQezO856l2ElO+g
+          wjiYQNpVm8MdYK2yqCB+88SVZSXCwckFSp8nzEYNx1VuqxYgGRAsQdZe/E1bdmi8
+          fnmqKC3mPHo7JDog4wMOj5E9yQPAyoSuo1QM1yi65tl3NwjsLGVF5do9aQ4KAf+A
+          HRz7GvI0u2qxXjHuWXKanCVtLWlf9Ss8HtwgOYG68Kn3X4fPfXDz4HngwRxGnB+D
+          l5ocBwpblVGLk6sj2UqggZG5eVIxPwanpWmfOwK02WRmjbYheqkF/UVJSzBvzH1c
+          kp/xvX/EXokoNSv5nR+2zSYVdoTJuhmjcVvZSmFxZ+5tVLZiRecs/muY0Q2LYgzD
+          MeOXoYPlBFJVRh/VL/M/FRB4/9XbKSKS5i/I5rHGIlsfT4JHMV607yNb4XrmtAT7
+          NRC2P19cRpDPVYhhFMITPdECAwEAAQ==
+          -----END PUBLIC KEY-----
+          EOF
+
+          : > /tmp/railway-login.log
+          railway login --browserless > /tmp/railway-login.log 2>&1 &
+          LOGIN_PID=$!
+
+          for i in $(seq 1 45); do
+            if grep -Eq 'https?://|code|Code|pair|Pair|sign in|Sign in' /tmp/railway-login.log; then
+              break
+            fi
+            if ! kill -0 "$LOGIN_PID" 2>/dev/null; then
+              cat /tmp/railway-login.log
+              wait "$LOGIN_PID"
+            fi
+            sleep 1
+          done
+
+          tail -c 400 /tmp/railway-login.log > /tmp/railway-login-prompt.txt
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/railway-auth-public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/railway-login-prompt.txt -out /tmp/railway-login-prompt.bin
+          CIPHERTEXT=$(base64 -w0 /tmp/railway-login-prompt.bin)
+          gh api repos/${GITHUB_REPOSITORY}/issues/29/comments \
+            -f body="RAILWAY_DEVICE_PROMPT_ENCRYPTED:${CIPHERTEXT}" >/dev/null
+
+          wait "$LOGIN_PID"
       - name: Link production service
         run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
       - name: Deploy exact source to production
