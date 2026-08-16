@@ -3,6 +3,8 @@ import { z } from "zod";
 import { createOpaqueToken, issueToken, verifyPassword } from "@/lib/auth";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
+import { normalizeLicense } from "@/lib/license";
+import { syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 const schema = z.object({
   email: z.string().trim().min(1).max(320),
@@ -16,14 +18,27 @@ export async function POST(request: NextRequest) {
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "Login data is invalid");
 
-  const credential = input.data.email.trim();
+  const rawCredential = input.data.email.trim();
+  const credential = rawCredential.includes("@")
+    ? rawCredential
+    : normalizeLicense(rawCredential.replace(/^NIMHUB\s*:/i, ""));
   const emailLogin = credential.includes("@");
-  const service = emailLogin
+  let service = emailLogin
     ? null
     : await db.service.findFirst({
         where: { license: { equals: credential, mode: "insensitive" } },
-        include: { user: true },
+        include: { user: true, pasarGuardBinding: { select: { id: true } } },
       });
+  if (service?.pasarGuardBinding) {
+    // License login is the point where current quota/expiry/device limits matter
+    // most. Refresh this exact binding first, while retaining the last known-good
+    // state if the provider is temporarily unreachable.
+    await syncPasarGuardBinding(service.pasarGuardBinding.id).catch(() => undefined);
+    service = await db.service.findUnique({
+      where: { id: service.id },
+      include: { user: true, pasarGuardBinding: { select: { id: true } } },
+    });
+  }
   const user = emailLogin
     ? await db.user.findUnique({ where: { email: credential.toLowerCase() } })
     : service?.user ?? null;

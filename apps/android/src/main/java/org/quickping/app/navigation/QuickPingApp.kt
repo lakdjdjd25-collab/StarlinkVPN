@@ -9,6 +9,12 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.currentStateFlow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalContext
@@ -29,6 +35,9 @@ import org.quickping.app.ui.screens.SettingsScreen
 import org.quickping.app.ui.screens.SplashScreen
 import org.quickping.app.ui.screens.SplitTunnelingScreen
 import org.quickping.app.ui.screens.VersionScreen
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 private object Route {
     const val Splash = "splash"
@@ -43,10 +52,20 @@ private object Route {
     const val Version = "update/latest"
 }
 
-private fun NavHostController.openSettingsSafely() {
-    if (currentDestination?.route != Route.Home) return
-    navigate(Route.Settings) {
-        launchSingleTop = true
+private suspend fun NavHostController.openSettingsWhenHomeIsReady() {
+    val homeEntry = currentBackStackEntry?.takeIf { it.destination.route == Route.Home } ?: return
+
+    // A quick Back followed by Settings can render Home before its back-stack
+    // entry reaches RESUMED. Navigating during that short lifecycle window can
+    // leave the new Settings entry transparent. Wait for the actual lifecycle
+    // event instead of adding an arbitrary time delay.
+    homeEntry.lifecycle.currentStateFlow.first {
+        it.isAtLeast(Lifecycle.State.RESUMED)
+    }
+    if (currentBackStackEntry == homeEntry && currentDestination?.route == Route.Home) {
+        navigate(Route.Settings) {
+            launchSingleTop = true
+        }
     }
 }
 
@@ -74,6 +93,15 @@ fun QuickPingApp(
 ) {
     val state by quickPingViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val navigationScope = rememberCoroutineScope()
+    var settingsNavigationJob by remember { mutableStateOf<Job?>(null) }
+    val onOpenSettings: () -> Unit = {
+        if (settingsNavigationJob?.isActive != true) {
+            settingsNavigationJob = navigationScope.launch {
+                navController.openSettingsWhenHomeIsReady()
+            }
+        }
+    }
     val vpnPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { result ->
@@ -161,7 +189,7 @@ fun QuickPingApp(
                     state = state,
                     onToggleConnection = onToggleVpn,
                     onSelectServer = quickPingViewModel::selectServer,
-                    onSettings = navController::openSettingsSafely,
+                    onSettings = onOpenSettings,
                     onAccount = { navController.navigate(Route.Account) },
                     onNotifications = { navController.navigate(Route.Notifications) },
                 )

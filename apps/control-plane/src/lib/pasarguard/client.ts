@@ -211,10 +211,29 @@ export class PasarGuardClient {
   }
 
   async listUsers(): Promise<PasarGuardUser[]> {
-    const response = await this.authorized("api/users?load_sub=false");
-    const parsed = usersResponseSchema.safeParse(await response.json().catch(() => null));
-    if (!parsed.success) throw new PasarGuardError("invalid_response", "فهرست کاربران پاسارگارد ساختار معتبری ندارد");
-    return parsed.data.users.map(mapUser);
+    const pageSize = 100;
+    const users: PasarGuardUser[] = [];
+    let offset = 0;
+    let expectedTotal: number | null = null;
+
+    while (expectedTotal === null || users.length < expectedTotal) {
+      const response = await this.authorized(
+        `api/users?load_sub=false&limit=${pageSize}&offset=${offset}`,
+      );
+      const parsed = usersResponseSchema.safeParse(await response.json().catch(() => null));
+      if (!parsed.success) {
+        throw new PasarGuardError("invalid_response", "فهرست کاربران پاسارگارد ساختار معتبری ندارد");
+      }
+      expectedTotal = parsed.data.total;
+      users.push(...parsed.data.users.map(mapUser));
+      offset += parsed.data.users.length;
+
+      if (users.length >= expectedTotal) break;
+      if (parsed.data.users.length === 0 || offset > 100_000) {
+        throw new PasarGuardError("invalid_response", "صفحه‌بندی کاربران پاسارگارد کامل دریافت نشد");
+      }
+    }
+    return users.slice(0, expectedTotal ?? users.length);
   }
 
   async listUserTemplates(): Promise<PasarGuardUserTemplate[]> {

@@ -212,7 +212,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(heroTop))
             Image(
-                painter = painterResource(R.drawable.ic_logo_welcome),
+                painter = painterResource(R.drawable.nimhub_logo),
                 contentDescription = "NimHUB Vpn",
                 modifier = Modifier.size(logoWidth, logoHeight),
                 contentScale = ContentScale.Fit,

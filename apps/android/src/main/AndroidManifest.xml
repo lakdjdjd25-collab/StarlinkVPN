@@ -38,6 +38,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
+            android:theme="@style/Theme.QuickPing.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -67,7 +68,7 @@
         <service
             android:name=".background.QuickSettingsTileService"
             android:exported="true"
-            android:icon="@drawable/ic_logo"
+            android:icon="@mipmap/ic_launcher_foreground"
             android:label="@string/tile_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>

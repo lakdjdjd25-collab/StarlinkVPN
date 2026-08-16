@@ -130,9 +130,9 @@ fun VersionScreen(release: AppRelease?, onBack: () -> Unit) {
                 Spacer(Modifier.height(56.dp))
                 Text(
                     if (updateAvailable) {
-                        quickText("نسخهٔ جدید QuickPing آماده است", "A new QuickPing version is available")
+                        quickText("نسخهٔ جدید NimHUB Vpn آماده است", "A new NimHUB Vpn version is available")
                     } else {
-                        quickText("تبریک! QuickPing شما به‌روز است", "QuickPing is up to date")
+                        quickText("تبریک! NimHUB Vpn شما به‌روز است", "NimHUB Vpn is up to date")
                     },
                     color = QuickPingColors.TextPrimary,
                     style = MaterialTheme.typography.titleMedium,

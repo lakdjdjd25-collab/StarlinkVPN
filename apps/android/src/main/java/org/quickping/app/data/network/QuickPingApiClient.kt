@@ -351,7 +351,7 @@ private fun JSONObject.toService(): Service {
     return Service(
         id = getString("id"),
         name = optString("name", "سرویس شخصی"),
-        plan = optString("plan", "QuickPing"),
+        plan = optString("plan", "NimHUB"),
         license = optString("license"),
         totalBytes = optLongFlexible("size"),
         usedBytes = optLongFlexible("usedSize"),

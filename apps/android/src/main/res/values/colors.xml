@@ -2,4 +2,5 @@
 <resources>
     <color name="quickping_black">#05070A</color>
     <color name="quickping_blue">#2E78F7</color>
+    <color name="nimhub_splash_background">#080E18</color>
 </resources>

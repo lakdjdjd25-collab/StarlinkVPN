@@ -4,6 +4,7 @@ import { z } from "zod";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
+import { isValidLicense, normalizeLicense } from "@/lib/license";
 import {
   createPasarGuardClient,
   PasarGuardError,
@@ -16,7 +17,7 @@ const schema = z.object({
   userId: z.string().min(1),
   planId: z.string().min(1),
   name: z.string().min(2).max(120),
-  license: z.string().min(6).max(64).transform((value) => value.toUpperCase()),
+  license: z.string().transform(normalizeLicense).refine(isValidLicense),
   days: z.number().int().min(1).max(3650),
 });
 

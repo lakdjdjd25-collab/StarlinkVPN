@@ -17,6 +17,16 @@ Parts of the Android platform bridge follow the GPL-licensed implementation in:
   Copyright (C) 2022 nekohasekai <contact-sagernet@sekai.icu>
   https://github.com/SagerNet/sing-box-for-android
 
+The control-plane QR renderer includes:
+
+  QRCode for JavaScript
+  Copyright (c) 2009 Kazuhiko Arase
+  Licensed under the MIT License
+  Source and license: apps/control-plane/src/vendor/qrcode
+
+The Android QR fallback uses ZXing Android Embedded and ZXing Core, licensed
+under the Apache License 2.0.
+
 QuickPing is not affiliated with or endorsed by SagerNet, sing-box, or the
 publisher of the reference APK. No signing key, private backend source, or
 unrecoverable native binary from that APK is included in this repository.

@@ -13,6 +13,18 @@ class ReferenceLoginLicenseTest {
         assertEquals("ABC123-XY", referenceExtractLicense("license: abc123-xy"))
     }
 
+    @Test fun canonicalNimHubQrPayloadIsAccepted() {
+        assertEquals("NH-ABCD-2345-EFGH-6789", referenceExtractLicense("NIMHUB:NH-ABCD-2345-EFGH-6789"))
+    }
+
+    @Test fun jsonQrPayloadIsAccepted() {
+        assertEquals("NH-ABCD-2345-EFGH-6789", referenceExtractLicense("{\"license\":\"nh-abcd-2345-efgh-6789\"}"))
+    }
+
+    @Test fun linkQrPayloadIsAccepted() {
+        assertEquals("NH-ABCD-2345-EFGH-6789", referenceExtractLicense("https://nimhub.example/login?license=nh-abcd-2345-efgh-6789"))
+    }
+
     @Test fun malformedLicenseIsRejected() {
         assertTrue(referenceExtractLicense("bad code with spaces").isBlank())
     }

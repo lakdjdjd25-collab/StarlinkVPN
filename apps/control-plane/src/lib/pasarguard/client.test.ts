@@ -47,7 +47,38 @@ describe("PasarGuard API client", () => {
     expect(String(loginInit.body)).toContain("grant_type=password");
     const [usersUrl, usersInit] = fetcher.mock.calls[1] as [URL, RequestInit];
     expect(usersUrl.pathname).toBe("/api/users");
+    expect(usersUrl.searchParams.get("limit")).toBe("100");
+    expect(usersUrl.searchParams.get("offset")).toBe("0");
     expect(usersInit.headers).toMatchObject({ authorization: "Bearer test-token" });
+  });
+
+  it("loads every page before returning PasarGuard users", async () => {
+    const rawUser = (id: number) => ({
+      id,
+      username: `user-${id}`,
+      status: "active",
+      used_traffic: 0,
+      data_limit: 1024,
+      expire: null,
+      hwid_limit: 1,
+      group_ids: [1],
+    });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "paged-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total: 3, users: [rawUser(1), rawUser(2)] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total: 3, users: [rawUser(3)] }), { status: 200 }));
+    const client = new PasarGuardClient({
+      baseUrl: normalizePasarGuardBaseUrl("https://panel.example.com/dashboard"),
+      username: "admin",
+      password: "test-password",
+      fetch: fetcher as unknown as typeof fetch,
+    });
+
+    const users = await client.listUsers();
+
+    expect(users.map((user) => user.id)).toEqual([1, 2, 3]);
+    const [secondPageUrl] = fetcher.mock.calls[2] as [URL, RequestInit];
+    expect(secondPageUrl.searchParams.get("offset")).toBe("2");
   });
 
   it("reads user templates with quota and one-time reset metadata", async () => {

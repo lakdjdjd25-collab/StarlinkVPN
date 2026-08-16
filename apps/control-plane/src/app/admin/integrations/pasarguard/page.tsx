@@ -35,7 +35,7 @@ export default async function PasarGuardPage() {
       </header>
 
       <section className="card section">
-        <div className="section-title"><h2>اتصال کاربر پنل به حساب QuickPing</h2></div>
+        <div className="section-title"><h2>اتصال کاربر پنل به حساب NimHUB</h2></div>
         <p style={{ color: "var(--muted)", marginTop: 0 }}>
           رمز مدیر و توکن اشتراک در مرورگر یا اپ نمایش داده نمی‌شود. پس از اتصال، سرورها با پیکربندی رمزگذاری‌شده وارد می‌شوند.
         </p>
@@ -49,7 +49,7 @@ export default async function PasarGuardPage() {
         <div className="section-title"><h2>اتصال‌های فعال</h2></div>
         {bindings.length ? (
           <div className="table-wrap"><table>
-            <thead><tr><th>کاربر پاسارگارد</th><th>حساب QuickPing</th><th>مصرف</th><th>انقضا</th><th>سرورها</th><th>آخرین همگام‌سازی</th><th>کنترل</th></tr></thead>
+            <thead><tr><th>کاربر پاسارگارد</th><th>حساب NimHUB</th><th>مصرف</th><th>انقضا</th><th>سرورها</th><th>آخرین همگام‌سازی</th><th>کنترل</th></tr></thead>
             <tbody>{bindings.map((binding) => <tr key={binding.id}>
               <td><strong dir="ltr">{binding.externalUsername}</strong><br /><small dir="ltr">#{String(binding.externalUserId)}</small></td>
               <td dir="ltr">{binding.service.user.email}</td>

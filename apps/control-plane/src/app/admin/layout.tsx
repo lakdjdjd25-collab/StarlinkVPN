@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { LogoutButton } from "@/components/LogoutButton";
 import { requireAdminPage } from "@/lib/admin-session";
 
@@ -17,8 +18,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-shell">
       <aside className="sidebar">
         <Link className="brand-mark" href="/admin">
-          <span className="brand-q">Q</span>
-          <span>QUICKPING</span>
+          <Image className="brand-logo" src="/nimhub-logo.png" width={42} height={42} alt="" />
+          <span>NIMHUB</span>
         </Link>
         <nav className="nav-list" aria-label="ناوبری مدیریت">
           {navigation.map(([label, href]) => (
