@@ -48,6 +48,11 @@ data class NotificationItem(
     val body: String,
     val createdAt: String,
     val read: Boolean,
+    val category: String = "SYSTEM",
+)
+
+data class ManagementInfo(
+    val telegramUsername: String = "Folwn",
 )
 
 data class AppRelease(

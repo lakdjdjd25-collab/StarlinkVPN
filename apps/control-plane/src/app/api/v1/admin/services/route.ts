@@ -6,11 +6,11 @@ import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
 import { isValidLicense, normalizeLicense } from "@/lib/license";
 import {
-  createPasarGuardClient,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
 } from "@/lib/pasarguard/client";
+import { createPasarGuardClient, createPasarGuardClientForProvider, syncActivePasarGuardProfiles } from "@/lib/pasarguard/provider";
 import { bindPasarGuardUser, syncPasarGuardBinding } from "@/lib/pasarguard/sync";
 
 const schema = z.object({
@@ -31,16 +31,6 @@ const updateSchema = z.object({
 
 function remoteUsername(userId: string, license: string): string {
   return `nh_${createHash("sha256").update(`${userId}:${license}`).digest("hex").slice(0, 24)}`;
-}
-
-function remoteGroupIds(users: PasarGuardUser[]): number[] {
-  const active = users.filter((user) => user.status.toLowerCase() === "active" && user.groupIds.length > 0);
-  const source = active.length ? active : users.filter((user) => user.groupIds.length > 0);
-  const ids = [...new Set(source.flatMap((user) => user.groupIds))].sort((a, b) => a - b);
-  if (!ids.length) {
-    throw new PasarGuardError("not_configured", "هیچ گروه سرور فعالی در پاسارگارد برای ساخت سرویس پیدا نشد");
-  }
-  return ids;
 }
 
 function providerFailure(error: unknown) {
@@ -93,14 +83,22 @@ export async function POST(request: NextRequest) {
   let createdRemote = false;
 
   try {
-    client = createPasarGuardClient();
+    client = await createPasarGuardClient();
     const visibleUsers = await client.listUsers();
-    const groups = remoteGroupIds(visibleUsers);
+    const { profiles } = await syncActivePasarGuardProfiles();
+    const mapping = await db.pasarGuardPlanMapping.findUnique({
+      where: { providerId_planId: { providerId: client.providerId!, planId: plan.id } },
+    });
+    const profile = mapping?.valid ? profiles.find((item) => item.key === mapping.profileKey) : null;
+    if (!profile || !profile.groupIds.length) {
+      return fail(409, "plan_mapping_required", "برای این پلن ابتدا گروه یا قالب پنل فعال را در تنظیمات پاسارگارد انتخاب کنید");
+    }
+    const groups = profile.groupIds;
     remote = visibleUsers.find((item) => item.username === username) ?? null;
 
     if (remote) {
-      const alreadyBound = await db.pasarGuardBinding.findUnique({
-        where: { externalUserId: BigInt(remote.id) },
+      const alreadyBound = await db.pasarGuardBinding.findFirst({
+        where: { providerId: client.providerId, externalUserId: BigInt(remote.id) },
         select: { id: true },
       });
       if (alreadyBound) return fail(409, "service_already_bound", "سرویس متناظر پاسارگارد قبلاً به QuickPing متصل شده است");
@@ -150,8 +148,8 @@ export async function POST(request: NextRequest) {
     return ok(binding.service, { status: 201 });
   } catch (error) {
     if (remote) {
-      const partial = await db.pasarGuardBinding.findUnique({
-        where: { externalUserId: BigInt(remote.id) },
+      const partial = await db.pasarGuardBinding.findFirst({
+        where: { providerId: client?.providerId ?? null, externalUserId: BigInt(remote.id) },
         include: { service: { select: { id: true, userId: true, license: true } } },
       }).catch(() => null);
       if (partial?.service.userId === user.id && partial.service.license === input.data.license) {
@@ -190,7 +188,8 @@ export async function PATCH(request: NextRequest) {
 
   try {
     if (before.pasarGuardBinding) {
-      const client = createPasarGuardClient();
+      const binding = await db.pasarGuardBinding.findUnique({ where: { id: before.pasarGuardBinding.id }, select: { providerId: true } });
+      const client = binding?.providerId ? await createPasarGuardClientForProvider(binding.providerId) : await createPasarGuardClient();
       await client.updateUser(before.pasarGuardBinding.externalUsername, {
         dataLimit: quotaBytes,
         expiresAt: requestedExpiry,

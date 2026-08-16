@@ -66,6 +66,99 @@ type PasarGuardRemoteUser = {
   expiresAt: string | null;
 };
 
+
+export function PasarGuardProviderForm({
+  baseUrl,
+  username,
+  configured,
+}: {
+  baseUrl: string;
+  username: string;
+  configured: boolean;
+}) {
+  const router = useRouter();
+  const [url, setUrl] = useState(baseUrl);
+  const [user, setUser] = useState(username);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function send(action: "test_connection" | "activate_provider" | "sync_profiles") {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const payload = action === "sync_profiles"
+      ? { action }
+      : { action, baseUrl: url, username: user, password };
+    const response = await fetch("/api/v1/admin/integrations/pasarguard", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const body = await response.json().catch(() => null) as {
+      data?: { profileCount?: number; userCount?: number; profiles?: unknown[] };
+      error?: { message?: string };
+    } | null;
+    if (!response.ok) {
+      setError(body?.error?.message ?? "عملیات پاسارگارد انجام نشد");
+    } else if (action === "test_connection") {
+      setMessage(`اتصال واقعی موفق بود؛ ${body?.data?.profileCount ?? 0} گروه/قالب و ${body?.data?.userCount ?? 0} کاربر قابل دسترسی است.`);
+    } else if (action === "activate_provider") {
+      setPassword("");
+      setMessage("پنل جدید با موفقیت تست، ذخیره و فعال شد. Bindingهای قبلی خودکار جابه‌جا نشدند.");
+      router.refresh();
+    } else {
+      setMessage(`همگام‌سازی انجام شد؛ ${body?.data?.profiles?.length ?? 0} گروه/قالب دریافت شد.`);
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div>
+      <div className="form-grid">
+        <div className="field"><label>آدرس مستقیم پنل / Base URL</label><input className="input" value={url} onChange={(event) => setUrl(event.target.value)} dir="ltr" placeholder="https://panel.example.com/" /></div>
+        <div className="field"><label>نام کاربری ادمین</label><input className="input" value={user} onChange={(event) => setUser(event.target.value)} dir="ltr" autoComplete="username" /></div>
+        <div className="field"><label>رمز عبور ادمین</label><input className="input" value={password} onChange={(event) => setPassword(event.target.value)} type="password" dir="ltr" autoComplete="new-password" placeholder="برای تست/تعویض وارد کنید" /></div>
+      </div>
+      <p style={{ color: "var(--muted)", fontSize: 13 }}>رمز ذخیره‌شده هرگز دوباره به مرورگر برگردانده نمی‌شود. فعال‌سازی فقط پس از Login واقعی و دریافت Group/Template انجام می‌شود.</p>
+      {error ? <p className="error">{error}</p> : null}
+      {message ? <p style={{ color: "var(--success)", fontSize: 13 }}>{message}</p> : null}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <button className="button secondary" type="button" disabled={busy || !url || !user || !password} onClick={() => send("test_connection")}>تست اتصال واقعی</button>
+        <button className="button" type="button" disabled={busy || !url || !user || !password} onClick={() => send("activate_provider")}>ذخیره و فعال‌سازی</button>
+        <button className="button secondary" type="button" disabled={busy || !configured} onClick={() => send("sync_profiles")}>Sync گروه‌ها و قالب‌ها</button>
+      </div>
+    </div>
+  );
+}
+
+export function PasarGuardPlanMappingForm({
+  plans,
+  profiles,
+}: {
+  plans: Option[];
+  profiles: Array<{ key: string; name: string; kind: "template" | "group" }>;
+}) {
+  const action = useMutation("/api/v1/admin/integrations/pasarguard");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await action.send({ action: "map_plan", planId: data.get("planId"), profileKey: data.get("profileKey") });
+  }
+  return (
+    <form onSubmit={submit}>
+      <div className="form-grid">
+        <div className="field"><label>پلن NimHUB</label><select className="select" name="planId" required>{plans.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></div>
+        <div className="field"><label>Group / Template پنل فعال</label><select className="select" name="profileKey" required>{profiles.map((profile) => <option key={profile.key} value={profile.key}>{profile.kind === "template" ? "قالب" : "گروه"} — {profile.name}</option>)}</select></div>
+      </div>
+      {action.error ? <p className="error">{action.error}</p> : null}
+      <button className="button" disabled={action.busy || !plans.length || !profiles.length} style={{ marginTop: 12 }}>ثبت Mapping</button>
+    </form>
+  );
+}
+
 export function PasarGuardIntegrationForm({
   configured,
   quickPingUsers,
@@ -393,6 +486,29 @@ export function ServiceUpdateForm({
   );
 }
 
+
+export function ManagementInfoForm({ telegramUsername }: { telegramUsername: string }) {
+  const action = useMutation("/api/v1/admin/management");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await action.send({ telegramUsername: data.get("telegramUsername") });
+  }
+  return (
+    <form onSubmit={submit}>
+      <div className="form-grid">
+        <div className="field">
+          <label>آیدی تلگرام مدیریت</label>
+          <input className="input" name="telegramUsername" defaultValue={`@${telegramUsername.replace(/^@+/, "")}`} dir="ltr" required />
+        </div>
+      </div>
+      <p style={{ color: "var(--muted)", fontSize: 13 }}>دکمه ارتقای پلن در اپ این مقدار را از سرور می‌گیرد؛ تغییر آن نیاز به APK جدید ندارد.</p>
+      {action.error ? <p className="error">{action.error}</p> : null}
+      <button className="button" disabled={action.busy} style={{ marginTop: 8 }}>ذخیره اطلاعات مدیریت</button>
+    </form>
+  );
+}
+
 export function GlobalSettingForm() {
   const action = useMutation("/api/v1/admin/settings");
   const [jsonError, setJsonError] = useState("");
@@ -425,37 +541,60 @@ export function GlobalSettingForm() {
 
 export function CreateNotificationForm({ users }: { users: Option[] }) {
   const action = useMutation("/api/v1/admin/notifications");
+  const [audience, setAudience] = useState("ALL");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    const selected = String(data.get("selectedUserIds") ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const selected = data.getAll("selectedUserIds").map(String).filter(Boolean);
     const done = await action.send({
       title: data.get("title"),
       body: data.get("body"),
-      audience: data.get("audience"),
-      actionUrl: data.get("actionUrl") || undefined,
-      publishNow: data.get("publishNow") === "on",
+      category: data.get("category"),
+      audience,
+      publishNow: true,
       selectedUserIds: selected,
     });
-    if (done) form.reset();
+    if (done) {
+      form.reset();
+      setAudience("ALL");
+    }
   }
   return (
     <form onSubmit={submit}>
       <div className="form-grid">
         <div className="field"><label>عنوان</label><input className="input" name="title" required /></div>
-        <div className="field"><label>مخاطب</label><select className="select" name="audience" defaultValue="ALL"><option>ALL</option><option>FREE</option><option>PAID</option><option>SELECTED</option></select></div>
-        <div className="field"><label>پیوند اقدام (اختیاری)</label><input className="input" name="actionUrl" type="url" dir="ltr" /></div>
-        <div className="field"><label>شناسه کاربران انتخابی با ویرگول</label><input className="input" name="selectedUserIds" list="quickping-user-ids" dir="ltr" /></div>
+        <div className="field">
+          <label>موضوع</label>
+          <select className="select" name="category" defaultValue="SYSTEM">
+            <option value="ACCOUNT">حساب کاربری</option>
+            <option value="SERVICE">سرویس / پلن</option>
+            <option value="SYSTEM">سیستم / بروزرسانی</option>
+            <option value="SUPPORT">پشتیبانی / اطلاعیه</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>مخاطب</label>
+          <select className="select" name="audience" value={audience} onChange={(event) => setAudience(event.target.value)}>
+            <option value="ALL">همه کاربران فعلی</option>
+            <option value="SELECTED">یک یا چند کاربر</option>
+          </select>
+        </div>
       </div>
-      <datalist id="quickping-user-ids">{users.map((user) => <option value={user.id} key={user.id}>{user.label}</option>)}</datalist>
+      {audience === "SELECTED" ? (
+        <div className="field">
+          <label>کاربران (امکان انتخاب چند مورد)</label>
+          <select className="select" name="selectedUserIds" multiple size={Math.min(8, Math.max(3, users.length))} required>
+            {users.map((user) => <option value={user.id} key={user.id}>{user.label}</option>)}
+          </select>
+        </div>
+      ) : null}
       <div className="field"><label>متن اعلان</label><textarea className="textarea" name="body" rows={5} required /></div>
-      <label style={{ display: "flex", gap: 8, marginTop: 12, color: "var(--muted)" }}><input type="checkbox" name="publishNow" defaultChecked /> انتشار فوری</label>
+      <p style={{ color: "var(--muted)", fontSize: 13 }}>
+        اعلان عمومی فقط برای کاربران موجود در لحظه ارسال ثبت می‌شود؛ کاربران جدید اعلان‌های قدیمی را دریافت نمی‌کنند.
+      </p>
       {action.error ? <p className="error">{action.error}</p> : null}
-      <button className="button" disabled={action.busy} style={{ marginTop: 14 }}>ثبت اعلان</button>
+      <button className="button" disabled={action.busy} style={{ marginTop: 8 }}>ارسال اعلان</button>
     </form>
   );
 }

@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.quickping.app.model.GuardianCategory
 import org.quickping.app.model.AppRelease
 import org.quickping.app.model.NotificationItem
+import org.quickping.app.model.ManagementInfo
 import org.quickping.app.model.Server
 import org.quickping.app.model.Service
 import org.quickping.app.model.UserInfo
@@ -40,6 +41,7 @@ data class BootstrapPayload(
     val guardianCategories: List<GuardianCategory>,
     val notifications: List<NotificationItem>,
     val release: AppRelease?,
+    val management: ManagementInfo = ManagementInfo(),
 )
 
 class ApiException(
@@ -171,6 +173,19 @@ class QuickPingApiClient(baseUrl: String) {
                     sha256 = release.optString("sha256"),
                 )
             },
+            management = data.optJSONObject("management")?.let { management ->
+                ManagementInfo(telegramUsername = management.optString("telegramUsername", "Folwn").normalizeTelegramUsername())
+            } ?: ManagementInfo(),
+        )
+    }
+
+    fun markNotificationsRead(accessToken: String, notificationIds: List<String>) {
+        if (notificationIds.isEmpty()) return
+        requestNoData(
+            method = "PATCH",
+            path = "/api/v1/client/notifications",
+            body = JSONObject().put("notificationIds", JSONArray(notificationIds)),
+            accessToken = accessToken,
         )
     }
 
@@ -393,9 +408,13 @@ private fun JSONArray?.toNotifications(): List<NotificationItem> {
             body = item.optString("body"),
             createdAt = item.optString("publishedAt", item.optString("createdAt")),
             read = item.optBoolean("read", false),
+            category = item.optString("category", "SYSTEM"),
         )
     }
 }
+
+private fun String.normalizeTelegramUsername(): String =
+    trim().removePrefix("@").takeIf { it.matches(Regex("[A-Za-z0-9_]{5,32}")) } ?: "Folwn"
 
 private fun guardianCatalog(values: Map<String, Boolean>) = listOf(
     GuardianCategory("malware", "بدافزارها", "محافظت در برابر دامنه‌های مخرب", "malware", values["malware"] ?: true),

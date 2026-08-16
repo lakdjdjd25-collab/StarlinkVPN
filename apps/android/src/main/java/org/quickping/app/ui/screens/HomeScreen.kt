@@ -11,6 +11,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onAccount: () -> Unit,
     onNotifications: () -> Unit,
+    onUpgrade: () -> Unit,
 ) {
     ReferenceHomeScreen(
         state = state,
@@ -19,5 +20,6 @@ fun HomeScreen(
         onSettings = onSettings,
         onAccount = onAccount,
         onNotifications = onNotifications,
+        onUpgrade = onUpgrade,
     )
 }

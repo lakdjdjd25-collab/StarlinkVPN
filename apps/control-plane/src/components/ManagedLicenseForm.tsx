@@ -37,6 +37,9 @@ type ManagedLicense = {
   serverCount: number;
   lastSyncAt: string | null;
   lastError: string | null;
+  providerId: string | null;
+  providerName: string;
+  needsMigration: boolean;
 };
 
 type Credentials = {
@@ -434,6 +437,15 @@ function ManagedLicenseCard({
     if (result?.credentials) await onCredentials(result.credentials);
   }
 
+  async function migrateProvider() {
+    if (!profileKey) {
+      setError("برای انتقال، ابتدا Group یا Template پنل فعال را انتخاب کنید");
+      return;
+    }
+    const result = await request({ action: "migrate_provider", serviceId: license.id, profileKey });
+    if (result) await onUpdated("سرویس بدون حذف حساب NimHUB به پنل فعال منتقل و سرورها دوباره همگام شدند.");
+  }
+
   const usedPercent = Math.min(100, Math.round((Number(license.usedBytes) / Math.max(1, Number(license.quotaBytes))) * 100));
 
   return (
@@ -443,7 +455,7 @@ function ManagedLicenseCard({
           <h3>{license.name}</h3>
           <p dir="ltr">{license.credentialsReady ? license.email : "ورود ایمیلی هنوز ساخته نشده"}</p>
         </div>
-        <span className={license.status === "ACTIVE" ? "badge green" : "badge red"}>{license.status === "ACTIVE" ? "فعال" : "مسدود"}</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}><span className={license.status === "ACTIVE" ? "badge green" : "badge red"}>{license.status === "ACTIVE" ? "فعال" : "مسدود"}</span>{license.needsMigration ? <span className="badge red">نیازمند انتقال پنل</span> : null}</div>
       </div>
       <div className="license-code" dir="ltr">{license.license}</div>
       <div className="usage-row"><span>مصرف {formatGb(license.usedBytes)} از {formatGb(license.quotaBytes)} GB</span><span>{usedPercent}٪</span></div>
@@ -453,8 +465,10 @@ function ManagedLicenseCard({
         <span>دستگاه <strong>{license.maxDevices}</strong></span>
         <span>سرور <strong>{license.serverCount}</strong></span>
         <span>گروه <strong>{license.profileName}</strong></span>
+        <span>Provider <strong>{license.providerName}</strong></span>
       </div>
       {license.lastError ? <p className="error">آخرین همگام‌سازی: {license.lastError}</p> : null}
+      {license.needsMigration ? <p className="error">این سرویس هنوز به پنل قبلی متصل است. Group/Template پنل فعال را انتخاب و «انتقال به پنل فعال» را اجرا کنید؛ سیستم هیچ Mapping را خودکار حدس نمی‌زند.</p> : null}
       <details className="license-editor">
         <summary>مدیریت این کاربر</summary>
         <form onSubmit={update}>
@@ -467,7 +481,11 @@ function ManagedLicenseCard({
           </div>
           {error ? <p className="error">{error}</p> : null}
           <div className="manager-actions">
-            <button className="button" disabled={busy || !profileKey}>{busy ? "در حال ذخیره…" : "ذخیره و همگام‌سازی"}</button>
+            {license.needsMigration ? (
+              <button className="button" type="button" disabled={busy || !profileKey} onClick={migrateProvider}>{busy ? "در حال انتقال…" : "انتقال به پنل فعال"}</button>
+            ) : (
+              <button className="button" disabled={busy || !profileKey}>{busy ? "در حال ذخیره…" : "ذخیره و همگام‌سازی"}</button>
+            )}
             <button className="button secondary" type="button" disabled={busy} onClick={resetCredentials}>
               {license.credentialsReady ? "بازنشانی رمز ورود" : "ساخت ایمیل و رمز ورود"}
             </button>

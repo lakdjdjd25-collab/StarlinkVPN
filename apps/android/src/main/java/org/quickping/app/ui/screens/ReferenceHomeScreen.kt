@@ -36,6 +36,7 @@ internal fun ReferenceHomeScreen(
     onSettings: () -> Unit,
     onAccount: () -> Unit,
     onNotifications: () -> Unit,
+    onUpgrade: () -> Unit,
 ) {
     val connected = state.connectionStatus == ConnectionStatus.Connected
     Box(Modifier.fillMaxSize().background(QuickPingColors.Background)) {
@@ -63,7 +64,7 @@ internal fun ReferenceHomeScreen(
             ),
         )
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            ReferenceHomeHeader(state, onSettings, onAccount, onNotifications)
+            ReferenceHomeHeader(state, onSettings, onAccount, onNotifications, onUpgrade)
             ReferenceConnectionPanel(state, false, onToggleConnection)
             ReferenceServerList(
                 modifier = Modifier.weight(1f).background(QuickPingColors.Background),
@@ -98,6 +99,7 @@ private fun ReferenceHomeHeader(
     onSettings: () -> Unit,
     onAccount: () -> Unit,
     onNotifications: () -> Unit,
+    onUpgrade: () -> Unit,
 ) {
     Box(Modifier.fillMaxWidth().height(154.dp)) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -107,7 +109,7 @@ private fun ReferenceHomeHeader(
             ) {
                 ReferenceCircleButton(R.drawable.ic_user, onAccount)
                 Spacer(Modifier.width(7.dp))
-                ReferencePlanPill(state.service.isFree)
+                ReferencePlanPill(state.service.isFree, onUpgrade)
                 Spacer(Modifier.weight(1f))
                 ReferenceCircleButton(R.drawable.ic_bell, onNotifications)
                 Spacer(Modifier.width(7.dp))
@@ -138,10 +140,10 @@ private fun ReferenceHomeHeader(
             Spacer(Modifier.height(2.dp))
             Text(
                 when (state.connectionStatus) {
-                    ConnectionStatus.Connected -> "is Connected"
-                    ConnectionStatus.Connecting -> "is Connecting"
-                    ConnectionStatus.Error -> "Connection Error"
-                    ConnectionStatus.Disconnected -> "is Disconnected"
+                    ConnectionStatus.Connected -> quickText("متصل است", "is Connected")
+                    ConnectionStatus.Connecting -> quickText("در حال اتصال", "is Connecting")
+                    ConnectionStatus.Error -> quickText("خطای اتصال", "Connection Error")
+                    ConnectionStatus.Disconnected -> quickText("قطع است", "is Disconnected")
                 },
                 color = Color(0xFF8B8D94),
                 fontFamily = Bitcount,
@@ -155,12 +157,12 @@ private fun ReferenceHomeHeader(
 }
 
 @Composable
-private fun ReferencePlanPill(isFree: Boolean) {
+private fun ReferencePlanPill(isFree: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.height(35.dp).width(if (isFree) 56.dp else 67.dp).clip(CircleShape).then(
             if (isFree) Modifier.background(QuickPingColors.Surface.copy(alpha = .82f)).border(1.dp, Color(0xFF3E4654), CircleShape)
             else Modifier.background(Brush.horizontalGradient(listOf(Color(0xFF6555CE), Color(0xFFA28DCE), Color(0xFFD3D884))))
-        ),
+        ).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(

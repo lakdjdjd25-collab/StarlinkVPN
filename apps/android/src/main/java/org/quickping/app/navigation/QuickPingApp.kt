@@ -1,6 +1,10 @@
 package org.quickping.app.navigation
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +43,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+
+private fun openTelegramManager(context: Context, username: String) {
+    val safeUsername = username.trim().removePrefix("@").takeIf {
+        it.matches(Regex("[A-Za-z0-9_]{5,32}"))
+    } ?: "Folwn"
+    val appUri = Uri.parse("tg://resolve?domain=$safeUsername")
+    val webUri = Uri.parse("https://t.me/$safeUsername")
+    try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, appUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: ActivityNotFoundException) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, webUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
 
 private object Route {
     const val Splash = "splash"
@@ -206,6 +223,7 @@ fun QuickPingApp(
                     onSettings = onOpenSettings,
                     onAccount = { navController.navigate(Route.Account) },
                     onNotifications = { navController.navigate(Route.Notifications) },
+                    onUpgrade = { openTelegramManager(context, state.management.telegramUsername) },
                 )
             }
             composable(
@@ -274,7 +292,7 @@ fun QuickPingApp(
                 )
             }
             composable(Route.Notifications) {
-                LaunchedEffect(Unit) { quickPingViewModel.refreshAccountState() }
+                LaunchedEffect(Unit) { quickPingViewModel.refreshNotificationsAndMarkRead() }
                 NotificationsScreen(
                     notifications = state.notifications,
                     onBack = navController::popBackStack,

@@ -44,9 +44,9 @@ export async function GET(request: NextRequest) {
   if (auth.serviceId && visibleServices.length !== 1) {
     return fail(403, "license_unavailable", "The licensed service is no longer available");
   }
-  const hasPaidService = visibleServices.some((service) => !service.isFree);
-  const [settings, release, notifications] = await Promise.all([
+  const [settings, management, release, notifications] = await Promise.all([
     db.globalSetting.findUnique({ where: { key: "client.bootstrap" } }),
+    db.globalSetting.findUnique({ where: { key: "client.management" } }),
     db.appRelease.findFirst({
       where: { platform: "ANDROID", publishedAt: { not: null } },
       orderBy: { versionCode: "desc" },
@@ -56,12 +56,7 @@ export async function GET(request: NextRequest) {
         publishedAt: { lte: new Date() },
         AND: [
           { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-          {
-            OR: [
-              { audience: { in: ["ALL", hasPaidService ? "PAID" : "FREE"] } },
-              { audience: "SELECTED", deliveries: { some: { userId: user.id } } },
-            ],
-          },
+          { deliveries: { some: { userId: user.id } } },
         ],
       },
       include: {
@@ -74,6 +69,16 @@ export async function GET(request: NextRequest) {
       take: 30,
     }),
   ]);
+
+  const undeliveredIds = notifications
+    .filter((notification) => !notification.deliveries[0]?.deliveredAt)
+    .map((notification) => notification.id);
+  if (undeliveredIds.length) {
+    await db.notificationDelivery.updateMany({
+      where: { userId: user.id, notificationId: { in: undeliveredIds }, deliveredAt: null },
+      data: { deliveredAt: new Date() },
+    });
+  }
 
   return ok({
     user: {
@@ -114,6 +119,7 @@ export async function GET(request: NextRequest) {
       guardian: service.guardianProfile,
     })),
     global: settings?.value ?? {},
+    management: management?.value ?? { telegramUsername: "Folwn" },
     release,
     notifications: notifications.map(({ deliveries, ...notification }) => ({
       ...notification,

@@ -3,11 +3,8 @@ import { z } from "zod";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
-import {
-  createPasarGuardClient,
-  isPasarGuardConfigured,
-  PasarGuardError,
-} from "@/lib/pasarguard/client";
+import { PasarGuardError } from "@/lib/pasarguard/client";
+import { createPasarGuardClientForProvider, isPasarGuardConfigured } from "@/lib/pasarguard/provider";
 
 const schema = z.object({
   serviceId: z.string().min(1),
@@ -27,7 +24,7 @@ export async function DELETE(request: NextRequest) {
   if (!admin || admin.role !== "ADMIN") return fail(403, "forbidden", "فقط مدیر اصلی مجاز است");
   const input = schema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "شناسه مجوز معتبر نیست");
-  if (!isPasarGuardConfigured()) {
+  if (!await isPasarGuardConfigured()) {
     return fail(503, "pasarguard_not_configured", "اتصال پاسارگارد در Secretهای سرور کامل نشده است");
   }
 
@@ -36,7 +33,7 @@ export async function DELETE(request: NextRequest) {
     include: {
       user: { select: { id: true, managedAccount: true } },
       plan: { select: { id: true, name: true } },
-      pasarGuardBinding: { select: { externalUsername: true } },
+      pasarGuardBinding: { select: { externalUsername: true, providerId: true } },
       _count: { select: { payments: true } },
     },
   });
@@ -48,7 +45,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
-    const client = createPasarGuardClient();
+    const client = await createPasarGuardClientForProvider(target.pasarGuardBinding.providerId);
     try {
       await client.deleteUser(target.pasarGuardBinding.externalUsername);
     } catch (error) {

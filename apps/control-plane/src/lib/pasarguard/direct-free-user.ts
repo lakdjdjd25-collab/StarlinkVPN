@@ -1,9 +1,9 @@
 import {
-  createPasarGuardClient,
   PasarGuardError,
   type PasarGuardClient,
   type PasarGuardUser,
 } from "@/lib/pasarguard/client";
+import { createPasarGuardClient } from "@/lib/pasarguard/provider";
 
 function groupIds(users: PasarGuardUser[]): number[] {
   const active = users.filter((user) => user.status.toLowerCase() === "active" && user.groupIds.length > 0);
@@ -16,9 +16,10 @@ function groupIds(users: PasarGuardUser[]): number[] {
 }
 
 export async function googleFreeGroupIds(
-  client: PasarGuardClient = createPasarGuardClient(),
+  client?: PasarGuardClient,
 ): Promise<number[]> {
-  return groupIds(await client.listUsers());
+  const resolved = client ?? await createPasarGuardClient();
+  return groupIds(await resolved.listUsers());
 }
 
 export async function preflightDirectGoogleFreeUser(): Promise<void> {
@@ -29,7 +30,8 @@ export async function createDirectGoogleFreeUser(
   username: string,
   quotaBytes: bigint,
   note: string,
-  client: PasarGuardClient = createPasarGuardClient(),
+  client?: PasarGuardClient,
 ): Promise<PasarGuardUser> {
-  return client.createUser(username, quotaBytes, await googleFreeGroupIds(client), note, 1);
+  const resolved = client ?? await createPasarGuardClient();
+  return resolved.createUser(username, quotaBytes, await googleFreeGroupIds(resolved), note, 1);
 }
