@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         OR: [{ providerId: null }, { providerId: { not: client.providerId } }],
         service: {
           planId: { in: mappedPlanIds },
-          status: { in: ["ACTIVE", "SUSPENDED"] as const },
+          status: { in: ["ACTIVE", "SUSPENDED"] },
           expiresAt: { gt: new Date() },
         },
       };
