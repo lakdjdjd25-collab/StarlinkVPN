@@ -10,4 +10,10 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:colorAccent">@color/quickping_blue</item>
     </style>
+
+    <style name="Theme.QuickPing.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/nimhub_splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.QuickPing</item>
+    </style>
 </resources>

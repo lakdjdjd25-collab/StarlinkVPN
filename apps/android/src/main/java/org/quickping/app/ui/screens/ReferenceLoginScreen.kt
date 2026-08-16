@@ -1,6 +1,8 @@
 package org.quickping.app.ui.screens
 
-import android.net.Uri
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -44,12 +46,17 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.delay
 import org.quickping.app.R
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.json.JSONObject
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import org.quickping.app.model.AppLanguage
 
 private const val REFERENCE_LOGIN_MOTION_MS = 300
@@ -132,6 +139,8 @@ fun ReferenceLoginScreen(
     val qrNotFoundText = quickText("کد مجوز در QR پیدا نشد", "License code was not found in the QR")
     val qrFailedText = quickText("اسکن QR انجام نشد", "QR scan failed")
     val licenseInvalidText = quickText("کد مجوز معتبر نیست", "License code is not valid")
+    val clipboardEmptyText = quickText("متن مجوز در حافظهٔ کپی پیدا نشد", "No license was found in the clipboard")
+    val qrPromptText = quickText("کیوآرکد مجوز را داخل کادر قرار دهید", "Place the license QR code inside the frame")
 
     fun submitLicense(raw: String, fromQr: Boolean = false) {
         val parsed = referenceExtractLicense(raw)
@@ -146,12 +155,39 @@ fun ReferenceLoginScreen(
         onPasswordLogin(parsed, "")
     }
 
+    val fallbackScannerLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val contents = result.contents
+        if (contents.isNullOrBlank()) scanError = null else submitLicense(contents, fromQr = true)
+    }
+
+    fun launchFallbackScanner() {
+        val options = ScanOptions()
+            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            .setPrompt(qrPromptText)
+            .setBeepEnabled(false)
+            .setOrientationLocked(true)
+        runCatching { fallbackScannerLauncher.launch(options) }
+            .onFailure { scanError = qrFailedText }
+    }
+
     fun launchQrScanner() {
         scanError = null
         scanner.startScan()
             .addOnSuccessListener { barcode -> submitLicense(barcode.rawValue.orEmpty(), fromQr = true) }
             .addOnCanceledListener { scanError = null }
-            .addOnFailureListener { scanError = qrFailedText }
+            .addOnFailureListener { launchFallbackScanner() }
+    }
+
+    fun pasteLicense() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val text = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+        val parsed = referenceExtractLicense(text)
+        if (parsed.isBlank()) {
+            scanError = clipboardEmptyText
+        } else {
+            license = parsed
+            scanError = null
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
@@ -223,8 +259,8 @@ fun ReferenceLoginScreen(
 
             Spacer(Modifier.height(heroTop))
             Image(
-                painter = painterResource(R.drawable.ic_logo_welcome),
-                contentDescription = "QuickPing",
+                painter = painterResource(R.drawable.nimhub_logo),
+                contentDescription = "NimHUB Vpn",
                 modifier = Modifier.size(logoWidth, logoHeight),
                 contentScale = ContentScale.Fit,
             )
@@ -258,6 +294,7 @@ fun ReferenceLoginScreen(
                     scanError = null
                 },
                 onScan = { launchQrScanner() },
+                onPaste = { pasteLicense() },
                 onSubmit = { submitLicense(license) },
             )
 
@@ -480,6 +517,7 @@ private fun ReferenceLicenseBar(
     compact: Boolean,
     onValueChange: (String) -> Unit,
     onScan: () -> Unit,
+    onPaste: () -> Unit,
     onSubmit: () -> Unit,
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -523,7 +561,7 @@ private fun ReferenceLicenseBar(
                     cursorBrush = SolidColor(Color(0xFF4A82FF)),
                 )
             }
-            ReferenceLoginInnerButton(R.drawable.ic_ticket, onClick = {})
+            ReferenceLoginInnerButton(R.drawable.ic_ticket, onClick = onPaste, enabled = enabled)
         }
     }
 }
@@ -624,15 +662,36 @@ internal fun referenceExtractLicense(raw: String): String {
         }
     }
 
-    val prefixed = value.replace(Regex("^(?i)(NIMHUB|LICENSE|LICENCE)\\s*[:=]\\s*"), "")
+    val prefixed = value.replace(
+        Regex("^(NIMHUB|LICENSE|LICENCE)\\s*[:=]\\s*", RegexOption.IGNORE_CASE),
+        "",
+    )
     normalizeReferenceLicense(prefixed).takeIf(String::isNotBlank)?.let { return it }
 
     if (!value.contains("://")) return ""
     return runCatching {
-        val uri = Uri.parse(value)
+        val uri = URI(value)
+        val scheme = uri.scheme?.lowercase().orEmpty()
+        if (scheme !in setOf("https", "http", "nimhub")) return@runCatching ""
+
+        val host = uri.host?.lowercase().orEmpty()
+        if (scheme in setOf("https", "http") && !host.contains("nimhub")) {
+            return@runCatching ""
+        }
+
+        val query = uri.rawQuery.orEmpty()
+            .split('&')
+            .mapNotNull { pair ->
+                val separator = pair.indexOf('=')
+                if (separator <= 0) return@mapNotNull null
+                val key = URLDecoder.decode(pair.substring(0, separator), StandardCharsets.UTF_8.name())
+                val content = URLDecoder.decode(pair.substring(separator + 1), StandardCharsets.UTF_8.name())
+                key.lowercase() to content
+            }
+            .toMap()
         val candidate = listOf("license", "code", "key")
-            .firstNotNullOfOrNull { uri.getQueryParameter(it)?.trim()?.takeIf(String::isNotBlank) }
-            ?: uri.lastPathSegment?.trim().orEmpty()
+            .firstNotNullOfOrNull { query[it]?.trim()?.takeIf(String::isNotBlank) }
+            ?: uri.path?.substringAfterLast('/')?.trim().orEmpty()
         normalizeReferenceLicense(candidate)
     }.getOrDefault("")
 }

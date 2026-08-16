@@ -1,4 +1,5 @@
 import { AssignNodeForm, CreatePlanForm, CreateServiceForm, ServiceUpdateForm } from "@/components/EntityForms";
+import { ManagedLicenseForm } from "@/components/ManagedLicenseForm";
 import { db } from "@/lib/db";
 import { formatBytes, formatDate } from "@/lib/format";
 
@@ -14,6 +15,11 @@ export default async function ServicesPage() {
   return (
     <>
       <header className="page-header"><div><h1>سرویس‌ها</h1><p>حجم، اعتبار، پلن و کلیدهای مجوز</p></div><span className="badge blue">{services.length} سرویس</span></header>
+      <section className="card section">
+        <div className="section-title"><h2>افزودن کاربر و صدور مجوز</h2></div>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>ساخت کاربر پاسارگارد، تعیین حجم و زمان و دستگاه، همگام‌سازی سرورها و تولید متن و کیوآرکد در یک مرحله.</p>
+        <ManagedLicenseForm />
+      </section>
       <section className="card section"><div className="section-title"><h2>ساخت پلن</h2></div><CreatePlanForm /></section>
       <section className="card section"><div className="section-title"><h2>ایجاد سرویس</h2></div><CreateServiceForm users={users.map((user) => ({ id: user.id, label: user.email }))} plans={plans.map((plan) => ({ id: plan.id, label: `${plan.name} — ${plan.price}` }))} /></section>
       <section className="card section"><div className="section-title"><h2>اتصال سرور به سرویس</h2></div><AssignNodeForm services={services.map((service) => ({ id: service.id, label: `${service.name} — ${service.user.email}` }))} nodes={nodes.map((node) => ({ id: node.id, label: `${node.name} — ${node.region.name}` }))} /></section>

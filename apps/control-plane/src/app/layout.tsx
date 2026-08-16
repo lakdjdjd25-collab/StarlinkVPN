@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "مدیریت QuickPing",
-  description: "کنترل‌پلین خصوصی سرویس QuickPing",
+  title: "مدیریت NimHUB Vpn",
+  description: "کنترل‌پلین خصوصی سرویس NimHUB Vpn",
   robots: { index: false, follow: false },
 };
 

@@ -51,7 +51,7 @@ class QuickSettingsTileService : TileService() {
                 ServiceState.Connecting -> Tile.STATE_UNAVAILABLE
                 else -> Tile.STATE_INACTIVE
             }
-            label = "QuickPing"
+            label = "NimHUB Vpn"
             updateTile()
         }
     }

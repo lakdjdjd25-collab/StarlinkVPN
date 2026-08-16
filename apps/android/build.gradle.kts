@@ -30,8 +30,8 @@ android {
         applicationId = "org.quickping"
         minSdk = 23
         targetSdk = 36
-        versionCode = 160174
-        versionName = "2.6.11"
+        versionCode = 160175
+        versionName = "2.6.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -119,6 +119,10 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.google.code.scanner)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") {
+        isTransitive = false
+    }
+    implementation("com.google.zxing:core:3.3.0")
     implementation("com.google.android.gms:play-services-base:18.10.0")
     implementation("androidx.credentials:credentials:1.6.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")

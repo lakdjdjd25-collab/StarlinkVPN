@@ -22,7 +22,7 @@ export default async function DashboardPage() {
       <header className="page-header">
         <div>
           <h1>داشبورد</h1>
-          <p>وضعیت لحظه‌ای کنترل‌پلین QuickPing</p>
+          <p>وضعیت لحظه‌ای کنترل‌پلین NimHUB Vpn</p>
         </div>
         <span className="badge green">سامانه فعال</span>
       </header>

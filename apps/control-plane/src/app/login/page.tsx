@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { FormEvent, useState } from "react";
 
 export default function LoginPage() {
@@ -37,8 +38,8 @@ export default function LoginPage() {
     <main className="login-page">
       <form className="login-card" onSubmit={submit}>
         <div className="brand-mark">
-          <span className="brand-q">Q</span>
-          <span>QUICKPING</span>
+          <Image className="brand-logo" src="/nimhub-logo.png" width={42} height={42} alt="" />
+          <span>NIMHUB</span>
         </div>
         <h1>ورود به پنل مدیریت</h1>
         <p style={{ color: "var(--muted)" }}>
