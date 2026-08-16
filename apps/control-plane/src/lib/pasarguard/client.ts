@@ -1,44 +1,193 @@
 import { z } from "zod";
 
 const trafficValue = z.union([z.string(), z.number(), z.bigint()]).nullable().optional();
+const groupIdsValue = z.array(z.coerce.number().int().positive()).nullable().optional().transform((value) => value ?? []);
 const rawUserSchema = z.object({
   id: z.coerce.number().int().positive(),
   username: z.string().min(1),
-  status: z.string().min(1),
+  status: z.string().min(1).nullable().optional().transform((value) => value?.trim() || "active"),
   used_traffic: trafficValue,
   data_limit: trafficValue,
   expire: z.union([z.string(), z.number(), z.null()]).optional(),
-  hwid_limit: z.coerce.number().int().positive().nullable().optional(),
-  group_ids: z.array(z.coerce.number().int().positive()).default([]),
-});
+  hwid_limit: z.coerce.number().int().nonnegative().nullable().optional(),
+  group_ids: groupIdsValue,
+}).passthrough();
+
+const rawSimpleUserSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  username: z.string().min(1),
+}).passthrough();
 
 const rawTemplateSchema = z.object({
   id: z.coerce.number().int().positive(),
   name: z.string().nullable().optional(),
   data_limit: trafficValue,
   expire_duration: z.coerce.number().int().nonnegative().nullable().optional(),
-  group_ids: z.array(z.coerce.number().int().positive()).default([]),
+  group_ids: groupIdsValue,
   status: z.string().nullable().optional(),
   is_disabled: z.boolean().nullable().optional(),
   data_limit_reset_strategy: z.string().nullable().optional(),
-});
+}).passthrough();
 
 const rawGroupSchema = z.object({
   id: z.coerce.number().int().positive(),
   name: z.string().nullable().optional(),
-});
+}).passthrough();
+
+const rawUserArraySchema = z.array(rawUserSchema);
+const rawSimpleUserArraySchema = z.array(rawSimpleUserSchema);
+const rawGroupArraySchema = z.array(rawGroupSchema);
+const rawTemplateArraySchema = z.array(rawTemplateSchema);
 
 const usersResponseSchema = z.object({
-  users: z.array(rawUserSchema),
-  total: z.number().int().nonnegative(),
-});
+  users: rawUserArraySchema,
+  total: z.coerce.number().int().nonnegative().optional(),
+}).passthrough();
+
+const simpleUsersResponseSchema = z.object({
+  users: rawSimpleUserArraySchema,
+  total: z.coerce.number().int().nonnegative().optional(),
+}).passthrough();
 
 const groupsResponseSchema = z.object({
-  groups: z.array(rawGroupSchema),
-  total: z.number().int().nonnegative(),
-});
+  groups: rawGroupArraySchema,
+  total: z.coerce.number().int().nonnegative().optional(),
+}).passthrough();
 
 const tokenSchema = z.object({ access_token: z.string().min(1) });
+
+type ParsedListPage<T> = {
+  items: T[];
+  total: number | null;
+  complete: boolean;
+};
+
+type RawUser = z.infer<typeof rawUserSchema>;
+type RawSimpleUser = z.infer<typeof rawSimpleUserSchema>;
+type RawGroup = z.infer<typeof rawGroupSchema>;
+
+function parseUsersPage(value: unknown): ParsedListPage<RawUser> | null {
+  const direct = rawUserArraySchema.safeParse(value);
+  if (direct.success) return { items: direct.data, total: direct.data.length, complete: true };
+
+  const envelope = usersResponseSchema.safeParse(value);
+  if (envelope.success) {
+    return {
+      items: envelope.data.users,
+      total: envelope.data.total ?? null,
+      complete: false,
+    };
+  }
+
+  if (value && typeof value === "object" && "data" in value) {
+    const data = (value as { data?: unknown; total?: unknown }).data;
+    const outerTotal = z.coerce.number().int().nonnegative().safeParse((value as { total?: unknown }).total);
+    const nestedDirect = rawUserArraySchema.safeParse(data);
+    if (nestedDirect.success) {
+      return {
+        items: nestedDirect.data,
+        total: outerTotal.success ? outerTotal.data : nestedDirect.data.length,
+        complete: !outerTotal.success,
+      };
+    }
+    const nestedEnvelope = usersResponseSchema.safeParse(data);
+    if (nestedEnvelope.success) {
+      return {
+        items: nestedEnvelope.data.users,
+        total: nestedEnvelope.data.total ?? (outerTotal.success ? outerTotal.data : null),
+        complete: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseSimpleUsersPage(value: unknown): ParsedListPage<RawSimpleUser> | null {
+  const direct = rawSimpleUserArraySchema.safeParse(value);
+  if (direct.success) return { items: direct.data, total: direct.data.length, complete: true };
+
+  const envelope = simpleUsersResponseSchema.safeParse(value);
+  if (envelope.success) {
+    return {
+      items: envelope.data.users,
+      total: envelope.data.total ?? null,
+      complete: false,
+    };
+  }
+
+  if (value && typeof value === "object" && "data" in value) {
+    const data = (value as { data?: unknown; total?: unknown }).data;
+    const outerTotal = z.coerce.number().int().nonnegative().safeParse((value as { total?: unknown }).total);
+    const nestedDirect = rawSimpleUserArraySchema.safeParse(data);
+    if (nestedDirect.success) {
+      return {
+        items: nestedDirect.data,
+        total: outerTotal.success ? outerTotal.data : nestedDirect.data.length,
+        complete: !outerTotal.success,
+      };
+    }
+    const nestedEnvelope = simpleUsersResponseSchema.safeParse(data);
+    if (nestedEnvelope.success) {
+      return {
+        items: nestedEnvelope.data.users,
+        total: nestedEnvelope.data.total ?? (outerTotal.success ? outerTotal.data : null),
+        complete: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseGroupsPage(value: unknown): ParsedListPage<RawGroup> | null {
+  const direct = rawGroupArraySchema.safeParse(value);
+  if (direct.success) return { items: direct.data, total: direct.data.length, complete: true };
+
+  const envelope = groupsResponseSchema.safeParse(value);
+  if (envelope.success) {
+    return {
+      items: envelope.data.groups,
+      total: envelope.data.total ?? null,
+      complete: false,
+    };
+  }
+
+  if (value && typeof value === "object" && "data" in value) {
+    const data = (value as { data?: unknown; total?: unknown }).data;
+    const outerTotal = z.coerce.number().int().nonnegative().safeParse((value as { total?: unknown }).total);
+    const nestedDirect = rawGroupArraySchema.safeParse(data);
+    if (nestedDirect.success) {
+      return {
+        items: nestedDirect.data,
+        total: outerTotal.success ? outerTotal.data : nestedDirect.data.length,
+        complete: !outerTotal.success,
+      };
+    }
+    const nestedEnvelope = groupsResponseSchema.safeParse(data);
+    if (nestedEnvelope.success) {
+      return {
+        items: nestedEnvelope.data.groups,
+        total: nestedEnvelope.data.total ?? (outerTotal.success ? outerTotal.data : null),
+        complete: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+function parseTemplates(value: unknown): z.infer<typeof rawTemplateSchema>[] | null {
+  const direct = rawTemplateArraySchema.safeParse(value);
+  if (direct.success) return direct.data;
+  if (!value || typeof value !== "object") return null;
+
+  for (const key of ["templates", "data", "items"] as const) {
+    const parsed = rawTemplateArraySchema.safeParse((value as Record<string, unknown>)[key]);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
+}
 
 export type PasarGuardUser = {
   id: number;
@@ -116,7 +265,7 @@ function parseExpiry(value: string | number | null | undefined): Date | null {
   return date;
 }
 
-function mapUser(input: z.infer<typeof rawUserSchema>): PasarGuardUser {
+function mapUser(input: RawUser): PasarGuardUser {
   const dataLimit = toBigInt(input.data_limit);
   return {
     id: input.id,
@@ -125,8 +274,21 @@ function mapUser(input: z.infer<typeof rawUserSchema>): PasarGuardUser {
     usedTraffic: toBigInt(input.used_traffic),
     dataLimit: dataLimit > 0n ? dataLimit : null,
     expiresAt: parseExpiry(input.expire),
-    maxDevices: input.hwid_limit ?? null,
+    maxDevices: input.hwid_limit && input.hwid_limit > 0 ? input.hwid_limit : null,
     groupIds: input.group_ids,
+  };
+}
+
+function mapSimpleUser(input: RawSimpleUser): PasarGuardUser {
+  return {
+    id: input.id,
+    username: input.username,
+    status: "active",
+    usedTraffic: 0n,
+    dataLimit: null,
+    expiresAt: null,
+    maxDevices: null,
+    groupIds: [],
   };
 }
 
@@ -144,7 +306,7 @@ function mapTemplate(input: z.infer<typeof rawTemplateSchema>): PasarGuardUserTe
   };
 }
 
-function mapGroup(input: z.infer<typeof rawGroupSchema>): PasarGuardGroup {
+function mapGroup(input: RawGroup): PasarGuardGroup {
   return {
     id: input.id,
     name: input.name?.trim() || `Group ${input.id}`,
@@ -234,37 +396,72 @@ export class PasarGuardClient {
     return response;
   }
 
-  async listUsers(): Promise<PasarGuardUser[]> {
+  private async listFullUsers(): Promise<PasarGuardUser[]> {
     const pageSize = 100;
     const users: PasarGuardUser[] = [];
     let offset = 0;
     let expectedTotal: number | null = null;
 
-    while (expectedTotal === null || users.length < expectedTotal) {
-      const response = await this.authorized(
-        `api/users?load_sub=false&limit=${pageSize}&offset=${offset}`,
-      );
-      const parsed = usersResponseSchema.safeParse(await response.json().catch(() => null));
-      if (!parsed.success) {
-        throw new PasarGuardError("invalid_response", "فهرست کاربران پاسارگارد ساختار معتبری ندارد");
-      }
-      expectedTotal = parsed.data.total;
-      users.push(...parsed.data.users.map(mapUser));
-      offset += parsed.data.users.length;
+    while (true) {
+      const response = await this.authorized(`api/users?load_sub=false&limit=${pageSize}&offset=${offset}`);
+      const page = parseUsersPage(await response.json().catch(() => null));
+      if (!page) throw new PasarGuardError("invalid_response", "فهرست کاربران پاسارگارد ساختار معتبری ندارد");
 
-      if (users.length >= expectedTotal) break;
-      if (parsed.data.users.length === 0 || offset > 100_000) {
+      if (page.total !== null) expectedTotal = page.total;
+      users.push(...page.items.map(mapUser));
+      offset += page.items.length;
+
+      if (page.complete) break;
+      if (expectedTotal !== null && users.length >= expectedTotal) break;
+      if (page.items.length < pageSize && expectedTotal === null) break;
+      if (page.items.length === 0 || offset > 100_000) {
         throw new PasarGuardError("invalid_response", "صفحه‌بندی کاربران پاسارگارد کامل دریافت نشد");
       }
     }
+
     return users.slice(0, expectedTotal ?? users.length);
+  }
+
+  private async listSimpleUsers(): Promise<PasarGuardUser[]> {
+    const pageSize = 100;
+    const users: PasarGuardUser[] = [];
+    let offset = 0;
+    let expectedTotal: number | null = null;
+
+    while (true) {
+      const response = await this.authorized(`api/users/simple?limit=${pageSize}&offset=${offset}`);
+      const page = parseSimpleUsersPage(await response.json().catch(() => null));
+      if (!page) throw new PasarGuardError("invalid_response", "فهرست ساده کاربران پاسارگارد ساختار معتبری ندارد");
+
+      if (page.total !== null) expectedTotal = page.total;
+      users.push(...page.items.map(mapSimpleUser));
+      offset += page.items.length;
+
+      if (page.complete) break;
+      if (expectedTotal !== null && users.length >= expectedTotal) break;
+      if (page.items.length < pageSize && expectedTotal === null) break;
+      if (page.items.length === 0 || offset > 100_000) {
+        throw new PasarGuardError("invalid_response", "صفحه‌بندی کاربران پاسارگارد کامل دریافت نشد");
+      }
+    }
+
+    return users.slice(0, expectedTotal ?? users.length);
+  }
+
+  async listUsers(): Promise<PasarGuardUser[]> {
+    try {
+      return await this.listFullUsers();
+    } catch (error) {
+      if (!(error instanceof PasarGuardError) || (error.code !== "invalid_response" && error.code !== "forbidden")) throw error;
+      return this.listSimpleUsers();
+    }
   }
 
   async listUserTemplates(): Promise<PasarGuardUserTemplate[]> {
     const response = await this.authorized("api/user_templates");
-    const parsed = z.array(rawTemplateSchema).safeParse(await response.json().catch(() => null));
-    if (!parsed.success) throw new PasarGuardError("invalid_response", "فهرست قالب‌های پاسارگارد ساختار معتبری ندارد");
-    return parsed.data.map(mapTemplate);
+    const parsed = parseTemplates(await response.json().catch(() => null));
+    if (!parsed) throw new PasarGuardError("invalid_response", "فهرست قالب‌های پاسارگارد ساختار معتبری ندارد");
+    return parsed.map(mapTemplate);
   }
 
   async listGroups(): Promise<PasarGuardGroup[]> {
@@ -273,20 +470,19 @@ export class PasarGuardClient {
     let offset = 0;
     let expectedTotal: number | null = null;
 
-    while (expectedTotal === null || groups.length < expectedTotal) {
-      const response = await this.authorized(
-        `api/groups/simple?limit=${pageSize}&offset=${offset}`,
-      );
-      const parsed = groupsResponseSchema.safeParse(await response.json().catch(() => null));
-      if (!parsed.success) {
-        throw new PasarGuardError("invalid_response", "فهرست گروه‌های پاسارگارد ساختار معتبری ندارد");
-      }
-      expectedTotal = parsed.data.total;
-      groups.push(...parsed.data.groups.map(mapGroup));
-      offset += parsed.data.groups.length;
+    while (true) {
+      const response = await this.authorized(`api/groups/simple?limit=${pageSize}&offset=${offset}`);
+      const page = parseGroupsPage(await response.json().catch(() => null));
+      if (!page) throw new PasarGuardError("invalid_response", "فهرست گروه‌های پاسارگارد ساختار معتبری ندارد");
 
-      if (groups.length >= expectedTotal) break;
-      if (parsed.data.groups.length === 0 || offset > 100_000) {
+      if (page.total !== null) expectedTotal = page.total;
+      groups.push(...page.items.map(mapGroup));
+      offset += page.items.length;
+
+      if (page.complete) break;
+      if (expectedTotal !== null && groups.length >= expectedTotal) break;
+      if (page.items.length < pageSize && expectedTotal === null) break;
+      if (page.items.length === 0 || offset > 100_000) {
         throw new PasarGuardError("invalid_response", "صفحه‌بندی گروه‌های پاسارگارد کامل دریافت نشد");
       }
     }
