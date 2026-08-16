@@ -7,6 +7,9 @@ const navigation = [
   ["داشبورد", "/admin"],
   ["کاربران و مجوزها", "/admin/services"],
   ["سرورها", "/admin/nodes"],
+  ["اعلان‌ها", "/admin/notifications"],
+  ["اطلاعات مدیریت", "/admin/management"],
+  ["اتصال PasarGuard", "/admin/integrations/pasarguard"],
   ["تنظیمات", "/admin/settings"],
 ] as const;
 
