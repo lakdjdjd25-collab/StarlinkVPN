@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { migrationTransferShape } from "./migration-shape";
 
+// These invariants protect existing users from quota resets during provider cutover.
 const GB = 1024n ** 3n;
 
 describe("PasarGuard provider migration traffic continuity", () => {
