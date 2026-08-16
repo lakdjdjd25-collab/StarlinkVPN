@@ -1,0 +1,136 @@
+name: Deploy PR35 production exact
+
+on:
+  push:
+    branches:
+      - agent/deploy-pr35-production-exact
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: 349055bc4d28831df880c6a392a701e1df035275
+          path: production
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify exact source
+        working-directory: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "349055bc4d28831df880c6a392a701e1df035275"
+          test -f apps/control-plane/prisma/migrations/20260816175000_provider_migration_usage_offset/migration.sql
+
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+
+      - name: Start Railway device authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/railway-auth-public.pem <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA8y8mDR+ZUAGJZG43+Sl6
+          31C6J/1hN4nBD1T10gtHbamGNurZlISV+Y4pWStFYSI/vXq5iN+kBDLs8/TfaQms
+          OBUozYdFvRgPkK9ZwXCrj4Nme8ayMOs+8zMzwyX2rvdBTN8blYZ/xM/jEX0mfQm5
+          lRKVm+C59FqXcJx8g/X7Gsyl4zYV79zc2mXfIRa9WkVU5QqoW3Tc/EXqX5QDT2bS
+          7HnIOwDIUOUOopOpOA9KLyNLOnSTJ3CTtGjSjgR7wRvzq9D7DTKGtcNKxE18PbI2
+          EI0bWo3GjFx+tYnX3TBtGfMtPEwogn2rIXkLskWT6W+9ycsO4eGU2PFTLDTStJ8l
+          TPYyxSkQfR6TTbHAaeztyK574YDX59KAM2PnaQA4qTrN4GbilG6UyABfCAg3pVCD
+          vVCVy0q8eaD3kXoZiTlSbv8cc4GvSJH7UIJvuO5KMs1rPZ3+AEp1IePzz9d/p/+V
+          D4VmvFxwZt0q3hjHO3Av+ZMezT1MjGr5BU7Cuf8OId6sZHgbnfSOrmdp+ZFiyTTP
+          I8p32ze4YOUkcbh/RZtQ8ZE0aXxRKqfIEC2DlC1HDaWyLZxUfe6iGeHOAcl+DD2S
+          v9tEuS4P/2jxhpgke+4ZRZWo1Ec55kju47N4DOTgV04isZtP9+lWyvp9B8FSQOSA
+          gwaBRAwpWZjamCH8KiC2vtsCAwEAAQ==
+          -----END PUBLIC KEY-----
+          EOF
+          : > /tmp/railway-login.log
+          RUNNER_TRACKING_ID="" nohup railway login --browserless > /tmp/railway-login.log 2>&1 &
+          echo $! > /tmp/railway-login.pid
+          for i in $(seq 1 60); do
+            if grep -Eq 'https?://|code|Code|pair|Pair|sign in|Sign in' /tmp/railway-login.log; then break; fi
+            PID=$(cat /tmp/railway-login.pid)
+            if ! kill -0 "$PID" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          tail -c 700 /tmp/railway-login.log > /tmp/railway-login-prompt.txt
+          openssl pkeyutl -encrypt -pubin -inkey /tmp/railway-auth-public.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in /tmp/railway-login-prompt.txt -out /tmp/railway-login-prompt.bin
+          base64 -w0 /tmp/railway-login-prompt.bin > /tmp/railway-login-prompt.b64
+
+      - name: Upload encrypted Railway device prompt
+        uses: actions/upload-artifact@v4
+        with:
+          name: railway-pr35-device-prompt-encrypted
+          path: /tmp/railway-login-prompt.b64
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Wait for Railway authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          PID=$(cat /tmp/railway-login.pid)
+          for i in $(seq 1 300); do
+            if ! kill -0 "$PID" 2>/dev/null; then railway whoami --json >/dev/null; exit 0; fi
+            sleep 2
+          done
+          exit 1
+
+      - name: Link existing production service
+        working-directory: production
+        run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
+
+      - name: Capture previous deployment
+        id: before
+        working-directory: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          ID=$(railway deployment list --service control-plane --environment production --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.id||"")})')
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy exact merged source
+        working-directory: production
+        run: railway up --service control-plane --environment production --detach -m "Deploy PR35 exact main 349055bc4d28831df880c6a392a701e1df035275"
+
+      - name: Verify production deployment
+        working-directory: production
+        shell: bash
+        env:
+          PREVIOUS_ID: ${{ steps.before.outputs.id }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 180); do
+            DATA=$(railway deployment list --service control-plane --environment production --json)
+            ID=$(printf '%s' "$DATA" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.id||"")})')
+            STATUS=$(printf '%s' "$DATA" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s);const d=Array.isArray(x)?x[0]:x.deployments?.[0];console.log(d?.status||"")})')
+            if [ -n "$ID" ] && [ "$ID" != "$PREVIOUS_ID" ]; then
+              case "$STATUS" in
+                SUCCESS) printf '%s\n' "$ID" > /tmp/pr35-deployment-id.txt; exit 0 ;;
+                FAILED|CRASHED|SKIPPED|REMOVED) exit 1 ;;
+              esac
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Upload safe deployment result
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr35-production-deployment
+          path: /tmp/pr35-deployment-id.txt
+          if-no-files-found: error
+          retention-days: 7
