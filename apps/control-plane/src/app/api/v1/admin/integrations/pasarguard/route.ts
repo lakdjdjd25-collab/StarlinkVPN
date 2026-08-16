@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@/generated/prisma/client";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
         return fail(409, "plan_mapping_required", "ابتدا گروه پنل فعال را برای پلن‌های NimHUB مشخص کنید");
       }
       const excluded = [...new Set(input.data.excludeBindingIds)];
-      const baseWhere = {
+      const baseWhere: Prisma.PasarGuardBindingWhereInput = {
         OR: [{ providerId: null }, { providerId: { not: client.providerId } }],
         service: {
           planId: { in: mappedPlanIds },
