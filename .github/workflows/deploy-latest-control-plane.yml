@@ -1,0 +1,44 @@
+name: Deploy latest NimHUB control-plane
+
+on:
+  push:
+    branches: ["agent/railway-source-deploy"]
+    paths: [".github/workflows/deploy-latest-control-plane.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact production source
+        uses: actions/checkout@v4
+        with:
+          ref: a666b00076f8c5f14cad1d66e79f8a5d42bce746
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install Railway CLI
+        run: npm install --global @railway/cli@latest
+      - name: Sign in to Railway
+        run: railway login --browserless
+      - name: Link production service
+        run: railway link --project d2b3a600-5b04-4ba9-a341-7959ab38e187 --environment production --service control-plane
+      - name: Deploy exact source to production
+        run: railway up --service control-plane --environment production --detach -m "Deploy NimHUB managed accounts from a666b00076f8c5f14cad1d66e79f8a5d42bce746"
+      - name: Verify deployment status
+        shell: bash
+        run: |
+          for i in $(seq 1 90); do
+            STATUS=$(railway deployment list --service control-plane --environment production --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const x=JSON.parse(s); const d=Array.isArray(x)?x[0]:x.deployments?.[0]; console.log(d?.status||"")})')
+            echo "deployment_status=$STATUS"
+            case "$STATUS" in
+              SUCCESS) exit 0 ;;
+              FAILED|CRASHED|SKIPPED|REMOVED) exit 1 ;;
+            esac
+            sleep 5
+          done
+          exit 1
