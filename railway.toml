@@ -9,4 +9,4 @@ healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 
-# Production source deployment trigger for NimHUB 2.6.12.
+# Authorized production refresh for NimHUB managed accounts (PR 27).
