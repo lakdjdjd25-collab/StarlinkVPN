@@ -21,21 +21,69 @@ const createSchema = z.object({
   quotaGb: z.number().positive().max(100_000),
   days: z.number().int().min(1).max(3650),
   maxDevices: z.number().int().min(1).max(1000),
-  templateId: z.number().int().positive(),
+  profileKey: z.string().regex(/^(template|group):[1-9]\d*$/, "قالب یا گروه پاسارگارد معتبر نیست"),
   note: z.string().trim().max(500).default(""),
 });
+
+type ProviderProfile = {
+  key: string;
+  kind: "template" | "group";
+  id: number;
+  name: string;
+  groupIds: number[];
+  dataLimit: bigint | null;
+  expireDurationSeconds: number | null;
+};
 
 function managedEmail(username: string): string {
   const id = createHash("sha256").update(username).digest("hex").slice(0, 32);
   return `pg-${id}@license.nimhub.local`;
 }
 
-function planName(templateId: number, quotaBytes: bigint, days: number, maxDevices: number): string {
+function planName(profileKey: string, quotaBytes: bigint, days: number, maxDevices: number): string {
   const id = createHash("sha256")
-    .update(`${templateId}:${quotaBytes}:${days}:${maxDevices}`)
+    .update(`${profileKey}:${quotaBytes}:${days}:${maxDevices}`)
     .digest("hex")
     .slice(0, 18);
   return `NimHUB Managed ${id}`;
+}
+
+async function availableProfiles(client: PasarGuardClient): Promise<ProviderProfile[]> {
+  const [templatesResult, groupsResult] = await Promise.allSettled([
+    client.listUserTemplates(),
+    client.listGroups(),
+  ]);
+  const profiles: ProviderProfile[] = [];
+
+  if (templatesResult.status === "fulfilled") {
+    profiles.push(...templatesResult.value
+      .filter((template) => !template.isDisabled && template.status === "active" && template.groupIds.length > 0)
+      .map((template) => ({
+        key: `template:${template.id}`,
+        kind: "template" as const,
+        id: template.id,
+        name: template.name,
+        groupIds: template.groupIds,
+        dataLimit: template.dataLimit,
+        expireDurationSeconds: template.expireDurationSeconds,
+      })));
+  }
+  if (groupsResult.status === "fulfilled") {
+    profiles.push(...groupsResult.value.map((group) => ({
+      key: `group:${group.id}`,
+      kind: "group" as const,
+      id: group.id,
+      name: group.name,
+      groupIds: [group.id],
+      dataLimit: null,
+      expireDurationSeconds: null,
+    })));
+  }
+  if (templatesResult.status === "rejected" && groupsResult.status === "rejected") {
+    throw groupsResult.reason ?? templatesResult.reason;
+  }
+
+  return profiles;
 }
 
 async function nextUniqueLicense(): Promise<string> {
@@ -88,16 +136,8 @@ export async function GET(request: NextRequest) {
     return fail(503, "pasarguard_not_configured", "اتصال پاسارگارد در Secretهای سرور کامل نشده است");
   }
   try {
-    const templates = (await createPasarGuardClient().listUserTemplates())
-      .filter((template) => !template.isDisabled && template.status === "active" && template.groupIds.length > 0)
-      .map((template) => ({
-        id: template.id,
-        name: template.name,
-        groupIds: template.groupIds,
-        dataLimit: template.dataLimit,
-        expireDurationSeconds: template.expireDurationSeconds,
-      }));
-    return ok({ templates });
+    const profiles = await availableProfiles(createPasarGuardClient());
+    return ok({ profiles });
   } catch (error) {
     return providerFailure(error);
   }
@@ -118,7 +158,7 @@ export async function POST(request: NextRequest) {
   const quotaBytes = BigInt(Math.round(input.data.quotaGb * 1024 ** 3));
   const expiresAt = new Date(Date.now() + input.data.days * 86_400_000);
   const internalEmail = managedEmail(input.data.remoteUsername);
-  const managedPlanName = planName(input.data.templateId, quotaBytes, input.data.days, input.data.maxDevices);
+  const managedPlanName = planName(input.data.profileKey, quotaBytes, input.data.days, input.data.maxDevices);
   let client: PasarGuardClient | null = null;
   let remote: PasarGuardUser | null = null;
   let quickPingUserId: string | null = null;
@@ -128,9 +168,9 @@ export async function POST(request: NextRequest) {
 
   try {
     client = createPasarGuardClient();
-    const [templates, users] = await Promise.all([client.listUserTemplates(), client.listUsers()]);
-    const template = templates.find((item) => item.id === input.data.templateId);
-    if (!template || template.isDisabled || template.status !== "active" || !template.groupIds.length) {
+    const [profiles, users] = await Promise.all([availableProfiles(client), client.listUsers()]);
+    const profile = profiles.find((item) => item.key === input.data.profileKey);
+    if (!profile || !profile.groupIds.length) {
       return fail(400, "template_unavailable", "قالب یا گروه انتخاب‌شده در پاسارگارد فعال نیست");
     }
 
@@ -192,14 +232,14 @@ export async function POST(request: NextRequest) {
         expiresAt,
         maxDevices: input.data.maxDevices,
         status: "active",
-        groupIds: template.groupIds,
+        groupIds: profile.groupIds,
         note: providerNote,
       });
     } else {
       remote = await client.createUser(
         input.data.remoteUsername,
         quotaBytes,
-        template.groupIds,
+        profile.groupIds,
         providerNote,
         input.data.maxDevices,
         expiresAt,
@@ -224,7 +264,7 @@ export async function POST(request: NextRequest) {
         after: {
           pasarGuardUserId: remote.id,
           pasarGuardUsername: remote.username,
-          templateId: input.data.templateId,
+          providerProfile: input.data.profileKey,
           quotaBytes: quotaBytes.toString(),
           durationDays: input.data.days,
           maxDevices: input.data.maxDevices,
