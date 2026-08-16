@@ -13,8 +13,12 @@ fun HomeScreen(
     onNotifications: () -> Unit,
     onUpgrade: () -> Unit,
 ) {
+    val stableServers = rememberStableServerPings(
+        servers = state.servers,
+        enabled = state.settings.autoPing,
+    )
     ReferenceHomeScreen(
-        state = state,
+        state = state.copy(servers = stableServers),
         onToggleConnection = onToggleConnection,
         onSelectServer = onSelectServer,
         onSettings = onSettings,
