@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       services: {
         where: {
           ...(auth.serviceId ? { id: auth.serviceId } : {}),
-          status: "ACTIVE",
+          status: { in: ["ACTIVE", "SUSPENDED"] },
           expiresAt: { gt: new Date() },
         },
         orderBy: { expiresAt: "desc" },
@@ -35,13 +35,16 @@ export async function GET(request: NextRequest) {
       },
     },
   });
-  if (!user || user.status !== "ACTIVE") {
+  if (!user || user.status === "DELETED") {
     return fail(403, "account_unavailable", "The account is unavailable");
   }
-  if (auth.serviceId && user.services.length !== 1) {
-    return fail(403, "license_unavailable", "The licensed service is no longer active");
+  const visibleServices = user.services.filter((service) =>
+    user.status === "SUSPENDED" ? service.status === "SUSPENDED" : service.status === "ACTIVE",
+  );
+  if (auth.serviceId && visibleServices.length !== 1) {
+    return fail(403, "license_unavailable", "The licensed service is no longer available");
   }
-  const hasPaidService = user.services.some((service) => !service.isFree);
+  const hasPaidService = visibleServices.some((service) => !service.isFree);
   const [settings, release, notifications] = await Promise.all([
     db.globalSetting.findUnique({ where: { key: "client.bootstrap" } }),
     db.appRelease.findFirst({
@@ -80,8 +83,9 @@ export async function GET(request: NextRequest) {
       telegramBound: Boolean(user.telegramId),
       balance: user.balance,
       language: user.language,
+      status: user.status,
     },
-    services: user.services.map((service) => ({
+    services: visibleServices.map((service) => ({
       id: service.id,
       name: service.name,
       plan: service.plan.name,
@@ -95,7 +99,7 @@ export async function GET(request: NextRequest) {
       usersCount: service.maxDevices,
       isFree: service.isFree,
       autoPay: service.autoPay,
-      servers: service.nodes.map(({ node }) => ({
+      servers: user.status === "SUSPENDED" ? [] : service.nodes.map(({ node }) => ({
         id: node.id,
         location: node.region.name,
         countryCode: node.region.countryCode,
