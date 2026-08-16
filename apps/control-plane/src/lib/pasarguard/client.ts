@@ -23,8 +23,18 @@ const rawTemplateSchema = z.object({
   data_limit_reset_strategy: z.string().nullable().optional(),
 });
 
+const rawGroupSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  name: z.string().nullable().optional(),
+});
+
 const usersResponseSchema = z.object({
   users: z.array(rawUserSchema),
+  total: z.number().int().nonnegative(),
+});
+
+const groupsResponseSchema = z.object({
+  groups: z.array(rawGroupSchema),
   total: z.number().int().nonnegative(),
 });
 
@@ -50,6 +60,11 @@ export type PasarGuardUserTemplate = {
   status: string;
   isDisabled: boolean;
   resetStrategy: string;
+};
+
+export type PasarGuardGroup = {
+  id: number;
+  name: string;
 };
 
 export type PasarGuardUserUpdate = {
@@ -126,6 +141,13 @@ function mapTemplate(input: z.infer<typeof rawTemplateSchema>): PasarGuardUserTe
     status: input.status?.trim().toLowerCase() || "active",
     isDisabled: input.is_disabled ?? false,
     resetStrategy: input.data_limit_reset_strategy?.trim().toLowerCase() || "no_reset",
+  };
+}
+
+function mapGroup(input: z.infer<typeof rawGroupSchema>): PasarGuardGroup {
+  return {
+    id: input.id,
+    name: input.name?.trim() || `Group ${input.id}`,
   };
 }
 
@@ -241,6 +263,33 @@ export class PasarGuardClient {
     const parsed = z.array(rawTemplateSchema).safeParse(await response.json().catch(() => null));
     if (!parsed.success) throw new PasarGuardError("invalid_response", "فهرست قالب‌های پاسارگارد ساختار معتبری ندارد");
     return parsed.data.map(mapTemplate);
+  }
+
+  async listGroups(): Promise<PasarGuardGroup[]> {
+    const pageSize = 100;
+    const groups: PasarGuardGroup[] = [];
+    let offset = 0;
+    let expectedTotal: number | null = null;
+
+    while (expectedTotal === null || groups.length < expectedTotal) {
+      const response = await this.authorized(
+        `api/groups/simple?limit=${pageSize}&offset=${offset}`,
+      );
+      const parsed = groupsResponseSchema.safeParse(await response.json().catch(() => null));
+      if (!parsed.success) {
+        throw new PasarGuardError("invalid_response", "فهرست گروه‌های پاسارگارد ساختار معتبری ندارد");
+      }
+      expectedTotal = parsed.data.total;
+      groups.push(...parsed.data.groups.map(mapGroup));
+      offset += parsed.data.groups.length;
+
+      if (groups.length >= expectedTotal) break;
+      if (parsed.data.groups.length === 0 || offset > 100_000) {
+        throw new PasarGuardError("invalid_response", "صفحه‌بندی گروه‌های پاسارگارد کامل دریافت نشد");
+      }
+    }
+
+    return groups.slice(0, expectedTotal ?? groups.length);
   }
 
   async getUser(id: number): Promise<PasarGuardUser> {
