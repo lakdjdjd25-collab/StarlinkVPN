@@ -5,10 +5,8 @@ import { requireAdminPage } from "@/lib/admin-session";
 
 const navigation = [
   ["داشبورد", "/admin"],
-  ["کاربران", "/admin/users"],
-  ["سرویس‌ها", "/admin/services"],
+  ["کاربران و مجوزها", "/admin/services"],
   ["سرورها", "/admin/nodes"],
-  ["پاسارگارد", "/admin/integrations/pasarguard"],
   ["تنظیمات", "/admin/settings"],
 ] as const;
 

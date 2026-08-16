@@ -148,6 +148,85 @@ td strong { color: var(--text); font-weight: 500; }
 .empty { padding: 36px; color: var(--faint); text-align: center; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .error { color: #f17887; font-size: 13px; }
+.success-message { color: var(--success); font-size: 13px; }
+
+.license-manager { display: grid; gap: 18px; }
+.manager-panel {
+  padding: 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: 18px;
+  background: rgba(16, 19, 24, .93);
+}
+.manager-panel h2, .manager-panel h3 { margin: 0; }
+.manager-panel .section-title p, .manager-list-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.manager-hint { color: var(--muted); font-size: 13px; }
+.manager-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.manager-list-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.manager-search { width: min(360px, 100%); }
+.manager-profile { grid-column: span 1; }
+
+.credential-receipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 250px);
+  align-items: center;
+  gap: 22px;
+  border-color: rgba(55, 201, 133, .28);
+}
+.compact-receipt { grid-template-columns: 1fr; }
+.receipt-content { min-width: 0; }
+.receipt-content h3 { margin-top: 10px; }
+.receipt-qr { display: flex; justify-content: center; }
+.license-qr { width: 240px; max-width: 100%; background: white; border-radius: 14px; }
+.credential-fields { display: grid; gap: 10px; margin-top: 14px; }
+.credential-fields label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+
+.managed-license-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.managed-license-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #0b0e13;
+}
+.managed-license-card.is-active { border-color: rgba(55, 201, 133, .2); }
+.managed-license-card.is-blocked { border-color: rgba(193, 37, 54, .34); }
+.license-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.license-card-head h3 { font-size: 16px; }
+.license-card-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.license-code {
+  margin-top: 13px;
+  padding: 9px 11px;
+  overflow: hidden;
+  color: var(--primary-light);
+  background: rgba(46, 120, 247, .08);
+  border-radius: 10px;
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.usage-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; color: var(--muted); font-size: 12px; }
+.usage-track { height: 7px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: var(--surface-high); }
+.usage-track span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.license-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.license-facts span { display: grid; gap: 2px; color: var(--faint); font-size: 11px; }
+.license-facts strong { color: var(--text); font-size: 12px; font-weight: 500; }
+.license-editor { margin-top: 14px; border-top: 1px solid var(--border-soft); }
+.license-editor summary { padding-top: 14px; color: var(--primary-light); cursor: pointer; font-size: 13px; }
+.license-editor form { margin-top: 4px; }
+.quick-adds { display: flex; gap: 5px; flex-wrap: wrap; }
+.quick-adds button {
+  padding: 4px 7px;
+  color: var(--primary-light);
+  background: rgba(46, 120, 247, .1);
+  border: 1px solid rgba(46, 120, 247, .22);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
 
 @media (max-width: 900px) {
   .admin-shell { grid-template-columns: 1fr; }
@@ -155,10 +234,15 @@ td strong { color: var(--text); font-weight: 500; }
   .nav-list { grid-template-columns: repeat(3, 1fr); }
   .sidebar-footer { position: static; margin-top: 14px; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .managed-license-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
   .stats-grid, .form-grid { grid-template-columns: 1fr; }
   .nav-list { grid-template-columns: repeat(2, 1fr); }
   .main-content { padding: 20px 14px; }
+  .manager-panel { padding: 15px; }
+  .manager-list-header, .credential-receipt { display: grid; grid-template-columns: 1fr; }
+  .manager-search { width: 100%; }
+  .manager-actions .button { flex: 1 1 100%; }
 }

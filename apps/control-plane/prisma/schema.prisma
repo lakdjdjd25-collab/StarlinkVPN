@@ -79,6 +79,7 @@ model User {
   telegramId      String?    @unique
   balance         BigInt     @default(0)
   language        String     @default("fa")
+  managedAccount  Boolean    @default(false)
   role            UserRole   @default(CUSTOMER)
   status          UserStatus @default(ACTIVE)
   createdAt       DateTime   @default(now())
