@@ -4,9 +4,9 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "npm --workspace @quickping/control-plane run start"
-healthcheckPath = "/api/v1/health"
+healthcheckPath = "/api/v1/health/vip"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 
-# Authorized production source refresh for NimHUB VIP release (PR 39).
+# Require the VIP-aware image and additive VIP schema before production cutover.
