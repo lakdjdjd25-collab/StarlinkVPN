@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessTier, filterAccessibleNodes } from "@/lib/vip-access";
+import { canAccessTier, filterAccessibleNodes } from "./vip-access";
 
 describe("VIP access policy", () => {
   it("allows STANDARD nodes for every service", () => {
