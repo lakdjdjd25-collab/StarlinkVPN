@@ -14,6 +14,7 @@ const schema = z.object({
   protocol: z.enum(["VLESS", "VMESS", "TROJAN", "WIREGUARD", "HYSTERIA2", "SOCKS5", "SINGBOX", "XRAY"]),
   capacity: z.number().int().min(1).max(1_000_000),
   freeAllowed: z.boolean().default(false),
+  accessTier: z.enum(["STANDARD", "VIP"]).default("STANDARD"),
   config: singBoxRuntimeConfigSchema,
 });
 
@@ -21,6 +22,7 @@ const updateSchema = z.object({
   id: z.string().min(1),
   status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]),
   capacity: z.number().int().min(1).max(1_000_000),
+  accessTier: z.enum(["STANDARD", "VIP"]),
 });
 
 export async function GET(request: NextRequest) {
@@ -45,12 +47,19 @@ export async function POST(request: NextRequest) {
       protocol: input.data.protocol,
       capacity: input.data.capacity,
       freeAllowed: input.data.freeAllowed,
+      accessTier: input.data.accessTier,
       configCiphertext: encryptConfig(input.data.config),
       status: "OFFLINE",
     },
   });
   await db.auditLog.create({
-    data: { actorId: admin.sub, action: "node.create", entityType: "VpnNode", entityId: node.id, after: { name: node.name, host: node.host, protocol: node.protocol } },
+    data: {
+      actorId: admin.sub,
+      action: "node.create",
+      entityType: "VpnNode",
+      entityId: node.id,
+      after: { name: node.name, host: node.host, protocol: node.protocol, accessTier: node.accessTier },
+    },
   });
   const { configCiphertext: _secret, ...publicNode } = node;
   return ok(publicNode, { status: 201 });
@@ -64,7 +73,7 @@ export async function PATCH(request: NextRequest) {
   if (!input.success) return fail(400, "invalid_input", "تغییرات نود معتبر نیست");
   const before = await db.vpnNode.findUnique({
     where: { id: input.data.id },
-    select: { id: true, status: true, capacity: true },
+    select: { id: true, status: true, capacity: true, accessTier: true },
   });
   if (!before) return fail(404, "node_not_found", "نود پیدا نشد");
   const node = await db.vpnNode.update({
@@ -72,18 +81,19 @@ export async function PATCH(request: NextRequest) {
     data: {
       status: input.data.status,
       capacity: input.data.capacity,
+      accessTier: input.data.accessTier,
       lastSeenAt: input.data.status === "ONLINE" ? new Date() : undefined,
     },
-    select: { id: true, name: true, status: true, capacity: true, lastSeenAt: true },
+    select: { id: true, name: true, status: true, capacity: true, accessTier: true, lastSeenAt: true },
   });
   await db.auditLog.create({
     data: {
       actorId: admin.sub,
-      action: "node.updateStatus",
+      action: "node.update",
       entityType: "VpnNode",
       entityId: node.id,
-      before: { status: before.status, capacity: before.capacity },
-      after: { status: node.status, capacity: node.capacity },
+      before: { status: before.status, capacity: before.capacity, accessTier: before.accessTier },
+      after: { status: node.status, capacity: node.capacity, accessTier: node.accessTier },
     },
   });
   return ok(node);
