@@ -1,9 +1,9 @@
 name: Railway VIP Cutover
 
 on:
-  push:
+  pull_request:
     branches:
-      - ops/railway-vip-cutover
+      - main
 
 permissions:
   contents: read
