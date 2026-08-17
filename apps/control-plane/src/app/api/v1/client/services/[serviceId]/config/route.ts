@@ -3,6 +3,7 @@ import { fail, ok, requireBearer } from "@/lib/api";
 import { decryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
 import { activePasarGuardProviderSummary } from "@/lib/pasarguard/provider";
+import { canAccessTier } from "@/lib/vip-access";
 
 export async function GET(
   request: NextRequest,
@@ -51,6 +52,9 @@ export async function GET(
   }
   const assignment = service.nodes[0];
   if (!assignment) return fail(404, "node_unavailable", "The selected server is unavailable");
+  if (!canAccessTier(service.vipAccess, assignment.node.accessTier)) {
+    return fail(403, "vip_access_required", "VIP access is required for this server");
+  }
   const { node, priority } = assignment;
   return ok({
     serviceId: service.id,
@@ -63,6 +67,7 @@ export async function GET(
       countryCode: node.region.countryCode,
       protocol: node.protocol,
       coreType: node.coreType,
+      accessTier: node.accessTier,
       runtimeConfig: decryptConfig<Record<string, unknown>>(node.configCiphertext),
     },
   });
