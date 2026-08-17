@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { fail, ok, requireBearer } from "@/lib/api";
 import { db } from "@/lib/db";
 import { refreshPasarGuardBindingsForUser } from "@/lib/pasarguard/sync";
+import { filterAccessibleNodes } from "@/lib/vip-access";
 
 export async function GET(request: NextRequest) {
   const auth = await requireBearer(request);
@@ -99,6 +100,10 @@ export async function GET(request: NextRequest) {
           || service.pasarGuardBinding.providerId !== activeProvider.id
           || !service.pasarGuardBinding.lastSyncAt),
       );
+      const accessibleNodes = filterAccessibleNodes(
+        service.nodes.map(({ node }) => node),
+        service.vipAccess,
+      );
       return {
         id: service.id,
         name: service.name,
@@ -113,8 +118,9 @@ export async function GET(request: NextRequest) {
         usersCount: service.maxDevices,
         isFree: service.isFree,
         autoPay: service.autoPay,
+        vipAccess: service.vipAccess,
         providerState: providerReview ? "REVIEW" : "READY",
-        servers: user.status === "SUSPENDED" || providerReview ? [] : service.nodes.map(({ node }) => ({
+        servers: user.status === "SUSPENDED" || providerReview ? [] : accessibleNodes.map((node) => ({
           id: node.id,
           location: node.region.name,
           countryCode: node.region.countryCode,
@@ -124,6 +130,7 @@ export async function GET(request: NextRequest) {
           coreType: node.coreType,
           freeAllowed: node.freeAllowed,
           unmetered: node.unmetered,
+          accessTier: node.accessTier,
           status: node.status,
         })),
         guardian: service.guardianProfile,
