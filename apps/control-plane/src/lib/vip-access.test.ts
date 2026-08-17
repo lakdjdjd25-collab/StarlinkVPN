@@ -12,6 +12,12 @@ describe("VIP access policy", () => {
     expect(canAccessTier(true, "VIP")).toBe(true);
   });
 
+  it("rejects the authorization decision for a direct VIP config attempt from a STANDARD service", () => {
+    const standardServiceVipAccess = false;
+    const directlyRequestedNodeTier = "VIP" as const;
+    expect(canAccessTier(standardServiceVipAccess, directlyRequestedNodeTier)).toBe(false);
+  });
+
   it("filters VIP metadata out of STANDARD bootstrap responses", () => {
     const nodes = [
       { id: "standard", accessTier: "STANDARD" as const },
