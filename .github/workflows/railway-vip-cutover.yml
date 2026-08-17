@@ -1,0 +1,83 @@
+name: Railway VIP Cutover
+
+on:
+  push:
+    branches:
+      - ops/railway-vip-cutover
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy exact main commit to existing control-plane
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_TOKEN: ${{ secrets.RAILWAY_PROJECT_TOKEN }}
+          RAILWAY_API: https://backboard.railway.com/graphql/v2
+          SERVICE_ID: a6c3406f-3de8-4205-a763-a00fff0db946
+          ENVIRONMENT_ID: 9c6e354a-60dd-476e-b6df-2126c9d6688b
+          COMMIT_SHA: a51bd9005076eeb9c0fbadbde4e52a23f597e915
+          REPOSITORY: lakdjdjd25-collab/StarlinkVPN
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+            AUTH_HEADER="Authorization: Bearer ${RAILWAY_TOKEN}"
+            CAN_CONNECT_SOURCE=1
+          elif [[ -n "${RAILWAY_PROJECT_TOKEN:-}" ]]; then
+            AUTH_HEADER="Project-Access-Token: ${RAILWAY_PROJECT_TOKEN}"
+            CAN_CONNECT_SOURCE=0
+          else
+            echo "::error::Neither RAILWAY_TOKEN nor RAILWAY_PROJECT_TOKEN is configured in repository secrets."
+            exit 2
+          fi
+
+          graphql() {
+            local query="$1"
+            local variables="$2"
+            curl --silent --show-error --fail-with-body \
+              --request POST \
+              --url "$RAILWAY_API" \
+              --header "$AUTH_HEADER" \
+              --header 'Content-Type: application/json' \
+              --data "$(jq -cn --arg q "$query" --argjson v "$variables" '{query:$q,variables:$v}')"
+          }
+
+          deploy_query='mutation serviceInstanceDeployV2($serviceId: String!, $environmentId: String!, $commitSha: String!) { serviceInstanceDeployV2(serviceId: $serviceId, environmentId: $environmentId, commitSha: $commitSha) }'
+          deploy_vars="$(jq -cn --arg serviceId "$SERVICE_ID" --arg environmentId "$ENVIRONMENT_ID" --arg commitSha "$COMMIT_SHA" '{serviceId:$serviceId,environmentId:$environmentId,commitSha:$commitSha}')"
+
+          response="$(graphql "$deploy_query" "$deploy_vars" || true)"
+          if jq -e '.data.serviceInstanceDeployV2 != null' >/dev/null 2>&1 <<<"$response"; then
+            deployment_id="$(jq -r '.data.serviceInstanceDeployV2' <<<"$response")"
+            echo "Deployment queued: ${deployment_id}"
+            exit 0
+          fi
+
+          if [[ "$CAN_CONNECT_SOURCE" != "1" ]]; then
+            echo "$response" | jq '{errors}'
+            echo "::error::Exact-commit deploy failed and the available project token cannot connect or change the service source."
+            exit 3
+          fi
+
+          connect_query='mutation serviceConnect($id: String!, $input: ServiceConnectInput!) { serviceConnect(id: $id, input: $input) { id } }'
+          connect_vars="$(jq -cn --arg id "$SERVICE_ID" --arg repo "$REPOSITORY" '{id:$id,input:{repo:$repo,branch:"main"}}')"
+          connect_response="$(graphql "$connect_query" "$connect_vars" || true)"
+          if ! jq -e '.data.serviceConnect.id != null' >/dev/null 2>&1 <<<"$connect_response"; then
+            echo "$connect_response" | jq '{errors}'
+            echo "::error::Unable to connect the existing control-plane service to the GitHub repository."
+            exit 4
+          fi
+
+          response="$(graphql "$deploy_query" "$deploy_vars" || true)"
+          if ! jq -e '.data.serviceInstanceDeployV2 != null' >/dev/null 2>&1 <<<"$response"; then
+            echo "$response" | jq '{errors}'
+            echo "::error::Source connected, but exact-commit deployment could not be queued."
+            exit 5
+          fi
+
+          deployment_id="$(jq -r '.data.serviceInstanceDeployV2' <<<"$response")"
+          echo "Deployment queued after source connection: ${deployment_id}"
