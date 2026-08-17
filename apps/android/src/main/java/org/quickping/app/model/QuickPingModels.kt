@@ -14,7 +14,10 @@ data class Server(
     val coreType: String = "sing-box",
     val freeAllowed: Boolean = false,
     val unmetered: Boolean = false,
-)
+    val accessTier: String = "STANDARD",
+) {
+    val isVip: Boolean get() = accessTier.equals("VIP", ignoreCase = true)
+}
 
 data class Service(
     val id: String,
@@ -27,6 +30,7 @@ data class Service(
     val usersCount: Int,
     val isFree: Boolean = false,
     val banned: Boolean = false,
+    val vipAccess: Boolean = false,
     val providerState: String = "READY",
 ) {
     val pendingReview: Boolean get() = providerState == "REVIEW"
