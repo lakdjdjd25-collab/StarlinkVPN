@@ -13,6 +13,7 @@ fun HomeScreen(
     onNotifications: () -> Unit,
     onUpgrade: () -> Unit,
 ) {
+    VipAccessRevocationGuard(state = state, onDisconnect = onToggleConnection)
     val stableServers = rememberStableServerPings(
         servers = state.servers,
         enabled = state.settings.autoPing,
