@@ -51,6 +51,11 @@ enum NodeStatus {
   MAINTENANCE
 }
 
+enum AccessTier {
+  STANDARD
+  VIP
+}
+
 enum NotificationAudience {
   ALL
   FREE
@@ -192,6 +197,7 @@ model Service {
   maxDevices       Int
   autoPay          Boolean       @default(false)
   isFree           Boolean       @default(false)
+  vipAccess        Boolean       @default(false)
   subscriptionLink String?       @unique
   hiddifyLink      String?
   createdAt        DateTime      @default(now())
@@ -236,6 +242,7 @@ model VpnNode {
   activeSessions      Int          @default(0)
   freeAllowed         Boolean      @default(false)
   unmetered           Boolean      @default(false)
+  accessTier          AccessTier   @default(STANDARD)
   status              NodeStatus   @default(OFFLINE)
   lastSeenAt          DateTime?
   provider            String       @default("MANUAL")
@@ -250,6 +257,7 @@ model VpnNode {
   pasarGuardBinding PasarGuardBinding? @relation(fields: [pasarGuardBindingId], references: [id], onDelete: Cascade)
 
   @@index([regionId, status])
+  @@index([accessTier, status])
   @@index([host, port, protocol])
   @@index([pasarGuardBindingId])
 }
@@ -275,7 +283,6 @@ model PasarGuardBinding {
   @@index([providerId, lastSyncAt])
   @@index([lastSyncAt])
 }
-
 
 model PasarGuardProvider {
   id                 String   @id @default(cuid())
