@@ -40,6 +40,7 @@ type ManagedLicense = {
   providerId: string | null;
   providerName: string;
   needsMigration: boolean;
+  vipAccess: boolean;
 };
 
 type Credentials = {
@@ -60,6 +61,13 @@ type Receipt = {
     maxDevices: number;
   };
   remoteUser: { id: number; username: string };
+};
+
+type VipServiceState = { id: string; vipAccess: boolean };
+
+const vipBadgeStyle = {
+  background: "linear-gradient(90deg,#6758cf,#947bd2,#d9da87)",
+  color: "#fff",
 };
 
 function qrGeometry(value: string) {
@@ -128,6 +136,21 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
+async function saveVipAccess(serviceId: string, vipAccess: boolean): Promise<string | null> {
+  try {
+    const response = await fetch("/api/v1/admin/vip-access", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ serviceId, vipAccess }),
+    });
+    if (response.ok) return null;
+    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    return body?.error?.message ?? "ذخیره دسترسی VIP انجام نشد";
+  } catch {
+    return "ارتباط با سرور برای ذخیره VIP برقرار نشد";
+  }
+}
+
 export function ManagedLicenseForm() {
   const [profiles, setProfiles] = useState<ProviderProfile[]>([]);
   const [licenses, setLicenses] = useState<ManagedLicense[]>([]);
@@ -147,18 +170,33 @@ export function ManagedLicenseForm() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/v1/admin/licenses", { cache: "no-store" });
+      const [response, vipResponse] = await Promise.all([
+        fetch("/api/v1/admin/licenses", { cache: "no-store" }),
+        fetch("/api/v1/admin/vip-access", { cache: "no-store" }),
+      ]);
       const body = await response.json().catch(() => null) as {
-        data?: { profiles?: ProviderProfile[]; licenses?: ManagedLicense[] };
+        data?: { profiles?: ProviderProfile[]; licenses?: Omit<ManagedLicense, "vipAccess">[] };
+        error?: { message?: string };
+      } | null;
+      const vipBody = await vipResponse.json().catch(() => null) as {
+        data?: { services?: VipServiceState[] };
         error?: { message?: string };
       } | null;
       if (!response.ok) {
         setError(body?.error?.message ?? "دریافت اطلاعات مجوزها انجام نشد");
         return;
       }
+      if (!vipResponse.ok) {
+        setError(vipBody?.error?.message ?? "دریافت وضعیت VIP مجوزها انجام نشد");
+        return;
+      }
       const nextProfiles = body?.data?.profiles ?? [];
+      const vipByService = new Map((vipBody?.data?.services ?? []).map((item) => [item.id, item.vipAccess]));
       setProfiles(nextProfiles);
-      setLicenses(body?.data?.licenses ?? []);
+      setLicenses((body?.data?.licenses ?? []).map((item) => ({
+        ...item,
+        vipAccess: vipByService.get(item.id) ?? false,
+      })));
       if (!nextProfiles.length) setError("هیچ قالب یا گروه قابل‌استفاده‌ای در پاسارگارد پیدا نشد");
     } catch {
       setError("ارتباط با سرور برای دریافت مجوزها برقرار نشد");
@@ -173,6 +211,7 @@ export function ManagedLicenseForm() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const vipAccess = data.get("vipAccess") === "on";
     if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
     setBusy(true);
     setError("");
@@ -201,10 +240,15 @@ export function ManagedLicenseForm() {
         setError(body?.error?.message ?? "ساخت کاربر و مجوز انجام نشد");
         return;
       }
+      const vipError = await saveVipAccess(body.data.service.id, vipAccess);
       setReceipt(body.data);
-      setMessage(body.data.reused
-        ? "این درخواست قبلاً انجام شده بود؛ مجوز موجود نمایش داده شد. برای رمز تازه از مدیریت کاربر استفاده کنید."
-        : "کاربر، ایمیل و رمز، سرویس پاسارگارد و مجوز با موفقیت ساخته شدند.");
+      if (vipError) {
+        setError(`مجوز ساخته شد، اما ${vipError}`);
+      } else {
+        setMessage(body.data.reused
+          ? `مجوز موجود نمایش داده شد و دسترسی VIP ${vipAccess ? "فعال" : "غیرفعال"} است.`
+          : `کاربر، ایمیل و رمز، سرویس پاسارگارد و مجوز ساخته شدند${vipAccess ? " و VIP فعال شد" : ""}.`);
+      }
       idempotencyKey.current = "";
       if (!body.data.reused) form.reset();
       await load();
@@ -265,7 +309,10 @@ export function ManagedLicenseForm() {
             </div>
             <div className="field"><label>یادداشت (اختیاری)</label><input className="input" name="note" maxLength={500} /></div>
           </div>
-          <p className="manager-hint">ایمیل تصادفی @nimhub.com، رمز اولیهٔ ۸ کاراکتری، مجوز و QR خودکار ساخته می‌شوند.</p>
+          <label style={{ display: "flex", gap: 9, alignItems: "center", marginTop: 12, color: "#d8ccff", fontWeight: 700 }}>
+            <input type="checkbox" name="vipAccess" /> دسترسی به سرورهای VIP
+          </label>
+          <p className="manager-hint">ایمیل تصادفی @nimhub.com، رمز اولیهٔ ۸ کاراکتری، مجوز و QR خودکار ساخته می‌شوند. VIP فقط با همین تیک مدیریت می‌شود.</p>
           {error ? <p className="error">{error}</p> : null}
           {message ? <p className="success-message">{message}</p> : null}
           <button className="button" disabled={busy || loading || !profiles.length}>
@@ -317,7 +364,7 @@ export function ManagedLicenseForm() {
 
       <section className="manager-panel">
         <div className="manager-list-header">
-          <div><h2>مدیریت کاربران و مجوزها</h2><p>مسدودی، حجم، اعتبار، دستگاه و گروه سرورها</p></div>
+          <div><h2>مدیریت کاربران و مجوزها</h2><p>مسدودی، حجم، اعتبار، دستگاه، گروه سرورها و VIP</p></div>
           <input
             className="input manager-search"
             value={search}
@@ -381,6 +428,7 @@ function ManagedLicenseCard({
   const [maxDevices, setMaxDevices] = useState(String(license.maxDevices));
   const [status, setStatus] = useState(license.status === "ACTIVE" ? "ACTIVE" : "SUSPENDED");
   const [profileKey, setProfileKey] = useState(license.profileKey);
+  const [vipAccess, setVipAccess] = useState(license.vipAccess);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -390,6 +438,7 @@ function ManagedLicenseCard({
     setMaxDevices(String(license.maxDevices));
     setStatus(license.status === "ACTIVE" ? "ACTIVE" : "SUSPENDED");
     setProfileKey(license.profileKey);
+    setVipAccess(license.vipAccess);
   }, [license, profiles]);
 
   async function request(body: unknown) {
@@ -429,7 +478,13 @@ function ManagedLicenseCard({
       maxDevices: Number(maxDevices),
       profileKey,
     });
-    if (result) await onUpdated("تغییرات کاربر در NimHUB و پاسارگارد ذخیره شد.");
+    if (!result) return;
+    const vipError = await saveVipAccess(license.id, vipAccess);
+    if (vipError) {
+      setError(`تنظیمات اصلی ذخیره شد، اما ${vipError}`);
+      return;
+    }
+    await onUpdated(`تغییرات کاربر ذخیره شد و VIP ${vipAccess ? "فعال" : "غیرفعال"} است.`);
   }
 
   async function resetCredentials() {
@@ -443,7 +498,7 @@ function ManagedLicenseCard({
       return;
     }
     const result = await request({ action: "migrate_provider", serviceId: license.id, profileKey });
-    if (result) await onUpdated("سرویس بدون حذف حساب NimHUB به پنل فعال منتقل و سرورها دوباره همگام شدند.");
+    if (result) await onUpdated("سرویس بدون حذف حساب NimHUB به پنل فعال منتقل و سرورها دوباره همگام شدند. دسترسی VIP سرویس بدون تغییر حفظ شد.");
   }
 
   const usedPercent = Math.min(100, Math.round((Number(license.usedBytes) / Math.max(1, Number(license.quotaBytes))) * 100));
@@ -455,7 +510,11 @@ function ManagedLicenseCard({
           <h3>{license.name}</h3>
           <p dir="ltr">{license.credentialsReady ? license.email : "ورود ایمیلی هنوز ساخته نشده"}</p>
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}><span className={license.status === "ACTIVE" ? "badge green" : "badge red"}>{license.status === "ACTIVE" ? "فعال" : "مسدود"}</span>{license.needsMigration ? <span className="badge red">نیازمند انتقال پنل</span> : null}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <span className={license.status === "ACTIVE" ? "badge green" : "badge red"}>{license.status === "ACTIVE" ? "فعال" : "مسدود"}</span>
+          {license.vipAccess ? <span className="badge" style={vipBadgeStyle}>VIP</span> : null}
+          {license.needsMigration ? <span className="badge red">نیازمند انتقال پنل</span> : null}
+        </div>
       </div>
       <div className="license-code" dir="ltr">{license.license}</div>
       <div className="usage-row"><span>مصرف {formatGb(license.usedBytes)} از {formatGb(license.quotaBytes)} GB</span><span>{usedPercent}٪</span></div>
@@ -465,6 +524,7 @@ function ManagedLicenseCard({
         <span>دستگاه <strong>{license.maxDevices}</strong></span>
         <span>سرور <strong>{license.serverCount}</strong></span>
         <span>گروه <strong>{license.profileName}</strong></span>
+        <span>VIP <strong>{license.vipAccess ? "فعال" : "خاموش"}</strong></span>
         <span>Provider <strong>{license.providerName}</strong></span>
       </div>
       {license.lastError ? <p className="error">آخرین همگام‌سازی: {license.lastError}</p> : null}
@@ -478,6 +538,12 @@ function ManagedLicenseCard({
             <div className="field"><label>حجم کل (GB)</label><input className="input" value={quotaGb} onChange={(event) => setQuotaGb(event.target.value)} type="number" min="0.1" max="100000" step="0.1" required /><QuickAdds values={[10, 30, 50]} unit="GB" onAdd={(value) => setQuotaGb(String(Number(quotaGb || 0) + value))} /></div>
             <div className="field"><label>اعتبار از امروز (روز)</label><input className="input" value={days} onChange={(event) => setDays(event.target.value)} type="number" min="1" max="3650" required /><QuickAdds values={[30, 90, 180]} unit="روز" onAdd={(value) => setDays(String(Number(days || 0) + value))} /></div>
             <div className="field manager-profile"><label>پلن / گروه سرورها</label><select className="select" value={profileKey} onChange={(event) => setProfileKey(event.target.value)} required><option value="" disabled>یک گروه را انتخاب کنید</option>{profiles.map((profile) => <option value={profile.key} key={profile.key}>{profileLabel(profile)}</option>)}</select></div>
+            <div className="field">
+              <label>دسترسی VIP</label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", color: vipAccess ? "#d8ccff" : "var(--muted)", minHeight: 42 }}>
+                <input type="checkbox" checked={vipAccess} onChange={(event) => setVipAccess(event.target.checked)} /> نمایش و استفاده از سرورهای VIP
+              </label>
+            </div>
           </div>
           {error ? <p className="error">{error}</p> : null}
           <div className="manager-actions">
