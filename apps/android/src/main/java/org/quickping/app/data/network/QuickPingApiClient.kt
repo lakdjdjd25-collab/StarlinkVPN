@@ -374,6 +374,7 @@ private fun JSONObject.toService(): Service {
         daysLeft = daysLeft.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
         usersCount = optInt("usersCount", 1),
         isFree = optBoolean("isFree"),
+        vipAccess = optBoolean("vipAccess", false),
         providerState = optString("providerState", "READY"),
     )
 }
@@ -395,6 +396,7 @@ private fun JSONArray?.toServers(): List<Server> {
             coreType = item.optString("coreType", "sing-box"),
             freeAllowed = item.optBoolean("freeAllowed"),
             unmetered = item.optBoolean("unmetered"),
+            accessTier = item.optString("accessTier", "STANDARD"),
         )
     }
 }
