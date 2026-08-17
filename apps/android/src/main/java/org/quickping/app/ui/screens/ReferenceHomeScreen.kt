@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import org.quickping.app.R
 import org.quickping.app.core.design.*
 import org.quickping.app.model.ConnectionStatus
+import org.quickping.app.model.selectBestServerForAuto
 import org.quickping.app.state.QuickPingUiState
 
 @Composable
@@ -73,10 +74,7 @@ internal fun ReferenceHomeScreen(
                 state = state,
                 bestLocationSelected = false,
                 onSelectBestLocation = {
-                    val best = state.servers
-                        .filter { it.pingMs != null }
-                        .minByOrNull { it.pingMs ?: Int.MAX_VALUE }
-                        ?: state.servers.firstOrNull()
+                    val best = selectBestServerForAuto(state.servers)
                     best?.let { server ->
                         onSelectServer(server.id)
                         if (state.connectionStatus !in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)) {
