@@ -6,6 +6,8 @@ import { activePasarGuardProviderSummary } from "@/lib/pasarguard/provider";
 import { remainingServiceBytes } from "@/lib/server-access";
 import { canAccessTier, VIP_ACCESS_REQUIRED } from "@/lib/vip-access";
 
+const MANUAL_TRAFFIC_CAPABILITY_HEADER = "x-nimhub-manual-traffic";
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ serviceId: string }> },
@@ -81,6 +83,9 @@ export async function GET(
     });
   }
   if (!manualServer) return fail(404, "node_unavailable", "The selected server is unavailable");
+  if (request.headers.get(MANUAL_TRAFFIC_CAPABILITY_HEADER) !== "1") {
+    return fail(426, "client_upgrade_required", "Update NimHUB to use Manual Servers");
+  }
   if (!canAccessTier(service.vipAccess, manualServer.accessTier)) {
     return fail(403, VIP_ACCESS_REQUIRED, "VIP access is required for this server");
   }
