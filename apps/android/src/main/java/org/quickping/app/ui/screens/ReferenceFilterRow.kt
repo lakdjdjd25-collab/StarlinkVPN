@@ -39,6 +39,8 @@ import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 
+internal enum class ReferenceQuickFilter { All, Unlimited, Gaming }
+
 @Composable
 internal fun ReferenceFilterRow(
     searchOpen: Boolean,
@@ -47,8 +49,8 @@ internal fun ReferenceFilterRow(
     onSearchClick: () -> Unit,
     onFilterClick: () -> Unit,
     filterActive: Boolean,
-    gamingOnly: Boolean,
-    onGamingOnlyChange: (Boolean) -> Unit,
+    quickFilter: ReferenceQuickFilter,
+    onQuickFilterChange: (ReferenceQuickFilter) -> Unit,
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
@@ -110,39 +112,38 @@ internal fun ReferenceFilterRow(
                         )
                     }
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
             } else {
                 Spacer(Modifier.weight(1f))
             }
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = quickText("گیمینگ", "Gaming"),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onGamingOnlyChange(true) }
-                            .padding(horizontal = 5.dp, vertical = 5.dp),
-                        color = if (gamingOnly) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                        fontFamily = Peyda,
-                        fontSize = 13.sp,
-                        fontWeight = if (gamingOnly) FontWeight.SemiBold else FontWeight.Medium,
-                    )
-                    Spacer(Modifier.width(9.dp))
-                    Text(
-                        text = quickText("همه", "All"),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { onGamingOnlyChange(false) }
-                            .padding(horizontal = 5.dp, vertical = 5.dp),
-                        color = if (!gamingOnly) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                        fontFamily = Peyda,
-                        fontSize = 13.sp,
-                        fontWeight = if (!gamingOnly) FontWeight.SemiBold else FontWeight.Medium,
-                    )
+                    ReferenceQuickFilter.entries.forEachIndexed { index, mode ->
+                        val selected = quickFilter == mode
+                        Text(
+                            text = mode.referenceLabel(),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onQuickFilterChange(mode) }
+                                .padding(horizontal = 4.dp, vertical = 5.dp),
+                            color = if (selected) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                            fontFamily = Peyda,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                        if (index < ReferenceQuickFilter.entries.lastIndex) Spacer(Modifier.width(4.dp))
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ReferenceQuickFilter.referenceLabel(): String = when (this) {
+    ReferenceQuickFilter.All -> quickText("همه", "All")
+    ReferenceQuickFilter.Unlimited -> quickText("نامحدود ∞", "Unlimited ∞")
+    ReferenceQuickFilter.Gaming -> quickText("گیمینگ 🎮", "Gaming 🎮")
 }
 
 @Composable
