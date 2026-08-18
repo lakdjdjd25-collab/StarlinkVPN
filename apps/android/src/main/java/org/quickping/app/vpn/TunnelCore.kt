@@ -19,11 +19,15 @@ internal interface TunnelCore {
 internal class SingBoxTunnelCore(
     private val platform: AndroidSingBoxPlatform,
     private val onNativeStop: () -> Unit,
+    private val onTrafficTotals: (uploadedBytes: Long, downloadedBytes: Long) -> Unit = { _, _ -> },
 ) : TunnelCore, CommandServerHandler {
     private val lifecycle = Mutex()
 
     @Volatile
     private var commandServer: CommandServer? = null
+
+    @Volatile
+    private var trafficMonitor: SingBoxTrafficMonitor? = null
 
     override suspend fun start(configJson: String, launchOptions: TunnelLaunchOptions) = lifecycle.withLock {
         require(configJson.isNotBlank()) { "Missing runtime configuration" }
@@ -31,6 +35,7 @@ internal class SingBoxTunnelCore(
         Libbox.checkConfig(configJson)
 
         val candidate = CommandServer(this, platform)
+        val monitor = SingBoxTrafficMonitor(onTrafficTotals)
         try {
             candidate.start()
             candidate.startOrReloadService(
@@ -45,8 +50,11 @@ internal class SingBoxTunnelCore(
                     }
                 },
             )
+            monitor.start()
+            trafficMonitor = monitor
             commandServer = candidate
         } catch (error: Throwable) {
+            monitor.stop()
             runCatching { candidate.closeService() }
             runCatching { candidate.close() }
             platform.close()
@@ -55,6 +63,8 @@ internal class SingBoxTunnelCore(
     }
 
     override suspend fun stop() = lifecycle.withLock {
+        trafficMonitor?.stop()
+        trafficMonitor = null
         val current = commandServer ?: run {
             platform.close()
             return@withLock
