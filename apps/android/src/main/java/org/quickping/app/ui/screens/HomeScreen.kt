@@ -17,6 +17,8 @@ fun HomeScreen(
     val stableServers = rememberStableServerPings(
         servers = state.servers,
         enabled = state.settings.autoPing,
+        selectedServerId = state.selectedServerId,
+        connectionStatus = state.connectionStatus,
     )
     ReferenceHomeScreen(
         state = state.copy(servers = stableServers),
