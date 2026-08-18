@@ -18,6 +18,7 @@ import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,9 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
+import org.quickping.app.model.ConnectionStatus
 import org.quickping.app.model.Server
 import org.quickping.app.state.QuickPingUiState
 
@@ -50,6 +53,15 @@ internal fun ReferenceServerList(
     var quickFilterName by rememberSaveable { mutableStateOf(ReferenceQuickFilter.All.name) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     var filterModeName by rememberSaveable { mutableStateOf(ReferenceFilterMode.Recommended.name) }
+    var rocketSearching by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(rocketSearching) {
+        if (rocketSearching) {
+            delay(850)
+            rocketSearching = false
+        }
+    }
+
     val quickFilter = runCatching { ReferenceQuickFilter.valueOf(quickFilterName) }
         .getOrDefault(ReferenceQuickFilter.All)
     val filterMode = runCatching { ReferenceFilterMode.valueOf(filterModeName) }
@@ -120,14 +132,23 @@ internal fun ReferenceServerList(
             filterMode == ReferenceFilterMode.Recommended
         if (state.servers.isNotEmpty() && cleanDefaultView && state.servers.any { it.selectable }) {
             item(key = "best-location") {
-                ReferenceBestLocationRow(selected = bestLocationSelected, onClick = onSelectBestLocation)
+                ReferenceBestLocationRow(
+                    selected = bestLocationSelected,
+                    searching = rocketSearching,
+                    onClick = {
+                        rocketSearching = true
+                        onSelectBestLocation()
+                    },
+                )
             }
         }
         items(visibleServers, key = { it.id }) { server ->
+            val selected = !bestLocationSelected && server.id == state.selectedServerId
             ReferenceServerRow(
                 server = server,
                 title = referenceServerTitle(server, state.servers),
-                selected = !bestLocationSelected && server.id == state.selectedServerId,
+                selected = selected,
+                connected = selected && state.connectionStatus == ConnectionStatus.Connected,
                 onClick = { onSelectServer(server.id) },
             )
         }
