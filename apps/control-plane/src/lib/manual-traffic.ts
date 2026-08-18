@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { remainingServiceBytes, serviceAccessFailure } from "@/lib/server-access";
 import { canAccessTier, VIP_ACCESS_REQUIRED } from "@/lib/vip-access";
@@ -17,12 +18,39 @@ export type TrafficCumulative = {
   downloadedBytes: bigint;
 };
 
+export function calculateTrafficCharge(input: {
+  previousAccountedTotal: bigint;
+  uploadedBytes: bigint;
+  downloadedBytes: bigint;
+  remainingBytes: bigint;
+  countTraffic: boolean;
+}) {
+  const requestedTotal = input.uploadedBytes + input.downloadedBytes;
+  if (input.uploadedBytes < 0n || input.downloadedBytes < 0n || requestedTotal < input.previousAccountedTotal) {
+    throw new ManualTrafficError(409, "traffic_counter_regression", "Traffic counters cannot move backwards");
+  }
+  const delta = requestedTotal - input.previousAccountedTotal;
+  const acceptedBytes = input.countTraffic
+    ? (delta < input.remainingBytes ? delta : input.remainingBytes)
+    : 0n;
+  const remainingBytes = input.countTraffic
+    ? input.remainingBytes - acceptedBytes
+    : input.remainingBytes;
+  return {
+    requestedTotal,
+    delta,
+    acceptedBytes,
+    remainingBytes: remainingBytes > 0n ? remainingBytes : 0n,
+    exhausted: input.countTraffic && remainingBytes <= 0n,
+  };
+}
+
 function retryableTransaction(error: unknown): boolean {
   return typeof error === "object" && error !== null &&
     "code" in error && (error as { code?: unknown }).code === "P2034";
 }
 
-async function serializable<T>(work: Parameters<typeof db.$transaction<T>>[0]): Promise<T> {
+async function serializable<T>(work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -158,22 +186,20 @@ export async function reportManualTraffic(input: {
       throw new ManualTrafficError(403, VIP_ACCESS_REQUIRED, "VIP access is required for this server");
     }
 
-    const remainingBefore = remainingServiceBytes(session.service);
-    const delta = requestedTotal - session.lastAccountedBytes;
-    const acceptedBytes = session.manualServer.countTraffic
-      ? (delta < remainingBefore ? delta : remainingBefore)
-      : 0n;
-    const remainingAfter = session.manualServer.countTraffic
-      ? remainingBefore - acceptedBytes
-      : remainingBefore;
-    const exhausted = session.manualServer.countTraffic && remainingAfter <= 0n;
+    const charge = calculateTrafficCharge({
+      previousAccountedTotal: session.lastAccountedBytes,
+      uploadedBytes: input.cumulative.uploadedBytes,
+      downloadedBytes: input.cumulative.downloadedBytes,
+      remainingBytes: remainingServiceBytes(session.service),
+      countTraffic: session.manualServer.countTraffic,
+    });
     const now = new Date();
-    const status = exhausted ? "EXHAUSTED" as const : input.finalize ? "ENDED" as const : "ACTIVE" as const;
+    const status = charge.exhausted ? "EXHAUSTED" as const : input.finalize ? "ENDED" as const : "ACTIVE" as const;
 
-    if (acceptedBytes > 0n) {
+    if (charge.acceptedBytes > 0n) {
       await tx.service.update({
         where: { id: session.serviceId },
-        data: { manualUsedBytes: { increment: acceptedBytes } },
+        data: { manualUsedBytes: { increment: charge.acceptedBytes } },
       });
     }
     await tx.trafficSession.update({
@@ -181,8 +207,8 @@ export async function reportManualTraffic(input: {
       data: {
         uploadedBytes: input.cumulative.uploadedBytes,
         downloadedBytes: input.cumulative.downloadedBytes,
-        totalBytes: requestedTotal,
-        lastAccountedBytes: requestedTotal,
+        totalBytes: charge.requestedTotal,
+        lastAccountedBytes: charge.requestedTotal,
         lastReportAt: now,
         status,
         ...(status !== "ACTIVE" ? { endedAt: now } : {}),
@@ -192,11 +218,11 @@ export async function reportManualTraffic(input: {
 
     return {
       sessionId: session.id,
-      acceptedBytes,
-      totalBytes: requestedTotal,
-      remainingBytes: remainingAfter,
+      acceptedBytes: charge.acceptedBytes,
+      totalBytes: charge.requestedTotal,
+      remainingBytes: charge.remainingBytes,
       status,
-      disconnect: exhausted,
+      disconnect: charge.exhausted,
     };
   });
 }
