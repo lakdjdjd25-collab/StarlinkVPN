@@ -9,6 +9,9 @@ type SchemaState = {
   manualServerTable: boolean;
   trafficSessionTable: boolean;
   manualServerMigration: boolean;
+  manualServerSubcategory: boolean;
+  manualServerVolumeBytes: boolean;
+  manualServerPromptMigration: boolean;
 };
 
 export async function GET() {
@@ -38,19 +41,33 @@ export async function GET() {
           SELECT 1 FROM "_prisma_migrations"
           WHERE migration_name = '20260818102000_manual_vless_servers'
             AND finished_at IS NOT NULL AND rolled_back_at IS NULL
-        ) AS "manualServerMigration"
+        ) AS "manualServerMigration",
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'ManualServer' AND column_name = 'subcategory'
+        ) AS "manualServerSubcategory",
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'ManualServer' AND column_name = 'volumeBytes'
+        ) AS "manualServerVolumeBytes",
+        EXISTS (
+          SELECT 1 FROM "_prisma_migrations"
+          WHERE migration_name = '20260818113000_manual_server_prompt_alignment'
+            AND finished_at IS NOT NULL AND rolled_back_at IS NULL
+        ) AS "manualServerPromptMigration"
     `;
 
     if (!schema?.serviceVipAccess || !schema.nodeAccessTier || !schema.vipMigration ||
         !schema.serviceManualUsedBytes || !schema.manualServerTable || !schema.trafficSessionTable ||
-        !schema.manualServerMigration) {
+        !schema.manualServerMigration || !schema.manualServerSubcategory || !schema.manualServerVolumeBytes ||
+        !schema.manualServerPromptMigration) {
       return fail(503, "schema_not_ready", "Control-plane database schema is not ready");
     }
 
     return ok({
       status: "ok",
       database: "ready",
-      schema: "manual-vless-v1",
+      schema: "manual-vless-v2",
       service: "quickping-control-plane",
       version: "2.6.0",
     });
