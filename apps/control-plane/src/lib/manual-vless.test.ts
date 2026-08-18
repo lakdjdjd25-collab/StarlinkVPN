@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { overrideVlessEndpoint, parseVlessUri } from "./manual-vless";
 
+const REALITY_PUBLIC_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 describe("manual VLESS parser", () => {
   it("parses a supported VLESS TLS websocket link into sing-box runtime config", () => {
     const parsed = parseVlessUri(
@@ -17,6 +19,20 @@ describe("manual VLESS parser", () => {
     expect(parsed.runtimeConfig).toBeTypeOf("object");
   });
 
+  it("preserves websocket early-data, ALPN, insecure and packet encoding options", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=ws&security=tls&sni=edge.example.com&path=%2Fws&ed=2048&eh=Sec-WebSocket-Protocol&alpn=h2%2Chttp%2F1.1&allowInsecure=1&packetEncoding=xudp",
+    );
+    const outbound = (parsed.runtimeConfig.outbounds as Array<Record<string, unknown>>)[0];
+    const transport = outbound.transport as Record<string, unknown>;
+    const tls = outbound.tls as Record<string, unknown>;
+    expect(transport.max_early_data).toBe(2048);
+    expect(transport.early_data_header_name).toBe("Sec-WebSocket-Protocol");
+    expect(tls.insecure).toBe(true);
+    expect(tls.alpn).toEqual(["h2", "http/1.1"]);
+    expect(outbound.packet_encoding).toBe("xudp");
+  });
+
   it("supports an IP endpoint and keeps unknown query parameters", () => {
     const parsed = parseVlessUri(
       "vless://11111111-1111-4111-8111-111111111111@203.0.113.9:8443?security=none&type=tcp&vendorFlag=alpha#IP%20Node",
@@ -28,14 +44,17 @@ describe("manual VLESS parser", () => {
     expect(parsed.fragment).toBe("IP Node");
   });
 
-  it("parses Reality parameters without logging or exposing the source URI", () => {
+  it("parses Reality parameters and defaults uTLS fingerprint when omitted", () => {
     const parsed = parseVlessUri(
-      "vless://11111111-1111-4111-8111-111111111111@reality.example.com:443?type=tcp&security=reality&sni=www.example.com&fp=chrome&pbk=public-key-value&sid=abcd",
+      `vless://11111111-1111-4111-8111-111111111111@reality.example.com:443?type=tcp&security=reality&sni=www.example.com&pbk=${REALITY_PUBLIC_KEY}&sid=abcd`,
     );
     expect(parsed.security).toBe("reality");
     expect(parsed.sni).toBe("www.example.com");
     expect(parsed.fingerprint).toBe("chrome");
-    expect(JSON.stringify(parsed.runtimeConfig)).toContain("public-key-value");
+    const outbound = (parsed.runtimeConfig.outbounds as Array<Record<string, unknown>>)[0];
+    const tls = outbound.tls as Record<string, unknown>;
+    expect(tls.utls).toEqual({ enabled: true, fingerprint: "chrome" });
+    expect(tls.reality).toEqual({ enabled: true, public_key: REALITY_PUBLIC_KEY, short_id: "abcd" });
   });
 
   it("parses gRPC service name", () => {
@@ -74,6 +93,24 @@ describe("manual VLESS parser", () => {
     expect(() => parseVlessUri(
       "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&security=reality&sni=edge.example.com",
     )).toThrow("VLESS_REALITY_KEY_REQUIRED");
+  });
+
+  it("rejects malformed Reality public keys before they reach Android", () => {
+    expect(() => parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&security=reality&sni=edge.example.com&pbk=bad-key&sid=abcd",
+    )).toThrow("VLESS_REALITY_KEY_INVALID");
+  });
+
+  it("rejects malformed Reality short IDs before they reach Android", () => {
+    expect(() => parseVlessUri(
+      `vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&security=reality&sni=edge.example.com&pbk=${REALITY_PUBLIC_KEY}&sid=abc`,
+    )).toThrow("VLESS_REALITY_SHORT_ID_INVALID");
+  });
+
+  it("rejects unsupported packet encodings", () => {
+    expect(() => parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=tcp&security=none&packetEncoding=unknown",
+    )).toThrow("VLESS_PACKET_ENCODING_UNSUPPORTED");
   });
 
   it("rejects unsupported transport without accepting an unusable config", () => {

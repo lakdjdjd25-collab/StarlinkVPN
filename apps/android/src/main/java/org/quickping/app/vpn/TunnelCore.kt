@@ -9,6 +9,7 @@ import io.nekohasekai.libbox.OverrideOptions
 import io.nekohasekai.libbox.SystemProxyStatus
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.quickping.app.data.traffic.ManualTrafficRuntimeRegistry
 
 internal interface TunnelCore {
     suspend fun start(configJson: String, launchOptions: TunnelLaunchOptions = TunnelLaunchOptions())
@@ -20,6 +21,9 @@ internal class SingBoxTunnelCore(
     private val platform: AndroidSingBoxPlatform,
     private val onNativeStop: () -> Unit,
     private val onTrafficTotals: (uploadedBytes: Long, downloadedBytes: Long) -> Unit = { _, _ -> },
+    private val trafficMonitoringRequired: () -> Boolean = {
+        ManualTrafficRuntimeRegistry.trafficMonitoringRequired()
+    },
 ) : TunnelCore, CommandServerHandler {
     private val lifecycle = Mutex()
 
@@ -50,8 +54,18 @@ internal class SingBoxTunnelCore(
                     }
                 },
             )
-            monitor.start()
-            trafficMonitor = monitor
+
+            var monitoringStarted = false
+            try {
+                monitor.startWithRetry()
+                monitoringStarted = true
+            } catch (error: Throwable) {
+                if (trafficMonitoringRequired()) {
+                    throw IllegalStateException("manual traffic monitor unavailable", error)
+                }
+                Log.w(TAG, "Traffic monitor unavailable for non-manual tunnel; continuing without accounting", error)
+            }
+            if (monitoringStarted) trafficMonitor = monitor
             commandServer = candidate
         } catch (error: Throwable) {
             monitor.stop()
