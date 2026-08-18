@@ -123,13 +123,14 @@ internal fun ReferenceServerRow(
                 Spacer(Modifier.width(5.dp))
                 ReferenceCapabilityBadge("🎮", width = 30)
             }
-            if (server.isVip) {
+            // Reuse the existing VIP visual only when the VIP server is unlocked for this user.
+            if (server.isVip && server.selectable) {
                 Spacer(Modifier.width(5.dp))
                 ReferenceVipBadge()
             }
             Spacer(Modifier.width(7.dp))
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                ReferencePingChip(server.pingMs)
+                ReferencePingChip(server)
             }
         }
     }
