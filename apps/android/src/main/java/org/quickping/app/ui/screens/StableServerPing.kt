@@ -160,7 +160,11 @@ internal fun rememberStableServerPings(
                 targets.map { server ->
                     async(Dispatchers.IO) {
                         semaphore.withPermit {
-                            val snapshot = measureServerEndpoint(context, server.host, server.port)
+                            val snapshot = runCatching {
+                                measureServerEndpoint(context, server.host, server.port)
+                            }.getOrElse {
+                                StablePingSnapshot(ServerPingState.UNKNOWN)
+                            }
                             stablePingEndpointKey(server) to snapshot.copy(
                                 measuredAtElapsedMs = SystemClock.elapsedRealtime(),
                             )
@@ -217,8 +221,6 @@ private suspend fun measureServerEndpoint(
     val activeCaps = connectivity.getNetworkCapabilities(active)
         ?: return@withContext StablePingSnapshot(ServerPingState.UNKNOWN)
 
-    // Never fall back through another VPN: that is what produced unrealistically low values such
-    // as +8 ms for unrelated NimHUB endpoints.
     if (activeCaps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
         return@withContext StablePingSnapshot(ServerPingState.UNKNOWN)
     }
