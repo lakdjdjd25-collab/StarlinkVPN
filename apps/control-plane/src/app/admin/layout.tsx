@@ -1,40 +1,8 @@
-import Link from "next/link";
-import Image from "next/image";
-import { LogoutButton } from "@/components/LogoutButton";
+import { AdminShell } from "@/components/admin/AdminShell";
 import { requireAdminPage } from "@/lib/admin-session";
-
-const navigation = [
-  ["داشبورد", "/admin"],
-  ["کاربران و مجوزها", "/admin/services"],
-  ["سرورها", "/admin/nodes"],
-  ["سرورهای دستی", "/admin/manual-servers"],
-  ["اعلان‌ها", "/admin/notifications"],
-  ["اطلاعات مدیریت", "/admin/management"],
-  ["اتصال PasarGuard", "/admin/integrations/pasarguard"],
-  ["تنظیمات", "/admin/settings"],
-] as const;
+import "./admin-v2.css";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireAdminPage();
-  return (
-    <div className="admin-shell">
-      <aside className="sidebar">
-        <Link className="brand-mark" href="/admin">
-          <Image className="brand-logo" src="/nimhub-logo.png" width={42} height={42} alt="" />
-          <span>NIMHUB</span>
-        </Link>
-        <nav className="nav-list" aria-label="ناوبری مدیریت">
-          {navigation.map(([label, href]) => (
-            <Link className="nav-link" href={href} key={href}>
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <LogoutButton />
-        </div>
-      </aside>
-      <main className="main-content">{children}</main>
-    </div>
-  );
+  return <AdminShell>{children}</AdminShell>;
 }
