@@ -40,6 +40,12 @@ type ManualServer = {
 
 type ApiEnvelope<T> = { data?: T; error?: { message?: string } };
 
+const SUBCATEGORY_OPTIONS = [
+  { value: "GENERAL", label: "عمومی" },
+  { value: "GAMING", label: "Gaming 🎮" },
+  { value: "STREAMING", label: "Streaming" },
+] as const;
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { cache: "no-store", ...init });
   const body = await response.json().catch(() => null) as ApiEnvelope<T> | null;
@@ -73,6 +79,22 @@ function optionalNumber(value: FormDataEntryValue | null): number | null {
   if (!raw) return null;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function subcategoryLabel(value: string | null): string {
+  if (!value) return "عمومی";
+  return SUBCATEGORY_OPTIONS.find((item) => item.value === value.toUpperCase())?.label ?? value;
+}
+
+function SubcategorySelect({ defaultValue }: { defaultValue?: string | null }) {
+  const normalized = defaultValue?.trim().toUpperCase() || "GENERAL";
+  const known = SUBCATEGORY_OPTIONS.some((item) => item.value === normalized);
+  return (
+    <select className="select" name="subcategory" defaultValue={normalized}>
+      {!known ? <option value={normalized}>{defaultValue}</option> : null}
+      {SUBCATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+    </select>
+  );
 }
 
 export function ManualServerManager() {
@@ -153,7 +175,7 @@ export function ManualServerManager() {
           host: selectedAddress,
           port: selectedPort,
           category: selectedCategory,
-          subcategory: String(data.get("subcategory") ?? "").trim(),
+          subcategory: String(data.get("subcategory") ?? "GENERAL"),
           volumeGb: optionalNumber(data.get("volumeGb")),
           accessTier: data.get("vip") === "on" ? "VIP" : "STANDARD",
           enabled: data.get("enabled") === "on",
@@ -194,7 +216,7 @@ export function ManualServerManager() {
           host: String(data.get("host") ?? "").trim(),
           port: Number(data.get("port")),
           category: String(data.get("category")),
-          subcategory: String(data.get("subcategory") ?? "").trim(),
+          subcategory: String(data.get("subcategory") ?? "GENERAL"),
           volumeGb: optionalNumber(data.get("volumeGb")),
           accessTier: data.get("vip") === "on" ? "VIP" : "STANDARD",
           enabled: data.get("enabled") === "on",
@@ -236,7 +258,7 @@ export function ManualServerManager() {
       <section className="card section">
         <div className="section-title">
           <h2>افزودن سرور دستی</h2>
-          <p>VLESS Config به‌صورت رمزگذاری‌شده نگهداری می‌شود؛ اطلاعات اتصال و دسته‌بندی را همین‌جا مدیریت کنید.</p>
+          <p>دسته‌بندی حجم و نوع کاربرد مستقل هستند: Unlimited/Limited برای حجم، و زیردسته برای Gaming/عمومی/Streaming.</p>
         </div>
         <form onSubmit={create}>
           <div className="field">
@@ -248,8 +270,8 @@ export function ManualServerManager() {
             <div className="field"><label>آدرس</label><input className="input" name="host" dir="ltr" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="server.example.com" required /></div>
             <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} value={port} onChange={(event) => setPort(event.target.value)} required /></div>
             <div className="field"><label>کشور</label><input className="input" name="countryOverride" value={countryOverride} onChange={(event) => setCountryOverride(event.target.value)} placeholder="Germany" required /></div>
-            <div className="field"><label>دسته‌بندی</label><select className="select" name="category" value={category} onChange={(event) => setCategory(event.target.value as "UNLIMITED" | "LIMITED")}><option value="UNLIMITED">Unlimited ∞</option><option value="LIMITED">Limited</option></select></div>
-            <div className="field"><label>زیردسته‌بندی</label><input className="input" name="subcategory" placeholder="مثلاً Gaming" required /></div>
+            <div className="field"><label>دسته‌بندی حجم</label><select className="select" name="category" value={category} onChange={(event) => setCategory(event.target.value as "UNLIMITED" | "LIMITED")}><option value="UNLIMITED">Unlimited ∞</option><option value="LIMITED">Limited</option></select></div>
+            <div className="field"><label>نوع کاربرد</label><SubcategorySelect /></div>
             <div className="field"><label>حجم سرور (GB)</label><input className="input" name="volumeGb" type="number" min="0.01" step="0.01" placeholder={category === "LIMITED" ? "مثلاً 50" : "برای Unlimited خالی"} required={category === "LIMITED"} disabled={category === "UNLIMITED"} /></div>
           </div>
           <details style={{ marginTop: 12 }}>
@@ -279,7 +301,7 @@ export function ManualServerManager() {
       </section>
 
       <section className="card section">
-        <div className="section-title"><h2>سرورهای دستی</h2><p>سرورها برای همه سرویس‌ها منتشر می‌شوند؛ VIP و محاسبه ترافیک از همین‌جا کنترل می‌شود.</p></div>
+        <div className="section-title"><h2>سرورهای دستی</h2><p>هر سرور هم‌زمان یک دسته حجم و یک نوع کاربرد دارد؛ مثلاً Unlimited + Gaming.</p></div>
         {servers.length === 0 ? <div className="empty">هنوز سرور دستی ثبت نشده است.</div> : null}
         <div style={{ display: "grid", gap: 12 }}>
           {servers.map((server) => <form key={server.id} onSubmit={(event) => void update(event, server)} className="card" style={{ padding: 14 }}>
@@ -287,7 +309,7 @@ export function ManualServerManager() {
               <div><strong>{server.flag} {server.displayName}</strong><div dir="ltr" style={{ color: "var(--muted)", fontSize: 12 }}>{server.host}:{server.port}</div></div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <span className="badge blue">{server.category === "LIMITED" ? "Limited" : "Unlimited ∞"}</span>
-                {server.subcategory ? <span className="badge">{server.subcategory}</span> : null}
+                <span className="badge">{subcategoryLabel(server.subcategory)}</span>
                 {server.volumeBytes ? <span className="badge">{formatBytes(server.volumeBytes)}</span> : null}
                 <span className="badge">{server.accessTier === "VIP" ? "VIP" : "Standard"}</span>
                 <span className={server.enabled ? "badge green" : "badge red"}>{server.enabled ? "Active" : "Disabled"}</span>
@@ -299,8 +321,8 @@ export function ManualServerManager() {
               <div className="field"><label>آدرس</label><input className="input" name="host" defaultValue={server.host} dir="ltr" required /></div>
               <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} defaultValue={server.port} required /></div>
               <div className="field"><label>کشور</label><input className="input" name="countryOverride" defaultValue={server.countryOverride ?? server.displayCountry} required /></div>
-              <div className="field"><label>دسته‌بندی</label><select className="select" name="category" defaultValue={server.category}><option value="UNLIMITED">Unlimited ∞</option><option value="LIMITED">Limited</option></select></div>
-              <div className="field"><label>زیردسته‌بندی</label><input className="input" name="subcategory" defaultValue={server.subcategory ?? ""} required /></div>
+              <div className="field"><label>دسته‌بندی حجم</label><select className="select" name="category" defaultValue={server.category}><option value="UNLIMITED">Unlimited ∞</option><option value="LIMITED">Limited</option></select></div>
+              <div className="field"><label>نوع کاربرد</label><SubcategorySelect defaultValue={server.subcategory} /></div>
               <div className="field"><label>حجم سرور (GB)</label><input className="input" name="volumeGb" type="number" min="0.01" step="0.01" defaultValue={bytesToGbInput(server.volumeBytes)} placeholder={server.category === "LIMITED" ? "لازم برای Limited" : "برای Unlimited خالی"} /></div>
               <div className="field"><label>کد کشور</label><input className="input" name="countryCode" defaultValue={server.countryCode ?? ""} maxLength={2} dir="ltr" /></div>
               <div className="field"><label>ترتیب</label><input className="input" name="sortOrder" type="number" defaultValue={server.sortOrder} /></div>

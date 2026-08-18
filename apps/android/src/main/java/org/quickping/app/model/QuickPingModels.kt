@@ -27,7 +27,8 @@ data class Server(
 ) {
     val isVip: Boolean get() = accessTier.equals("VIP", ignoreCase = true)
     val isManual: Boolean get() = serverType.equals("MANUAL", ignoreCase = true)
-    val isGaming: Boolean get() = category.equals("GAMING", ignoreCase = true)
+    val isGaming: Boolean get() =
+        subcategory.equals("GAMING", ignoreCase = true) || category.equals("GAMING", ignoreCase = true)
     val isUnlimitedCategory: Boolean get() = category.equals("UNLIMITED", ignoreCase = true)
     val isLimitedCategory: Boolean get() = category.equals("LIMITED", ignoreCase = true)
     val selectable: Boolean get() = canConnect && !locked
