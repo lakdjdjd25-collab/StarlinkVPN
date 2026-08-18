@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -21,12 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.quickping.app.R
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
@@ -57,6 +62,7 @@ internal fun ReferenceRecentServers(
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
                 state.servers.take(3).forEach { server ->
+                    val lockedVip = server.isVip && !server.selectable
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -74,18 +80,49 @@ internal fun ReferenceRecentServers(
                             modifier = Modifier.size(width = 44.dp, height = 27.dp).clip(RoundedCornerShape(6.dp)),
                         )
                         Spacer(Modifier.height(5.dp))
-                        Text(
-                            text = referenceServerTitle(server, state.servers),
-                            color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                            fontFamily = Peyda,
-                            fontSize = 14.sp,
-                            lineHeight = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = referenceServerTitle(server, state.servers),
+                                color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                                fontFamily = Peyda,
+                                fontSize = 14.sp,
+                                lineHeight = 18.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (server.isVip && server.selectable) {
+                                Spacer(Modifier.width(4.dp))
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_vip_crown),
+                                    contentDescription = quickText("سرور VIP", "VIP server"),
+                                    tint = Color.Unspecified,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(5.dp))
-                        ReferenceMiniPingChip(server.pingMs)
+                        if (lockedVip) {
+                            Box(
+                                modifier = Modifier
+                                    .width(38.dp)
+                                    .height(21.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF7157D9))
+                                    .border(1.dp, Color(0xFF8B73E6), RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "VIP",
+                                    color = Color.White,
+                                    fontFamily = Peyda,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        } else {
+                            ReferenceMiniPingChip(server.pingMs)
+                        }
                     }
                 }
             }
