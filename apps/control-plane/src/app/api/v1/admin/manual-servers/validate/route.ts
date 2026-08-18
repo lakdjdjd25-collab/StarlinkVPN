@@ -38,14 +38,12 @@ export async function POST(request: NextRequest) {
   try {
     const parsed = parseVlessUri(input.data.config);
     const geo = await detectGeoCountry(parsed.host);
-    const country = input.data.countryOverride || geo?.country || "Unknown";
+    const country = input.data.countryOverride || geo?.country || "نامشخص";
     const countryCode = (input.data.countryCodeOverride || geo?.countryCode || "global").toUpperCase();
     const fragment = parsed.fragment?.trim() || null;
     const suggestedName = fragment && fragment.length >= 2
       ? fragment
-      : country !== "Unknown"
-        ? country
-        : parsed.host;
+      : geo?.country || parsed.host;
     return ok({
       protocol: parsed.protocol,
       host: parsed.host,
