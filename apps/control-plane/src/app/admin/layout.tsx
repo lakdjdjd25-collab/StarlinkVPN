@@ -5,6 +5,7 @@ import "./dashboard-v2.css";
 import "./users-v2.css";
 import "./servers-v2.css";
 import "./manual-servers-v2.css";
+import "./notifications-v2.css";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireAdminPage();
