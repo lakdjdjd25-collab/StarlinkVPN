@@ -33,8 +33,17 @@ function activityTitle(action: string): string {
     "service.vipAccess": "دسترسی VIP تغییر کرد",
     "service.create": "سرویس جدید ساخته شد",
     "service.update": "سرویس به‌روزرسانی شد",
+    "service.addTraffic": "حجم اشتراک افزایش یافت",
+    "service.extend": "اعتبار اشتراک تمدید شد",
+    "service.suspend": "اشتراک متوقف شد",
+    "service.reactivate": "اشتراک فعال شد",
+    "service.deviceLimit": "محدودیت دستگاه تغییر کرد",
     "user.create": "حساب کاربری ساخته شد",
     "user.updateAccess": "دسترسی حساب تغییر کرد",
+    "user.suspend": "حساب کاربر معلق شد",
+    "user.reactivate": "حساب کاربر فعال شد",
+    "device.revoke": "یک دستگاه لغو شد",
+    "device.revokeAll": "همه دستگاه‌های کاربر لغو شدند",
     "manualServer.create": "سرور دستی اضافه شد",
     "manualServer.update": "سرور دستی ویرایش شد",
     "manualServer.delete": "سرور دستی حذف شد",
@@ -94,8 +103,8 @@ export default async function DashboardPage() {
     activity,
     usageSampleCount,
   ] = await Promise.all([
-    db.user.count({ where: { status: "ACTIVE" } }),
-    db.user.count({ where: { status: "SUSPENDED" } }),
+    db.user.count({ where: { role: "CUSTOMER", status: "ACTIVE" } }),
+    db.user.count({ where: { role: "CUSTOMER", status: "SUSPENDED" } }),
     db.service.findMany({
       where: { status: { in: ["ACTIVE", "SUSPENDED"] } },
       select: {
@@ -112,8 +121,8 @@ export default async function DashboardPage() {
     }),
     db.vpnNode.findMany({ select: { id: true, status: true, accessTier: true } }),
     db.manualServer.count({ where: { enabled: true, deletedAt: null } }),
-    db.user.count({ where: { createdAt: { gte: today } } }),
-    db.user.count({ where: { createdAt: { gte: weekAgo } } }),
+    db.user.count({ where: { role: "CUSTOMER", createdAt: { gte: today } } }),
+    db.user.count({ where: { role: "CUSTOMER", createdAt: { gte: weekAgo } } }),
     db.pasarGuardProvider.findFirst({
       where: { active: true },
       orderBy: { updatedAt: "desc" },
@@ -232,7 +241,7 @@ export default async function DashboardPage() {
             <Link href="/admin/services"><span><AdminIcon name="users" /></span><div><strong>کاربر جدید</strong><small>صدور مجوز و حساب NimHUB</small></div><AdminIcon name="chevron-left" size={15} /></Link>
             <Link href="/admin/manual-servers"><span><AdminIcon name="server" /></span><div><strong>افزودن سرور</strong><small>Managed / Manual server workflow</small></div><AdminIcon name="chevron-left" size={15} /></Link>
             <Link href="/admin/notifications"><span><AdminIcon name="bell" /></span><div><strong>ارسال اعلان</strong><small>All یا Selected users</small></div><AdminIcon name="chevron-left" size={15} /></Link>
-            <Link href="/admin/settings"><span><AdminIcon name="settings" /></span><div><strong>انتشار نسخه</strong><small>{latestRelease ? `فعلی: ${latestRelease.versionName}` : "نسخه فعالی ثبت نشده"}</small></div><AdminIcon name="chevron-left" size={15} /></Link>
+            <Link href="/admin/settings/releases"><span><AdminIcon name="settings" /></span><div><strong>انتشار نسخه</strong><small>{latestRelease ? `فعلی: ${latestRelease.versionName}` : "نسخه فعالی ثبت نشده"}</small></div><AdminIcon name="chevron-left" size={15} /></Link>
           </div>
           <div className="v2-dashboard-facts">
             <span><small>کاربر جدید / ۷ روز</small><strong>{formatNumber(newUsersWeek)}</strong></span>
