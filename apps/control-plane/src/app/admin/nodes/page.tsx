@@ -43,7 +43,7 @@ export default async function NodesPage() {
           port: node.port,
           activeSessions: node.activeSessions,
           capacity: node.capacity,
-          lastSeenAt: node.lastSeenAt.toISOString(),
+          lastSeenAt: node.lastSeenAt?.toISOString() ?? null,
         }))}
       />
 
