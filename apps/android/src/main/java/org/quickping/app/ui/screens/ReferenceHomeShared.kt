@@ -38,6 +38,7 @@ import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
 import org.quickping.app.model.Server
+import org.quickping.app.model.ServerPingState
 
 internal val ReferencePanelColor = Color(0xFF080A0D)
 internal val ReferenceCardColor = Color(0xFF090B0E)
@@ -69,18 +70,30 @@ internal fun ReferenceRtlText(
 }
 
 @Composable
-internal fun ReferencePingChip(pingMs: Int?) {
+internal fun ReferencePingChip(server: Server) {
+    val pingMs = server.pingMs
     val icon = when {
+        server.pingState == ServerPingState.TIMEOUT -> R.drawable.ic_ping_failed
+        server.pingState == ServerPingState.UNKNOWN -> R.drawable.ic_ping_failed
+        server.pingState == ServerPingState.CONNECTED && pingMs == null -> R.drawable.ic_ping_fast
         pingMs == null -> R.drawable.ic_ping_failed
         pingMs < 160 -> R.drawable.ic_ping_fast
         pingMs < 260 -> R.drawable.ic_ping
         else -> R.drawable.ic_ping_slow
     }
     val tint = when {
+        server.pingState == ServerPingState.CONNECTED -> QuickPingColors.Success
+        server.pingState in setOf(ServerPingState.TIMEOUT, ServerPingState.UNKNOWN) -> Color.Unspecified
         pingMs == null -> Color.Unspecified
         pingMs < 160 -> QuickPingColors.Success
         pingMs < 260 -> Color(0xFFE2C75C)
         else -> QuickPingColors.Danger
+    }
+    val label = pingMs?.let { "$it ms" } ?: when (server.pingState) {
+        ServerPingState.TIMEOUT -> "Timeout"
+        ServerPingState.UNKNOWN -> quickText("نامشخص", "Unknown")
+        ServerPingState.CONNECTED -> quickText("متصل", "Connected")
+        ServerPingState.CHECKING, ServerPingState.AVAILABLE -> quickText("بررسی", "Check")
     }
     Column(
         modifier = Modifier
@@ -97,7 +110,7 @@ internal fun ReferencePingChip(pingMs: Int?) {
             modifier = Modifier.size(17.dp),
         )
         Text(
-            text = pingMs?.let { "$it ms" } ?: quickText("بررسی", "Check"),
+            text = label,
             color = if (pingMs == null) Color(0xFF8B8F99) else QuickPingColors.TextSecondary,
             fontFamily = MonaSans,
             fontSize = 11.sp,
@@ -107,7 +120,14 @@ internal fun ReferencePingChip(pingMs: Int?) {
 }
 
 @Composable
-internal fun ReferenceMiniPingChip(pingMs: Int?) {
+internal fun ReferenceMiniPingChip(server: Server) {
+    val pingMs = server.pingMs
+    val label = pingMs?.let { "$it ms" } ?: when (server.pingState) {
+        ServerPingState.TIMEOUT -> "Timeout"
+        ServerPingState.UNKNOWN -> quickText("نامشخص", "Unknown")
+        ServerPingState.CONNECTED -> quickText("متصل", "Connected")
+        ServerPingState.CHECKING, ServerPingState.AVAILABLE -> quickText("تلاش مجدد", "Retry")
+    }
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         Row(
             modifier = Modifier
@@ -120,16 +140,24 @@ internal fun ReferenceMiniPingChip(pingMs: Int?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = pingMs?.let { "$it ms" } ?: quickText("تلاش مجدد", "Retry"),
+                text = label,
                 color = Color(0xFF7A7F8A),
                 fontFamily = MonaSans,
                 fontSize = 10.sp,
             )
             Spacer(Modifier.width(5.dp))
             Icon(
-                painter = painterResource(if (pingMs == null) R.drawable.ic_ping_failed else R.drawable.ic_ping),
+                painter = painterResource(
+                    if (server.pingState == ServerPingState.CONNECTED) R.drawable.ic_ping_fast
+                    else if (pingMs == null) R.drawable.ic_ping_failed
+                    else R.drawable.ic_ping,
+                ),
                 contentDescription = null,
-                tint = if (pingMs == null) Color.Unspecified else Color(0xFFE2C75C),
+                tint = when {
+                    server.pingState == ServerPingState.CONNECTED -> QuickPingColors.Success
+                    pingMs == null -> Color.Unspecified
+                    else -> Color(0xFFE2C75C)
+                },
                 modifier = Modifier.size(15.dp),
             )
         }
