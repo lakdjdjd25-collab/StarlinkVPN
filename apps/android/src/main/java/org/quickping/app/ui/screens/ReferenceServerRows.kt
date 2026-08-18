@@ -143,7 +143,7 @@ private fun ReferenceManualCategoryBadge(server: Server) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (server.isGaming) "🎮" else "∞",
+            text = if (server.isLimitedCategory) "L" else "∞",
             color = QuickPingColors.TextSecondary,
             fontFamily = Peyda,
             fontSize = 11.sp,
