@@ -40,6 +40,12 @@ export async function POST(request: NextRequest) {
     const geo = await detectGeoCountry(parsed.host);
     const country = input.data.countryOverride || geo?.country || "Unknown";
     const countryCode = (input.data.countryCodeOverride || geo?.countryCode || "global").toUpperCase();
+    const fragment = parsed.fragment?.trim() || null;
+    const suggestedName = fragment && fragment.length >= 2
+      ? fragment
+      : country !== "Unknown"
+        ? country
+        : parsed.host;
     return ok({
       protocol: parsed.protocol,
       host: parsed.host,
@@ -51,7 +57,8 @@ export async function POST(request: NextRequest) {
       path: parsed.path ?? null,
       serviceName: parsed.serviceName ?? null,
       flow: parsed.flow ?? null,
-      fragment: parsed.fragment ?? null,
+      fragment,
+      suggestedName,
       country,
       countryCode,
       flag: countryFlag(countryCode),
