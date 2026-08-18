@@ -171,7 +171,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
           )) : <div className="v2-command-empty">نتیجه‌ای پیدا نشد.</div>}
         </div>
         <div className="v2-command-footer">
-          <span>مرحله بعد: جست‌وجوی سراسری کاربر، مجوز و سرور به همین Command Center متصل می‌شود.</span>
+          <span>Ctrl K برای دسترسی سریع به بخش‌های اصلی کنترل سنتر</span>
         </div>
       </div>
     </div>
