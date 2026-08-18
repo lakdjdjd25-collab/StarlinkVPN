@@ -69,6 +69,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                     busy = false,
                 )
             }
+            if (bootstrap != null) settingsStore.saveSelectedServerId(_state.value.selectedServerId)
             if (bootstrap?.services?.firstOrNull()?.pendingReview == true) disconnectVpn()
         }
         viewModelScope.launch {
@@ -91,18 +92,27 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun connectVpn() {
         val current = _state.value
-        if (current.servers.isEmpty() || current.service.id.isBlank()) {
+        val selectedServer = current.servers.firstOrNull {
+            it.id == current.selectedServerId && it.selectable
+        } ?: current.servers.firstOrNull { it.selectable }
+        if (selectedServer == null || current.service.id.isBlank()) {
             _state.update {
                 it.copy(
                     connectionStatus = ConnectionStatus.Error,
                     connectionError = if (current.service.pendingReview)
                         "سرویس در حال بررسی انتقال به پنل جدید است"
-                    else "هیچ سرور فعالی برای اتصال وجود ندارد",
+                    else "هیچ سرور قابل اتصالی برای این سرویس وجود ندارد",
                     connectionErrorCode = if (current.service.pendingReview) "service_pending_review" else "no_server",
                 )
             }
             return
         }
+        if (selectedServer.id != current.selectedServerId) {
+            settingsStore.saveSelectedServerId(selectedServer.id)
+            _state.update { it.copy(selectedServerId = selectedServer.id) }
+        }
+        val serviceId = current.service.id
+        val serverId = selectedServer.id
         viewModelScope.launch {
             _state.update {
                 it.copy(
@@ -112,7 +122,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             runCatching {
-                val config = repository.runtimeConfig(current.service.id, current.selectedServerId)
+                val config = repository.runtimeConfig(serviceId, serverId)
                 runtimeStore.write(config)
                 val application = getApplication<Application>()
                 ContextCompat.startForegroundService(
@@ -141,9 +151,10 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun selectServer(id: String) {
-        if (id.isBlank() || id == _state.value.selectedServerId) return
-        settingsStore.saveSelectedServerId(id)
-        _state.update { it.copy(selectedServerId = id) }
+        val target = _state.value.servers.firstOrNull { it.id == id && it.selectable } ?: return
+        if (target.id == _state.value.selectedServerId) return
+        settingsStore.saveSelectedServerId(target.id)
+        _state.update { it.copy(selectedServerId = target.id) }
         restartVpnIfActive()
     }
 
@@ -222,6 +233,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                             loginError = null,
                         )
                     }
+                    settingsStore.saveSelectedServerId(_state.value.selectedServerId)
                 }
                 .onFailure { error ->
                     if (error is CancellationException) return@onFailure
@@ -260,6 +272,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                         loginError = null,
                     )
                 }
+                settingsStore.saveSelectedServerId(_state.value.selectedServerId)
             } catch (error: GetCredentialCancellationException) {
                 _state.update { it.copy(busy = false, loginError = null) }
             } catch (error: CancellationException) {
@@ -288,6 +301,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                             loginError = null,
                         )
                     }
+                    settingsStore.saveSelectedServerId(_state.value.selectedServerId)
                 }
                 .onFailure { error ->
                     if (error is CancellationException) return@onFailure
@@ -329,8 +343,21 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             val bootstrap = repository.restoreSession() ?: return@launch
             settingsStore.saveManagement(bootstrap.management)
             val guardian = mergeGuardian(bootstrap)
-            if (bootstrap.user.status == "SUSPENDED" || bootstrap.services.firstOrNull()?.pendingReview == true) disconnectVpn()
-            _state.update { state -> state.withBootstrap(bootstrap, guardian) }
+            val previous = _state.value
+            val next = previous.withBootstrap(bootstrap, guardian)
+            val previousSelectionStillConnectable = next.servers.any {
+                it.id == previous.selectedServerId && it.selectable
+            }
+            if (
+                bootstrap.user.status == "SUSPENDED" ||
+                bootstrap.services.firstOrNull()?.pendingReview == true ||
+                (previous.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting) &&
+                    !previousSelectionStillConnectable)
+            ) {
+                disconnectVpn()
+            }
+            settingsStore.saveSelectedServerId(next.selectedServerId)
+            _state.value = next
         }
     }
 
@@ -339,8 +366,20 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
             val bootstrap = repository.restoreSession() ?: return@launch
             settingsStore.saveManagement(bootstrap.management)
             val guardian = mergeGuardian(bootstrap)
-            if (bootstrap.user.status == "SUSPENDED") disconnectVpn()
-            _state.update { state -> state.withBootstrap(bootstrap, guardian) }
+            val previous = _state.value
+            val next = previous.withBootstrap(bootstrap, guardian)
+            val previousSelectionStillConnectable = next.servers.any {
+                it.id == previous.selectedServerId && it.selectable
+            }
+            if (
+                bootstrap.user.status == "SUSPENDED" ||
+                (previous.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting) &&
+                    !previousSelectionStillConnectable)
+            ) {
+                disconnectVpn()
+            }
+            settingsStore.saveSelectedServerId(next.selectedServerId)
+            _state.value = next
             val unreadIds = bootstrap.notifications.filterNot { it.read }.map { it.id }
             if (unreadIds.isNotEmpty()) {
                 runCatching { repository.markNotificationsRead(unreadIds) }
@@ -570,15 +609,20 @@ private fun QuickPingUiState.withBootstrap(
         user = payload.user,
         service = service,
         servers = servers,
-        selectedServerId = selectedServerId.takeIf { currentId ->
-            currentId.isNotBlank() && servers.any { server -> server.id == currentId }
-        } ?: servers.firstOrNull()?.id.orEmpty(),
+        selectedServerId = resolveSelectedServerId(selectedServerId, servers),
         guardianCategories = guardian,
         notifications = payload.notifications,
         management = payload.management,
         release = payload.release,
     )
 }
+
+internal fun resolveSelectedServerId(
+    currentId: String,
+    servers: List<org.quickping.app.model.Server>,
+): String = servers.firstOrNull { server ->
+    server.id == currentId && server.selectable
+}?.id ?: servers.firstOrNull { it.selectable }?.id ?: servers.firstOrNull()?.id.orEmpty()
 
 private fun Throwable.loginMessage(): String = when (this) {
     is ApiException -> when (code) {
@@ -599,6 +643,7 @@ private fun Throwable.connectionMessage(): String = when (this) {
         "service_not_found" -> "سرویس فعال پیدا نشد؛ حساب را دوباره همگام کنید"
         "quota_exhausted" -> "حجم سرویس به پایان رسیده است"
         "service_pending_review" -> "سرویس در حال بررسی انتقال به پنل جدید است"
+        "VIP_ACCESS_REQUIRED" -> "این سرور فقط برای کاربران VIP در دسترس است"
         "invalid_config" -> "پیکربندی سرور ناقص یا ناسازگار است"
         else -> message.ifBlank { "دریافت پیکربندی سرور ناموفق بود" }
     }
