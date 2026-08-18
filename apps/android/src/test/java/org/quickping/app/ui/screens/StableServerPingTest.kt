@@ -38,6 +38,21 @@ class StableServerPingTest {
         assertNull(merged.single().pingMs)
     }
 
+    @Test
+    fun lockedVip_dropsFreshAndCachedPing() {
+        val locked = server(id = "vip-1", host = "", port = 0, pingMs = 18).copy(
+            accessTier = "VIP",
+            requiresVip = true,
+            locked = true,
+            canConnect = false,
+        )
+        val cache = mapOf(stablePingEndpointKey(locked) to 18)
+
+        val merged = mergeStablePingValues(listOf(locked), cache)
+
+        assertNull(merged.single().pingMs)
+    }
+
     private fun server(id: String, host: String, port: Int, pingMs: Int?) = Server(
         id = id,
         countryCode = "de",
