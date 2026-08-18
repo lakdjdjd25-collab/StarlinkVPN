@@ -35,7 +35,7 @@ import org.quickping.app.core.design.quickText
 import org.quickping.app.model.Server
 import org.quickping.app.state.QuickPingUiState
 
-private enum class ReferenceFilterMode { Recommended, Fastest, Free, Unlimited }
+private enum class ReferenceFilterMode { Recommended, Fastest, Free }
 
 @Composable
 internal fun ReferenceServerList(
@@ -47,26 +47,37 @@ internal fun ReferenceServerList(
 ) {
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    var gamingOnly by rememberSaveable { mutableStateOf(false) }
+    var quickFilterName by rememberSaveable { mutableStateOf(ReferenceQuickFilter.All.name) }
     var showFilters by rememberSaveable { mutableStateOf(false) }
     var filterModeName by rememberSaveable { mutableStateOf(ReferenceFilterMode.Recommended.name) }
+    val quickFilter = runCatching { ReferenceQuickFilter.valueOf(quickFilterName) }
+        .getOrDefault(ReferenceQuickFilter.All)
     val filterMode = runCatching { ReferenceFilterMode.valueOf(filterModeName) }
         .getOrDefault(ReferenceFilterMode.Recommended)
     val normalizedQuery = query.trim().lowercase()
     val visibleServers = state.servers.asSequence()
-        .filter { !gamingOnly || it.isReferenceGamingServer() }
+        .filter { server ->
+            when (quickFilter) {
+                ReferenceQuickFilter.All -> true
+                ReferenceQuickFilter.Unlimited -> server.unmetered || server.isUnlimitedCategory
+                ReferenceQuickFilter.Gaming -> server.isReferenceGamingServer()
+            }
+        }
         .filter { normalizedQuery.isBlank() || referenceCountrySearchText(it).contains(normalizedQuery) }
         .filter {
             when (filterMode) {
                 ReferenceFilterMode.Free -> it.freeAllowed
-                ReferenceFilterMode.Unlimited -> it.unmetered || it.isUnlimitedCategory
                 else -> true
             }
         }
         .toList()
         .let { servers ->
             if (filterMode == ReferenceFilterMode.Fastest) {
-                servers.sortedWith(compareBy<Server> { !it.selectable }.thenBy { it.pingMs == null }.thenBy { it.pingMs ?: Int.MAX_VALUE })
+                servers.sortedWith(
+                    compareBy<Server> { !it.selectable }
+                        .thenBy { it.pingMs == null }
+                        .thenBy { it.pingMs ?: Int.MAX_VALUE },
+                )
             } else {
                 servers
             }
@@ -100,11 +111,13 @@ internal fun ReferenceServerList(
                 },
                 onFilterClick = { showFilters = true },
                 filterActive = filterMode != ReferenceFilterMode.Recommended,
-                gamingOnly = gamingOnly,
-                onGamingOnlyChange = { gamingOnly = it },
+                quickFilter = quickFilter,
+                onQuickFilterChange = { quickFilterName = it.name },
             )
         }
-        val cleanDefaultView = normalizedQuery.isBlank() && !gamingOnly && filterMode == ReferenceFilterMode.Recommended
+        val cleanDefaultView = normalizedQuery.isBlank() &&
+            quickFilter == ReferenceQuickFilter.All &&
+            filterMode == ReferenceFilterMode.Recommended
         if (state.servers.isNotEmpty() && cleanDefaultView && state.servers.any { it.selectable }) {
             item(key = "best-location") {
                 ReferenceBestLocationRow(selected = bestLocationSelected, onClick = onSelectBestLocation)
@@ -212,7 +225,6 @@ private fun ReferenceFilterMode.referenceLabel(): String = when (this) {
     ReferenceFilterMode.Recommended -> quickText("پیشنهادی", "Recommended")
     ReferenceFilterMode.Fastest -> quickText("کمترین پینگ", "Lowest ping")
     ReferenceFilterMode.Free -> quickText("مناسب سرویس رایگان", "Free available")
-    ReferenceFilterMode.Unlimited -> quickText("Unlimited ∞", "Unlimited ∞")
 }
 
 private fun Server.isReferenceGamingServer(): Boolean {
