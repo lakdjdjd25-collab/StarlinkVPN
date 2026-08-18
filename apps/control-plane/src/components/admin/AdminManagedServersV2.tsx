@@ -16,14 +16,15 @@ type ManagedNode = {
   port: number;
   activeSessions: number;
   capacity: number;
-  lastSeenAt: string;
+  lastSeenAt: string | null;
 };
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("fa-IR").format(value);
 }
 
-function formatDateTime(value: string): string {
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
   return new Intl.DateTimeFormat("fa-IR", {
     month: "short",
     day: "numeric",
