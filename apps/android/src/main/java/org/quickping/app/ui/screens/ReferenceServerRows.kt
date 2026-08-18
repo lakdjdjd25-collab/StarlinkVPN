@@ -115,8 +115,12 @@ internal fun ReferenceServerRow(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
             )
+            if (server.isManual) {
+                Spacer(Modifier.width(6.dp))
+                ReferenceManualCategoryBadge(server)
+            }
             if (server.isVip) {
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(6.dp))
                 ReferenceVipBadge()
             }
             Spacer(Modifier.width(7.dp))
@@ -124,6 +128,28 @@ internal fun ReferenceServerRow(
                 if (server.locked) ReferenceLockedChip() else ReferencePingChip(server.pingMs)
             }
         }
+    }
+}
+
+@Composable
+private fun ReferenceManualCategoryBadge(server: Server) {
+    Box(
+        modifier = Modifier
+            .height(25.dp)
+            .width(32.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF171B22))
+            .border(1.dp, Color(0xFF303641), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = if (server.isGaming) "🎮" else "∞",
+            color = QuickPingColors.TextSecondary,
+            fontFamily = Peyda,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
