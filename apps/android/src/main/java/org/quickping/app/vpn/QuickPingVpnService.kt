@@ -83,8 +83,13 @@ class QuickPingVpnService : VpnService() {
                     ipv6Enabled = false,
                     mtu = SAFE_TUN_MTU,
                 )
+                // PasarGuard nodes can contain app-specific proxy rules together with
+                // direct fallbacks. In normal full-tunnel mode, remove those provider
+                // direct routes before compiling so unmatched traffic cannot bypass
+                // the selected VPN while only apps such as Telegram use the proxy.
+                val sanitizedConfig = VpnRuntimeSanitizer.sanitize(rawConfig, runtimeSettings)
                 val compiled = VpnConfigCompiler.compile(
-                    rawConfigJson = rawConfig,
+                    rawConfigJson = sanitizedConfig,
                     settings = runtimeSettings,
                     enabledGuardianCategories = settingsStore.enabledGuardianCategoryIds(),
                     applicationPackage = packageName,
