@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
+import { adminAccountTransition } from "@/lib/admin-v2-account-status";
 import { db } from "@/lib/db";
 
 const schema = z.object({
@@ -30,12 +31,18 @@ export async function PATCH(request: NextRequest) {
     return fail(404, "customer_not_found", "حساب کاربر پیدا نشد");
   }
 
-  if (user.status === input.data.status) {
-    return ok({ id: user.id, status: user.status, changed: false, sessionsRevoked: false });
+  const transition = adminAccountTransition(user.status, input.data.status);
+  if (!transition.changed) {
+    return ok({
+      id: user.id,
+      status: user.status,
+      changed: false,
+      sessionsRevoked: false,
+      serviceStatusesChanged: false,
+    });
   }
 
   const now = new Date();
-  const suspended = input.data.status === "SUSPENDED";
   const result = await db.$transaction(async (tx) => {
     const updated = await tx.user.update({
       where: { id: user.id },
@@ -45,7 +52,7 @@ export async function PATCH(request: NextRequest) {
 
     let revokedDevices = 0;
     let revokedRefreshTokens = 0;
-    if (suspended) {
+    if (transition.revokeSessions) {
       const [devices, refreshTokens] = await Promise.all([
         tx.device.updateMany({
           where: { userId: user.id, revokedAt: null },
@@ -63,7 +70,7 @@ export async function PATCH(request: NextRequest) {
     await tx.auditLog.create({
       data: {
         actorId: admin.sub,
-        action: suspended ? "user.suspend" : "user.reactivate",
+        action: transition.revokeSessions ? "user.suspend" : "user.reactivate",
         entityType: "User",
         entityId: user.id,
         before: { status: user.status },
@@ -71,7 +78,7 @@ export async function PATCH(request: NextRequest) {
           status: updated.status,
           revokedDevices,
           revokedRefreshTokens,
-          serviceStatusesChanged: false,
+          serviceStatusesChanged: transition.serviceStatusesChanged,
         },
       },
     });
@@ -83,9 +90,9 @@ export async function PATCH(request: NextRequest) {
     id: result.updated.id,
     status: result.updated.status,
     changed: true,
-    sessionsRevoked: suspended,
+    sessionsRevoked: transition.revokeSessions,
     revokedDevices: result.revokedDevices,
     revokedRefreshTokens: result.revokedRefreshTokens,
-    serviceStatusesChanged: false,
+    serviceStatusesChanged: transition.serviceStatusesChanged,
   });
 }
