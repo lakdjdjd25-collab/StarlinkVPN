@@ -461,6 +461,8 @@ private fun JSONArray?.toServers(): List<Server> {
             unmetered = item.optBoolean("unmetered"),
             accessTier = accessTier,
             category = item.optNullableString("category"),
+            subcategory = item.optNullableString("subcategory"),
+            volumeBytes = if (item.isNull("volumeBytes")) null else item.optLongFlexible("volumeBytes"),
             serverType = item.optString("serverType", "MANAGED"),
             countTraffic = item.optBoolean("countTraffic", false),
             requiresVip = requiresVip,

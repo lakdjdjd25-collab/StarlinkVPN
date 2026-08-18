@@ -111,6 +111,7 @@ fun AccountScreen(
         ) {
             ProfileCard(
                 user = user,
+                vipAccess = service.vipAccess,
                 onChangePassword = {
                     onClearAction()
                     currentPassword = ""
@@ -347,6 +348,7 @@ fun AccountScreen(
 @Composable
 private fun ProfileCard(
     user: UserInfo,
+    vipAccess: Boolean,
     onChangePassword: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -361,21 +363,41 @@ private fun ProfileCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF284D85)),
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(QuickPingColors.SurfaceHigh),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_user), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(28.dp))
+                Icon(
+                    painter = painterResource(R.drawable.ic_logo),
+                    contentDescription = quickText("NimHUB", "NimHUB"),
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(42.dp),
+                )
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    user.email,
-                    color = QuickPingColors.TextPrimary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        user.email,
+                        modifier = Modifier.weight(1f, fill = false),
+                        color = QuickPingColors.TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (vipAccess) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_vip_crown),
+                            contentDescription = quickText("کاربر VIP", "VIP user"),
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
                 Spacer(Modifier.height(7.dp))
                 val suspended = user.status == "SUSPENDED"
                 StatusPill(
