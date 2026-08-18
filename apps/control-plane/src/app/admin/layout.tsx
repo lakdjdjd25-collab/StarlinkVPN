@@ -7,6 +7,7 @@ const navigation = [
   ["داشبورد", "/admin"],
   ["کاربران و مجوزها", "/admin/services"],
   ["سرورها", "/admin/nodes"],
+  ["سرورهای دستی", "/admin/manual-servers"],
   ["اعلان‌ها", "/admin/notifications"],
   ["اطلاعات مدیریت", "/admin/management"],
   ["اتصال PasarGuard", "/admin/integrations/pasarguard"],
