@@ -17,8 +17,8 @@ class ManualTrafficStateTest {
             countTraffic = true,
             pendingFinal = false,
         )
-        assertEquals(600L, state.unreportedBytes)
-        assertEquals(400L, state.localRemainingBytes)
+        assertEquals(400L, state.unreportedBytes)
+        assertEquals(600L, state.localRemainingBytes)
     }
 
     @Test
