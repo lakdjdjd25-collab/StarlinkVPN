@@ -9,21 +9,35 @@ import io.nekohasekai.libbox.LogIterator
 import io.nekohasekai.libbox.OutboundGroupIterator
 import io.nekohasekai.libbox.StatusMessage
 import io.nekohasekai.libbox.StringIterator
+import kotlinx.coroutines.delay
 
 internal class SingBoxTrafficMonitor(
     private val onTotals: (uploadedBytes: Long, downloadedBytes: Long) -> Unit,
 ) : CommandClientHandler {
     private var client: CommandClient? = null
 
-    fun start() {
+    suspend fun startWithRetry() {
         check(client == null) { "sing-box traffic monitor is already running" }
-        val options = CommandClientOptions().apply {
-            addCommand(Libbox.CommandStatus)
-            statusInterval = STATUS_INTERVAL_NANOS
+        var lastError: Throwable? = null
+        repeat(MAX_START_ATTEMPTS) { attempt ->
+            val options = CommandClientOptions().apply {
+                addCommand(Libbox.CommandStatus)
+                statusInterval = STATUS_INTERVAL_NANOS
+            }
+            val candidate = CommandClient(this, options)
+            try {
+                candidate.connect()
+                client = candidate
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                runCatching { candidate.disconnect() }
+                if (attempt < MAX_START_ATTEMPTS - 1) {
+                    delay(START_RETRY_DELAY_MS * (attempt + 1L))
+                }
+            }
         }
-        val candidate = CommandClient(this, options)
-        candidate.connect()
-        client = candidate
+        throw IllegalStateException("sing-box traffic monitor unavailable", lastError)
     }
 
     fun stop() {
@@ -59,5 +73,7 @@ internal class SingBoxTrafficMonitor(
 
     private companion object {
         const val STATUS_INTERVAL_NANOS = 1_000_000_000L
+        const val MAX_START_ATTEMPTS = 5
+        const val START_RETRY_DELAY_MS = 120L
     }
 }
