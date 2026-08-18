@@ -148,7 +148,9 @@ export async function reportManualTraffic(input: {
         requestedTotal < session.lastAccountedBytes) {
       throw new ManualTrafficError(409, "traffic_counter_regression", "Traffic counters cannot move backwards");
     }
-    if (session.status !== "ACTIVE") {
+
+    const finalizingRevoked = session.status === "REVOKED" && input.finalize;
+    if (session.status !== "ACTIVE" && !finalizingRevoked) {
       if (requestedTotal === session.totalBytes &&
           input.cumulative.uploadedBytes === session.uploadedBytes &&
           input.cumulative.downloadedBytes === session.downloadedBytes) {
@@ -163,27 +165,30 @@ export async function reportManualTraffic(input: {
       }
       throw new ManualTrafficError(409, "traffic_session_closed", "Traffic session is already closed");
     }
-    if (!session.manualServer.enabled || session.manualServer.deletedAt) {
-      await tx.trafficSession.update({
-        where: { id: session.id },
-        data: { status: "REVOKED", endedAt: new Date() },
-      });
-      throw new ManualTrafficError(403, "manual_server_unavailable", "The selected manual server is unavailable");
-    }
-    const failure = serviceAccessFailure(session.service.user, session.service);
-    if (failure && failure !== "quota_exhausted") {
-      await tx.trafficSession.update({
-        where: { id: session.id },
-        data: { status: "REVOKED", endedAt: new Date() },
-      });
-      throw new ManualTrafficError(403, failure, "The service is unavailable");
-    }
-    if (!canAccessTier(session.service.vipAccess, session.manualServer.accessTier)) {
-      await tx.trafficSession.update({
-        where: { id: session.id },
-        data: { status: "REVOKED", endedAt: new Date() },
-      });
-      throw new ManualTrafficError(403, VIP_ACCESS_REQUIRED, "VIP access is required for this server");
+
+    if (!finalizingRevoked) {
+      if (!session.manualServer.enabled || session.manualServer.deletedAt) {
+        await tx.trafficSession.update({
+          where: { id: session.id },
+          data: { status: "REVOKED", endedAt: new Date() },
+        });
+        throw new ManualTrafficError(403, "manual_server_unavailable", "The selected manual server is unavailable");
+      }
+      const failure = serviceAccessFailure(session.service.user, session.service);
+      if (failure && failure !== "quota_exhausted") {
+        await tx.trafficSession.update({
+          where: { id: session.id },
+          data: { status: "REVOKED", endedAt: new Date() },
+        });
+        throw new ManualTrafficError(403, failure, "The service is unavailable");
+      }
+      if (!canAccessTier(session.service.vipAccess, session.manualServer.accessTier)) {
+        await tx.trafficSession.update({
+          where: { id: session.id },
+          data: { status: "REVOKED", endedAt: new Date() },
+        });
+        throw new ManualTrafficError(403, VIP_ACCESS_REQUIRED, "VIP access is required for this server");
+      }
     }
 
     const charge = calculateTrafficCharge({
@@ -194,7 +199,13 @@ export async function reportManualTraffic(input: {
       countTraffic: session.manualServer.countTraffic,
     });
     const now = new Date();
-    const status = charge.exhausted ? "EXHAUSTED" as const : input.finalize ? "ENDED" as const : "ACTIVE" as const;
+    const status = finalizingRevoked
+      ? "REVOKED" as const
+      : charge.exhausted
+        ? "EXHAUSTED" as const
+        : input.finalize
+          ? "ENDED" as const
+          : "ACTIVE" as const;
 
     if (charge.acceptedBytes > 0n) {
       await tx.service.update({
@@ -211,7 +222,7 @@ export async function reportManualTraffic(input: {
         lastAccountedBytes: charge.requestedTotal,
         lastReportAt: now,
         status,
-        ...(status !== "ACTIVE" ? { endedAt: now } : {}),
+        ...(status !== "ACTIVE" ? { endedAt: session.endedAt ?? now } : {}),
       },
     });
     await tx.manualServer.update({ where: { id: session.manualServerId }, data: { lastUsedAt: now } });
@@ -222,7 +233,7 @@ export async function reportManualTraffic(input: {
       totalBytes: charge.requestedTotal,
       remainingBytes: charge.remainingBytes,
       status,
-      disconnect: charge.exhausted,
+      disconnect: charge.exhausted || status === "REVOKED",
     };
   });
 }
