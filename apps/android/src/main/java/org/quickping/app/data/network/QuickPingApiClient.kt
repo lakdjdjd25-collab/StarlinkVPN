@@ -34,6 +34,23 @@ data class RefreshedSession(
     val expiresInSeconds: Long,
 )
 
+data class ManualTrafficSession(
+    val sessionId: String,
+    val serviceId: String,
+    val serverId: String,
+    val remainingBytes: Long,
+    val countTraffic: Boolean,
+)
+
+data class ManualTrafficResult(
+    val sessionId: String,
+    val acceptedBytes: Long,
+    val totalBytes: Long,
+    val remainingBytes: Long,
+    val status: String,
+    val disconnect: Boolean,
+)
+
 data class BootstrapPayload(
     val user: UserInfo,
     val services: List<Service>,
@@ -205,6 +222,49 @@ class QuickPingApiClient(baseUrl: String) {
             }
             else -> throw ApiException(200, "invalid_config", "پیکربندی سرور موجود نیست")
         }
+    }
+
+    fun startManualTraffic(accessToken: String, serviceId: String, serverId: String): ManualTrafficSession {
+        val data = request(
+            method = "POST",
+            path = "/api/v1/client/traffic/sessions",
+            body = JSONObject().put("serviceId", serviceId).put("serverId", serverId),
+            accessToken = accessToken,
+        )
+        return ManualTrafficSession(
+            sessionId = data.getString("sessionId"),
+            serviceId = data.getString("serviceId"),
+            serverId = data.getString("serverId"),
+            remainingBytes = data.optLongFlexible("remainingBytes").coerceAtLeast(0L),
+            countTraffic = data.optBoolean("countTraffic", true),
+        )
+    }
+
+    fun reportManualTraffic(
+        accessToken: String,
+        sessionId: String,
+        uploadedBytes: Long,
+        downloadedBytes: Long,
+        finalize: Boolean,
+    ): ManualTrafficResult {
+        require(uploadedBytes >= 0L && downloadedBytes >= 0L) { "Traffic counters cannot be negative" }
+        val action = if (finalize) "end" else "report"
+        val data = request(
+            method = "POST",
+            path = "/api/v1/client/traffic/sessions/${sessionId.urlPathSegment()}/$action",
+            body = JSONObject()
+                .put("uploadedBytes", uploadedBytes.toString())
+                .put("downloadedBytes", downloadedBytes.toString()),
+            accessToken = accessToken,
+        )
+        return ManualTrafficResult(
+            sessionId = data.getString("sessionId"),
+            acceptedBytes = data.optLongFlexible("acceptedBytes").coerceAtLeast(0L),
+            totalBytes = data.optLongFlexible("totalBytes").coerceAtLeast(0L),
+            remainingBytes = data.optLongFlexible("remainingBytes").coerceAtLeast(0L),
+            status = data.optString("status", "ACTIVE"),
+            disconnect = data.optBoolean("disconnect", false),
+        )
     }
 
     fun requestPasswordChange(accessToken: String): EmailChallenge {
@@ -385,6 +445,9 @@ private fun JSONArray?.toServers(): List<Server> {
         val item = getJSONObject(index)
         val country = item.optString("countryCode", "global").lowercase()
         val location = item.optString("location", country.uppercase())
+        val accessTier = item.optString("accessTier", "STANDARD")
+        val requiresVip = item.optBoolean("requiresVip", accessTier.equals("VIP", ignoreCase = true))
+        val locked = item.optBoolean("locked", false)
         Server(
             id = item.getString("id"),
             countryCode = country,
@@ -396,7 +459,14 @@ private fun JSONArray?.toServers(): List<Server> {
             coreType = item.optString("coreType", "sing-box"),
             freeAllowed = item.optBoolean("freeAllowed"),
             unmetered = item.optBoolean("unmetered"),
-            accessTier = item.optString("accessTier", "STANDARD"),
+            accessTier = accessTier,
+            category = item.optNullableString("category"),
+            serverType = item.optString("serverType", "MANAGED"),
+            countTraffic = item.optBoolean("countTraffic", false),
+            requiresVip = requiresVip,
+            locked = locked,
+            canConnect = item.optBoolean("canConnect", !locked),
+            sortOrder = item.optInt("sortOrder", 0),
         )
     }
 }
