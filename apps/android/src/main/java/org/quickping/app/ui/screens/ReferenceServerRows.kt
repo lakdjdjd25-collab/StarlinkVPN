@@ -92,7 +92,7 @@ internal fun ReferenceServerRow(
                     if (selected) QuickPingColors.Primary else ReferenceStrokeColor,
                     RoundedCornerShape(28.dp),
                 )
-                .clickable(onClick = onClick)
+                .clickable(enabled = server.selectable, onClick = onClick)
                 .padding(horizontal = 13.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -106,7 +106,7 @@ internal fun ReferenceServerRow(
             Text(
                 text = title,
                 modifier = Modifier.weight(1f),
-                color = QuickPingColors.TextPrimary,
+                color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
                 fontFamily = Peyda,
                 fontSize = 17.sp,
                 lineHeight = 22.sp,
@@ -115,15 +115,61 @@ internal fun ReferenceServerRow(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
             )
+            if (server.isManual) {
+                Spacer(Modifier.width(6.dp))
+                ReferenceManualCategoryBadge(server)
+            }
             if (server.isVip) {
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(6.dp))
                 ReferenceVipBadge()
             }
             Spacer(Modifier.width(7.dp))
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                ReferencePingChip(server.pingMs)
+                if (server.locked) ReferenceLockedChip() else ReferencePingChip(server.pingMs)
             }
         }
+    }
+}
+
+@Composable
+private fun ReferenceManualCategoryBadge(server: Server) {
+    Box(
+        modifier = Modifier
+            .height(25.dp)
+            .width(32.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF171B22))
+            .border(1.dp, Color(0xFF303641), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = if (server.isGaming) "🎮" else "∞",
+            color = QuickPingColors.TextSecondary,
+            fontFamily = Peyda,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+internal fun ReferenceLockedChip() {
+    Box(
+        modifier = Modifier
+            .height(25.dp)
+            .width(43.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF20232B))
+            .border(1.dp, Color(0xFF343945), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "🔒",
+            color = QuickPingColors.TextSecondary,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 

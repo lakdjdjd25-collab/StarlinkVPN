@@ -24,16 +24,17 @@ internal fun VipAccessRevocationGuard(
 
     LaunchedEffect(
         state.selectedServerId,
-        state.servers.joinToString(separator = ",") { it.id },
+        state.servers.joinToString(separator = ",") { "${it.id}:${it.selectable}:${it.accessTier}" },
         state.connectionStatus,
     ) {
         val active = state.connectionStatus in setOf(ConnectionStatus.Connected, ConnectionStatus.Connecting)
-        val previousStillAvailable = previousSelectedId.isNotBlank() &&
-            state.servers.any { it.id == previousSelectedId }
-        val previousServerRemoved = previousSelectedId.isNotBlank() && !previousStillAvailable
+        val previousServer = state.servers.firstOrNull { it.id == previousSelectedId }
+        val previousStillAvailable = previousServer != null
+        val previousNoLongerAccessible = previousSelectedId.isNotBlank() &&
+            (!previousStillAvailable || previousServer?.selectable == false)
         val currentSelected = state.servers.firstOrNull { it.id == state.selectedServerId }
 
-        if (previousSelectedWasVip && previousServerRemoved && active) {
+        if (previousSelectedWasVip && previousNoLongerAccessible && active) {
             onDisconnect()
             Toast.makeText(
                 context,
@@ -51,15 +52,15 @@ internal fun VipAccessRevocationGuard(
                 previousSelectedId = state.selectedServerId
                 previousSelectedWasVip = currentSelected?.isVip == true
             }
-            !previousStillAvailable -> {
-                // After entitlement revocation, follow the fallback selection immediately so the
-                // warning cannot repeat while the VPN service is finishing its disconnect.
+            previousNoLongerAccessible -> {
+                // Follow the fallback selection immediately so the warning cannot repeat while
+                // the VPN service is finishing its entitlement-driven disconnect.
                 previousSelectedId = state.selectedServerId
                 previousSelectedWasVip = currentSelected?.isVip == true
             }
-            // While the tunnel is active and the previously selected server still exists, retain
-            // it as the effective tunnel target. Bootstrap refreshes may reset the visible
-            // selectedServerId to the first server without changing the actual running tunnel.
+            // While the tunnel is active and the previously selected server remains accessible,
+            // retain it as the effective tunnel target. Bootstrap refreshes may change the visible
+            // selectedServerId without changing the actual running tunnel.
         }
     }
 }

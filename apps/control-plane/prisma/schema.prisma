@@ -56,6 +56,18 @@ enum AccessTier {
   VIP
 }
 
+enum ManualServerCategory {
+  UNLIMITED
+  GAMING
+}
+
+enum TrafficSessionStatus {
+  ACTIVE
+  ENDED
+  EXHAUSTED
+  REVOKED
+}
+
 enum NotificationAudience {
   ALL
   FREE
@@ -193,6 +205,7 @@ model Service {
   status           ServiceStatus @default(ACTIVE)
   quotaBytes       BigInt
   usedBytes        BigInt        @default(0)
+  manualUsedBytes  BigInt        @default(0)
   expiresAt        DateTime
   maxDevices       Int
   autoPay          Boolean       @default(false)
@@ -210,6 +223,7 @@ model Service {
   payments          Payment[]
   guardianProfile   GuardianProfile?
   pasarGuardBinding PasarGuardBinding?
+  trafficSessions   TrafficSession[]
 
   @@index([userId, status])
   @@index([expiresAt, status])
@@ -260,6 +274,55 @@ model VpnNode {
   @@index([accessTier, status])
   @@index([host, port, protocol])
   @@index([pasarGuardBindingId])
+}
+
+model ManualServer {
+  id               String               @id @default(cuid())
+  displayName      String
+  sourceCiphertext String
+  configCiphertext String
+  protocol         NodeProtocol         @default(VLESS)
+  host             String
+  port             Int
+  country          String?
+  countryCode      String?
+  countryOverride  String?
+  category         ManualServerCategory @default(UNLIMITED)
+  accessTier       AccessTier           @default(STANDARD)
+  enabled          Boolean              @default(false)
+  sortOrder        Int                  @default(0)
+  countTraffic     Boolean              @default(true)
+  lastUsedAt       DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  trafficSessions TrafficSession[]
+
+  @@index([enabled, sortOrder])
+  @@index([accessTier, enabled])
+  @@index([deletedAt])
+}
+
+model TrafficSession {
+  id                 String               @id @default(cuid())
+  serviceId          String
+  manualServerId     String
+  startedAt          DateTime             @default(now())
+  lastReportAt       DateTime?
+  endedAt            DateTime?
+  uploadedBytes      BigInt               @default(0)
+  downloadedBytes    BigInt               @default(0)
+  totalBytes         BigInt               @default(0)
+  lastAccountedBytes BigInt               @default(0)
+  status             TrafficSessionStatus @default(ACTIVE)
+
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  manualServer ManualServer @relation(fields: [manualServerId], references: [id], onDelete: Restrict)
+
+  @@index([serviceId, status])
+  @@index([manualServerId, startedAt])
+  @@index([status, lastReportAt])
 }
 
 model PasarGuardBinding {

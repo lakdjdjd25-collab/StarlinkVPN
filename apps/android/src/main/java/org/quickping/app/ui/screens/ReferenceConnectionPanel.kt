@@ -59,6 +59,7 @@ internal fun ReferenceConnectionPanel(
 ) {
     val server = state.servers.firstOrNull { it.id == state.selectedServerId }
     val connected = state.connectionStatus == ConnectionStatus.Connected
+    val canToggle = connected || state.connectionStatus == ConnectionStatus.Connecting || server?.selectable == true
     val panelShape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp)
 
     Box(
@@ -85,7 +86,7 @@ internal fun ReferenceConnectionPanel(
                             if (connected) Color(0xFFF0F3FC) else Color(0xFF9BA1B5),
                             RoundedCornerShape(40.dp),
                         )
-                        .clickable(enabled = state.servers.isNotEmpty(), onClick = onToggleConnection),
+                        .clickable(enabled = canToggle, onClick = onToggleConnection),
                     contentAlignment = Alignment.Center,
                 ) {
                     AnimatedContent(state.connectionStatus, label = "referenceConnectionIcon") { status ->
@@ -160,7 +161,7 @@ private fun ReferenceSelectedSummary(
     }
 
     Row(verticalAlignment = Alignment.Top) {
-        ReferencePingChip(server.pingMs)
+        if (server.locked) ReferenceLockedChip() else ReferencePingChip(server.pingMs)
         Spacer(Modifier.width(11.dp))
         Column(
             modifier = Modifier.width(132.dp),
@@ -185,6 +186,17 @@ private fun ReferenceSelectedSummary(
                 maxLines = 1,
             )
             val info = when {
+                server.locked -> quickText(
+                    "نیازمند دسترسی VIP",
+                    "VIP access required",
+                    nl = "VIP-toegang vereist",
+                    ar = "يتطلب وصول VIP",
+                    tr = "VIP erişimi gerekli",
+                    ru = "Требуется VIP-доступ",
+                    hi = "VIP एक्सेस आवश्यक",
+                    zh = "需要 VIP 权限",
+                    ur = "VIP رسائی درکار ہے",
+                )
                 state.connectionStatus == ConnectionStatus.Error && !state.connectionError.isNullOrBlank() -> {
                     state.connectionErrorCode
                         ?.takeIf(String::isNotBlank)

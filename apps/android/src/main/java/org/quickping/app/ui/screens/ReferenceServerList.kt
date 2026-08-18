@@ -59,14 +59,14 @@ internal fun ReferenceServerList(
         .filter {
             when (filterMode) {
                 ReferenceFilterMode.Free -> it.freeAllowed
-                ReferenceFilterMode.Unlimited -> it.unmetered
+                ReferenceFilterMode.Unlimited -> it.unmetered || it.isUnlimitedCategory
                 else -> true
             }
         }
         .toList()
         .let { servers ->
             if (filterMode == ReferenceFilterMode.Fastest) {
-                servers.sortedWith(compareBy<Server> { it.pingMs == null }.thenBy { it.pingMs ?: Int.MAX_VALUE })
+                servers.sortedWith(compareBy<Server> { !it.selectable }.thenBy { it.pingMs == null }.thenBy { it.pingMs ?: Int.MAX_VALUE })
             } else {
                 servers
             }
@@ -105,7 +105,7 @@ internal fun ReferenceServerList(
             )
         }
         val cleanDefaultView = normalizedQuery.isBlank() && !gamingOnly && filterMode == ReferenceFilterMode.Recommended
-        if (state.servers.isNotEmpty() && cleanDefaultView) {
+        if (state.servers.isNotEmpty() && cleanDefaultView && state.servers.any { it.selectable }) {
             item(key = "best-location") {
                 ReferenceBestLocationRow(selected = bestLocationSelected, onClick = onSelectBestLocation)
             }
@@ -212,10 +212,11 @@ private fun ReferenceFilterMode.referenceLabel(): String = when (this) {
     ReferenceFilterMode.Recommended -> quickText("پیشنهادی", "Recommended")
     ReferenceFilterMode.Fastest -> quickText("کمترین پینگ", "Lowest ping")
     ReferenceFilterMode.Free -> quickText("مناسب سرویس رایگان", "Free available")
-    ReferenceFilterMode.Unlimited -> quickText("بدون محاسبه حجم", "Unmetered")
+    ReferenceFilterMode.Unlimited -> quickText("Unlimited ∞", "Unlimited ∞")
 }
 
 private fun Server.isReferenceGamingServer(): Boolean {
+    if (isGaming) return true
     val searchable = "$title $remarks".lowercase()
-    return unmetered || listOf("gaming", "game", "گیم", "بازی").any(searchable::contains)
+    return listOf("gaming", "game", "گیم", "بازی").any(searchable::contains)
 }

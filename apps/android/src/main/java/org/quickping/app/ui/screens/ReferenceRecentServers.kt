@@ -64,7 +64,7 @@ internal fun ReferenceRecentServers(
                             .clip(RoundedCornerShape(22.dp))
                             .background(ReferenceCardColor)
                             .border(1.dp, ReferenceStrokeColor, RoundedCornerShape(22.dp))
-                            .clickable { onSelectServer(server.id) }
+                            .clickable(enabled = server.selectable) { onSelectServer(server.id) }
                             .padding(vertical = 9.dp, horizontal = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
@@ -76,7 +76,7 @@ internal fun ReferenceRecentServers(
                         Spacer(Modifier.height(5.dp))
                         Text(
                             text = referenceServerTitle(server, state.servers),
-                            color = QuickPingColors.TextPrimary,
+                            color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
                             fontFamily = Peyda,
                             fontSize = 14.sp,
                             lineHeight = 18.sp,
@@ -85,7 +85,7 @@ internal fun ReferenceRecentServers(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(5.dp))
-                        ReferenceMiniPingChip(server.pingMs)
+                        if (server.locked) ReferenceLockedChip() else ReferenceMiniPingChip(server.pingMs)
                     }
                 }
             }

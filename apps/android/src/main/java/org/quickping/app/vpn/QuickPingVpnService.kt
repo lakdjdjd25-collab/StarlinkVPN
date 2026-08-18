@@ -7,9 +7,9 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
-import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,23 +17,40 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.quickping.app.MainActivity
+import org.quickping.app.QuickPingApplication
 import org.quickping.app.R
+import org.quickping.app.data.QuickPingRepository
+import org.quickping.app.data.network.ApiException
 import org.quickping.app.data.settings.QuickPingSettingsStore
+import org.quickping.app.data.traffic.ManualTrafficRuntimeRegistry
+import org.quickping.app.data.traffic.ManualTrafficStore
 
 class QuickPingVpnService : VpnService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val stopping = AtomicBoolean(false)
+    private val quotaStopTriggered = AtomicBoolean(false)
     private var tunnelJob: Job? = null
+    private var trafficJob: Job? = null
+    private var activeManualSessionId: String? = null
     private lateinit var core: TunnelCore
+    private lateinit var repository: QuickPingRepository
+    private lateinit var manualTrafficStore: ManualTrafficStore
 
     override fun onCreate() {
         super.onCreate()
+        repository = (application as QuickPingApplication).repository
+        manualTrafficStore = ManualTrafficStore(this)
         val platform = AndroidSingBoxPlatform(this)
-        core = SingBoxTunnelCore(platform) { disconnect() }
+        core = SingBoxTunnelCore(
+            platform = platform,
+            onNativeStop = { disconnect() },
+            onTrafficTotals = ::onTrafficTotals,
+        )
         createNotificationChannel()
     }
 
@@ -48,6 +65,7 @@ class QuickPingVpnService : VpnService() {
     private fun connect() {
         if (status.value.state == ServiceState.Connecting || status.value.state == ServiceState.Connected) return
         stopping.set(false)
+        quotaStopTriggered.set(false)
         startForeground(NOTIFICATION_ID, connectionNotification())
         publish(ServiceState.Connecting)
         tunnelJob = serviceScope.launch {
@@ -76,15 +94,31 @@ class QuickPingVpnService : VpnService() {
                     compiledConfigJson = compiled.configJson,
                     provider = settings.dnsProvider,
                 )
+
+                ManualTrafficRuntimeRegistry.take()?.let { pending ->
+                    manualTrafficStore.begin(
+                        sessionId = pending.sessionId,
+                        serviceId = pending.serviceId,
+                        serverId = pending.serverId,
+                        remainingBytes = pending.remainingBytes,
+                        countTraffic = pending.countTraffic,
+                    )
+                    activeManualSessionId = pending.sessionId
+                } ?: run {
+                    activeManualSessionId = null
+                }
+
                 core.start(runtimeConfig, compiled.launchOptions)
                 publish(ServiceState.Connected)
                 getSystemService<NotificationManager>()?.notify(
                     NOTIFICATION_ID,
                     connectionNotification(connected = true),
                 )
+                startTrafficReporter()
             }.onFailure { error ->
                 if (error is CancellationException && stopping.get()) return@onFailure
                 runCatching { core.stop() }
+                runCatching { finalizeManualTraffic() }
                 val failure = error.toVpnFailure()
                 Log.e(TAG, "VPN startup failed [${failure.code}]: ${failure.safeDetail}")
                 publish(ServiceState.Error, failure)
@@ -94,11 +128,108 @@ class QuickPingVpnService : VpnService() {
         }
     }
 
+    private fun onTrafficTotals(uploadedBytes: Long, downloadedBytes: Long) {
+        val sessionId = activeManualSessionId ?: return
+        val state = manualTrafficStore.updateCounters(uploadedBytes, downloadedBytes) ?: return
+        if (state.sessionId != sessionId || !state.countTraffic || state.localRemainingBytes > 0L) return
+        if (!quotaStopTriggered.compareAndSet(false, true)) return
+        serviceScope.launch {
+            runCatching { flushManualTraffic() }
+            stopForTrafficFailure(
+                VpnFailure(
+                    code = "quota_exhausted",
+                    userMessage = "حجم سرویس به پایان رسیده است",
+                    safeDetail = "manual traffic quota exhausted",
+                ),
+            )
+        }
+    }
+
+    private fun startTrafficReporter() {
+        trafficJob?.cancel()
+        val sessionId = activeManualSessionId ?: return
+        trafficJob = serviceScope.launch {
+            while (!stopping.get() && activeManualSessionId == sessionId) {
+                delay(TRAFFIC_REPORT_INTERVAL_MS)
+                val result = runCatching { flushManualTraffic() }
+                result.onFailure { error ->
+                    val apiError = error as? ApiException ?: return@onFailure
+                    if (apiError.status !in setOf(403, 404, 409)) return@onFailure
+                    stopForTrafficFailure(apiError.toTrafficFailure())
+                }
+                val current = result.getOrNull() ?: continue
+                if (current.disconnect) {
+                    stopForTrafficFailure(
+                        if (current.remainingBytes <= 0L || current.status == "EXHAUSTED") {
+                            VpnFailure("quota_exhausted", "حجم سرویس به پایان رسیده است", "manual traffic quota exhausted")
+                        } else {
+                            VpnFailure("manual_access_revoked", "دسترسی به سرور تغییر کرده است", "manual server access revoked")
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun flushManualTraffic(): org.quickping.app.data.network.ManualTrafficResult? {
+        val sessionId = activeManualSessionId ?: return null
+        val state = manualTrafficStore.load()?.takeIf { it.sessionId == sessionId } ?: return null
+        val result = repository.reportManualTraffic(
+            sessionId = sessionId,
+            uploadedBytes = state.uploadedBytes,
+            downloadedBytes = state.downloadedBytes,
+            finalize = false,
+        )
+        manualTrafficStore.confirm(result.remainingBytes, result.totalBytes)
+        return result
+    }
+
+    private suspend fun finalizeManualTraffic() {
+        val sessionId = activeManualSessionId ?: return
+        val state = manualTrafficStore.load()?.takeIf { it.sessionId == sessionId }
+        if (state == null) {
+            activeManualSessionId = null
+            return
+        }
+        val result = runCatching {
+            repository.reportManualTraffic(
+                sessionId = sessionId,
+                uploadedBytes = state.uploadedBytes,
+                downloadedBytes = state.downloadedBytes,
+                finalize = true,
+            )
+        }
+        result.onSuccess {
+            manualTrafficStore.confirm(it.remainingBytes, it.totalBytes)
+            manualTrafficStore.clear()
+        }.onFailure {
+            manualTrafficStore.markPendingFinal()
+        }
+        activeManualSessionId = null
+    }
+
+    private fun stopForTrafficFailure(failure: VpnFailure) {
+        if (!stopping.compareAndSet(false, true)) return
+        trafficJob?.cancel()
+        trafficJob = null
+        tunnelJob?.cancel()
+        serviceScope.launch {
+            runCatching { core.stop() }
+            runCatching { finalizeManualTraffic() }
+            publish(ServiceState.Error, failure)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+    }
+
     private fun disconnect() {
         if (!stopping.compareAndSet(false, true)) return
+        trafficJob?.cancel()
+        trafficJob = null
         tunnelJob?.cancel()
         tunnelJob = serviceScope.launch {
             runCatching { core.stop() }
+            runCatching { finalizeManualTraffic() }
             publish(ServiceState.Disconnected)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -150,7 +281,12 @@ class QuickPingVpnService : VpnService() {
 
     override fun onDestroy() {
         if (::core.isInitialized && core.isRunning()) {
-            runCatching { runBlocking(Dispatchers.IO) { core.stop() } }
+            runCatching {
+                runBlocking(Dispatchers.IO) {
+                    core.stop()
+                    finalizeManualTraffic()
+                }
+            }
         }
         serviceScope.cancel()
         super.onDestroy()
@@ -168,6 +304,7 @@ class QuickPingVpnService : VpnService() {
         private const val CHANNEL_ID = "quickping_vpn"
         private const val NOTIFICATION_ID = 2401
         private const val SAFE_TUN_MTU = 1280
+        private const val TRAFFIC_REPORT_INTERVAL_MS = 10_000L
         val status = MutableStateFlow(VpnServiceStatus(ServiceState.Disconnected))
         private const val TAG = "QuickPingVpnService"
     }
@@ -185,6 +322,15 @@ data class VpnServiceStatus(
     val state: ServiceState,
     val failure: VpnFailure? = null,
 )
+
+private fun ApiException.toTrafficFailure(): VpnFailure = when (code) {
+    "quota_exhausted" -> VpnFailure(code, "حجم سرویس به پایان رسیده است", "manual traffic quota exhausted")
+    "VIP_ACCESS_REQUIRED" -> VpnFailure(code, "دسترسی VIP این سرور برای سرویس شما فعال نیست", "manual VIP access required")
+    "manual_server_unavailable" -> VpnFailure(code, "سرور انتخاب‌شده دیگر در دسترس نیست", "manual server unavailable")
+    "service_expired" -> VpnFailure(code, "زمان سرویس به پایان رسیده است", "service expired")
+    "account_unavailable", "service_unavailable" -> VpnFailure(code, "سرویس در حال حاضر قابل استفاده نیست", "service unavailable")
+    else -> VpnFailure(code, message.ifBlank { "دسترسی به سرور تغییر کرده است" }, "manual traffic access rejected")
+}
 
 private fun Throwable.toVpnFailure(): VpnFailure {
     val source = generateSequence(this) { it.cause }.toList()
