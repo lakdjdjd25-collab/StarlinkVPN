@@ -8,6 +8,7 @@ import "./manual-servers-v2.css";
 import "./notifications-v2.css";
 import "./settings-v2.css";
 import "./provider-v2.css";
+import "./operators-v2.css";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireAdminPage();
