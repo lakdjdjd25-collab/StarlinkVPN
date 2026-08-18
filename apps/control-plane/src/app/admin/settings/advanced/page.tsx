@@ -1,21 +1,42 @@
 import { GlobalSettingForm } from "@/components/EntityForms";
+import { AdminOperatorAccountsV2 } from "@/components/admin/AdminOperatorAccountsV2";
 import { AdminSettingsTabs } from "@/components/admin/AdminSettingsTabs";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdvancedSettingsPage() {
-  const settings = await db.globalSetting.findMany({ orderBy: { key: "asc" } });
+  const [settings, operators] = await Promise.all([
+    db.globalSetting.findMany({ orderBy: { key: "asc" } }),
+    db.user.findMany({
+      where: { role: { in: ["ADMIN", "SUPPORT"] }, status: { not: "DELETED" } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, email: true, role: true, status: true, createdAt: true },
+    }),
+  ]);
 
   return (
     <>
-      <header className="page-header"><div><span className="v2-eyebrow">SYSTEM SETTINGS</span><h1>تنظیمات</h1><p>ابزارهای فنی و JSON خام؛ خارج از جریان روزمره مدیریت.</p></div></header>
+      <header className="page-header"><div><span className="v2-eyebrow">SYSTEM SETTINGS</span><h1>تنظیمات</h1><p>ابزارهای فنی، Operator accounts و JSON خام؛ خارج از جریان روزمره مشتری.</p></div></header>
       <AdminSettingsTabs />
 
       <div className="v2-settings-warning">
         <strong>Advanced configuration</strong>
-        <p>این بخش مستقیماً GlobalSetting را تغییر می‌دهد. برای Management، Provider و App Release از تب‌های اختصاصی استفاده کن.</p>
+        <p>برای Management، Provider و App Release از تب‌های اختصاصی استفاده کن. این بخش برای عملیات سیستمی و تنظیماتی است که UI تایپ‌شده ندارند.</p>
       </div>
+
+      <details className="v2-settings-editor" id="accounts">
+        <summary><span><strong>Admin / Support accounts</strong><small>مدیریت Operatorهای پنل؛ حساب‌های مشتری در Users V2 مدیریت می‌شوند</small></span><span>+</span></summary>
+        <div className="v2-settings-editor-body">
+          <AdminOperatorAccountsV2 operators={operators.map((operator) => ({
+            id: operator.id,
+            email: operator.email,
+            role: operator.role === "ADMIN" ? "ADMIN" : "SUPPORT",
+            status: operator.status,
+            createdAt: operator.createdAt.toISOString(),
+          }))} />
+        </div>
+      </details>
 
       <details className="v2-settings-editor">
         <summary><span><strong>ثبت یا ویرایش Raw Setting</strong><small>کلید + JSON؛ فقط برای تنظیماتی که UI تایپ‌شده ندارند</small></span><span>+</span></summary>
