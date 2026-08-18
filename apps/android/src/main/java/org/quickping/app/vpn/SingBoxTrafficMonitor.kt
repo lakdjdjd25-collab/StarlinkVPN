@@ -51,9 +51,9 @@ internal class SingBoxTrafficMonitor(
 
     override fun writeGroups(message: OutboundGroupIterator?) = Unit
 
-    override fun initializeClashMode(modeList: StringIterator?, currentMode: String?) = Unit
+    override fun initializeClashMode(modeList: StringIterator, currentMode: String) = Unit
 
-    override fun updateClashMode(newMode: String?) = Unit
+    override fun updateClashMode(newMode: String) = Unit
 
     override fun writeConnectionEvents(events: ConnectionEvents?) = Unit
 
