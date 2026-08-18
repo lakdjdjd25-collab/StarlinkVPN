@@ -5,6 +5,7 @@ import { singBoxRuntimeConfigSchema } from "@/lib/sing-box-config";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SUPPORTED_TRANSPORTS = new Set(["tcp", "ws", "grpc", "http", "h2", "httpupgrade"]);
 const SUPPORTED_SECURITY = new Set(["none", "tls", "reality"]);
+const GEOIP_TIMEOUT_MS = 2_500;
 
 export type ParsedVless = {
   protocol: "VLESS";
@@ -159,6 +160,39 @@ export function parseVlessUri(value: string): ParsedVless {
 export async function resolveHostIp(host: string): Promise<string | null> {
   if (isIP(host)) return host;
   return lookup(host).then(({ address }) => address).catch(() => null);
+}
+
+function publicIp(ip: string): boolean {
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split(".").map(Number);
+    return !(a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168));
+  }
+  if (isIP(ip) === 6) {
+    const value = ip.toLowerCase();
+    return value !== "::1" && !value.startsWith("fc") && !value.startsWith("fd") && !value.startsWith("fe80:");
+  }
+  return false;
+}
+
+export async function detectGeoCountry(host: string): Promise<GeoCountry | null> {
+  const ip = await resolveHostIp(host);
+  if (!ip || !publicIp(ip)) return null;
+  try {
+    const response = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}?fields=success,country,country_code`, {
+      headers: { accept: "application/json", "user-agent": "NimHUB-ControlPlane/2.6" },
+      signal: AbortSignal.timeout(GEOIP_TIMEOUT_MS),
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const body = await response.json() as { success?: boolean; country?: unknown; country_code?: unknown };
+    const country = typeof body.country === "string" ? body.country.trim() : "";
+    const countryCode = typeof body.country_code === "string" ? body.country_code.trim().toUpperCase() : "";
+    if (body.success === false || !country || !/^[A-Z]{2}$/.test(countryCode)) return null;
+    return { country, countryCode, ip };
+  } catch {
+    return null;
+  }
 }
 
 export function countryFlag(countryCode: string | null | undefined): string {
