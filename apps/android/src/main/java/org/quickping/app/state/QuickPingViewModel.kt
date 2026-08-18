@@ -122,7 +122,36 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
             runCatching {
-                val config = repository.runtimeConfig(serviceId, serverId)
+                val config = try {
+                    repository.runtimeConfig(serviceId, serverId)
+                } catch (error: ApiException) {
+                    if (error.code != "VIP_ACCESS_REQUIRED") throw error
+
+                    // The admin may revoke VIP while Android still holds the previous
+                    // bootstrap. Reconcile entitlement with the backend, never weaken
+                    // server authorization, and retry once on another selectable node.
+                    val bootstrap = repository.restoreSession() ?: throw error
+                    settingsStore.saveManagement(bootstrap.management)
+                    val guardian = mergeGuardian(bootstrap)
+                    val refreshed = _state.value.withBootstrap(bootstrap, guardian)
+                    val fallbackId = vipRevocationFallbackServerId(serverId, refreshed.servers)
+                    val fallback = refreshed.servers.firstOrNull { it.id == fallbackId }
+
+                    if (fallback == null || refreshed.service.id.isBlank()) {
+                        _state.value = refreshed
+                        settingsStore.saveSelectedServerId(refreshed.selectedServerId)
+                        throw error
+                    }
+
+                    settingsStore.saveSelectedServerId(fallback.id)
+                    _state.value = refreshed.copy(
+                        selectedServerId = fallback.id,
+                        connectionStatus = ConnectionStatus.Connecting,
+                        connectionError = null,
+                        connectionErrorCode = null,
+                    )
+                    repository.runtimeConfig(refreshed.service.id, fallback.id)
+                }
                 runtimeStore.write(config)
                 val application = getApplication<Application>()
                 ContextCompat.startForegroundService(
@@ -623,6 +652,15 @@ internal fun resolveSelectedServerId(
 ): String = servers.firstOrNull { server ->
     server.id == currentId && server.selectable
 }?.id ?: servers.firstOrNull { it.selectable }?.id ?: servers.firstOrNull()?.id.orEmpty()
+
+internal fun vipRevocationFallbackServerId(
+    failedServerId: String,
+    servers: List<org.quickping.app.model.Server>,
+): String? = servers.firstOrNull {
+    it.id != failedServerId && it.selectable && !it.isVip
+}?.id ?: servers.firstOrNull {
+    it.id != failedServerId && it.selectable
+}?.id
 
 private fun Throwable.loginMessage(): String = when (this) {
     is ApiException -> when (code) {
