@@ -89,6 +89,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: NimHUB-Vpn-2.6.12-debug
+          name: NimHUB-Vpn-2.6.19-debug
           path: apps/android/build/outputs/apk/debug/*.apk
           if-no-files-found: error
