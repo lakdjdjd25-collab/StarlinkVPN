@@ -1,7 +1,7 @@
-import type { Prisma } from "@/generated/prisma/client";
-import { db } from "@/lib/db";
-import { remainingServiceBytes, serviceAccessFailure } from "@/lib/server-access";
-import { canAccessTier, VIP_ACCESS_REQUIRED } from "@/lib/vip-access";
+import type { Prisma } from "../generated/prisma/client";
+import { db } from "./db";
+import { remainingServiceBytes, serviceAccessFailure } from "./server-access";
+import { canAccessTier, VIP_ACCESS_REQUIRED } from "./vip-access";
 
 export class ManualTrafficError extends Error {
   constructor(
