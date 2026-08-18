@@ -3,20 +3,47 @@ package org.quickping.app.ui.screens
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -26,6 +53,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -41,26 +69,24 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.platform.LocalLayoutDirection
-import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.android.gms.mlkit.codescanner.GmsBarcodeScannerOptions
+import com.google.android.gms.mlkit.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.delay
+import org.json.JSONObject
 import org.quickping.app.R
 import org.quickping.app.core.design.Peyda
 import org.quickping.app.core.design.QuickPingColors
 import org.quickping.app.core.design.quickText
-import org.json.JSONObject
-import java.net.URI
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
 import org.quickping.app.model.AppLanguage
 
-private const val REFERENCE_LOGIN_MOTION_MS = 300
 private const val WELCOME_CHARACTER_DELAY_MS = 72L
+private const val REFERENCE_VIEWPORT_HEIGHT_DP = 843f
 
 @Composable
 fun ReferenceLoginScreen(
@@ -81,7 +107,7 @@ fun ReferenceLoginScreen(
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
+    val keyboardVisible = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density) > 0
 
     var license by remember { mutableStateOf("") }
     var scanError by remember { mutableStateOf<String?>(null) }
@@ -106,28 +132,6 @@ fun ReferenceLoginScreen(
             cursorVisible = !cursorVisible
         }
     }
-
-
-    val logoWidth by animateDpAsState(
-        targetValue = if (keyboardVisible) 104.dp else 156.dp,
-        animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
-        label = "referenceLoginLogoWidth",
-    )
-    val logoHeight by animateDpAsState(
-        targetValue = if (keyboardVisible) 70.dp else 105.dp,
-        animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
-        label = "referenceLoginLogoHeight",
-    )
-    val heroTop by animateDpAsState(
-        targetValue = if (keyboardVisible) 5.dp else 50.dp,
-        animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
-        label = "referenceLoginHeroTop",
-    )
-    val headerHeight by animateDpAsState(
-        targetValue = if (keyboardVisible) 285.dp else 410.dp,
-        animationSpec = tween(REFERENCE_LOGIN_MOTION_MS),
-        label = "referenceLoginHeaderHeight",
-    )
 
     val scannerOptions = remember {
         GmsBarcodeScannerOptions.Builder()
@@ -190,7 +194,9 @@ fun ReferenceLoginScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF05070B))) {
+        val layoutScale = (maxHeight.value / REFERENCE_VIEWPORT_HEIGHT_DP).coerceIn(0.88f, 1.08f)
+
         Image(
             painter = painterResource(R.drawable.bg_login),
             contentDescription = null,
@@ -201,7 +207,7 @@ fun ReferenceLoginScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .height(headerHeight + 70.dp)
+                .height(520.dp)
                 .background(
                     Brush.verticalGradient(
                         colorStops = arrayOf(
@@ -213,179 +219,178 @@ fun ReferenceLoginScreen(
                     ),
                 ),
         )
-        Image(
-            painter = painterResource(R.drawable.header_login),
-            contentDescription = null,
-            modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(headerHeight),
-            contentScale = ContentScale.FillWidth,
-        )
 
-        val bottomInsetModifier = if (keyboardVisible) Modifier.imePadding() else Modifier.navigationBarsPadding()
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .then(bottomInsetModifier)
-                .padding(horizontal = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(if (keyboardVisible) 42.dp else 48.dp),
-                horizontalArrangement = Arrangement.Absolute.Right,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .background(Color(0xFF11151D).copy(alpha = .94f), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFF252B35), RoundedCornerShape(16.dp))
-                        .clickable { showLanguageDialog = true }
-                        .padding(
-                            horizontal = if (keyboardVisible) 11.dp else 12.dp,
-                            vertical = if (keyboardVisible) 7.dp else 8.dp,
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        language.label,
-                        color = Color(0xFFBDC1CA),
-                        fontFamily = Peyda,
-                        fontSize = if (keyboardVisible) 11.5.sp else 12.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text("⌄", color = Color(0xFF8F95A1), fontSize = 13.sp)
-                }
-            }
+        if (!keyboardVisible) {
+            // Measured against the 955x2048 Quick Ping source: ring centre ≈ (478, 818px).
+            Image(
+                painter = painterResource(R.drawable.header_login),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (160.dp * layoutScale))
+                    .fillMaxWidth()
+                    .height(417.dp),
+                contentScale = ContentScale.FillWidth,
+            )
 
-            Spacer(Modifier.height(heroTop))
+            ReferenceLanguageSelector(
+                language = language,
+                compact = false,
+                onClick = { showLanguageDialog = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
+                    .padding(top = 10.dp, end = 18.dp),
+            )
+
             Image(
                 painter = painterResource(R.drawable.nimhub_logo),
                 contentDescription = "NimHUB Vpn",
-                modifier = Modifier.size(logoWidth, logoHeight),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (260.dp * layoutScale))
+                    .size(width = 156.dp, height = 105.dp),
                 contentScale = ContentScale.Fit,
             )
-            Spacer(Modifier.height(if (keyboardVisible) 3.dp else 10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = typedWelcome,
-                    color = Color(0xFFD1D4DB),
-                    fontFamily = Peyda,
-                    fontSize = if (keyboardVisible) 16.sp else 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
-                Text(
-                    text = "│",
-                    color = Color(0xFF4A82FF).copy(alpha = if (cursorVisible) 1f else 0f),
-                    fontFamily = Peyda,
-                    fontSize = if (keyboardVisible) 16.sp else 18.sp,
-                    fontWeight = FontWeight.Normal,
-                    maxLines = 1,
-                )
-            }
 
-            Spacer(Modifier.weight(1f))
-            ReferenceLicenseBar(
-                value = license,
-                enabled = !busy,
-                compact = keyboardVisible,
-                onValueChange = {
-                    license = it
-                    scanError = null
-                },
-                onScan = { launchQrScanner() },
-                onPaste = { pasteLicense() },
-                onSubmit = { submitLicense(license) },
+            ReferenceWelcomeText(
+                text = typedWelcome,
+                cursorVisible = cursorVisible,
+                compact = false,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (375.dp * layoutScale)),
             )
 
-            val visibleError = scanError ?: error
-            if (!visibleError.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    referenceLocalizedLoginError(visibleError),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF2A1116).copy(alpha = .72f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    color = Color(0xFFFF9AA8),
-                    fontFamily = Peyda,
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 3,
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (568.dp * layoutScale))
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ReferenceLicenseBar(
+                    value = license,
+                    enabled = !busy,
+                    compact = false,
+                    onValueChange = {
+                        license = it
+                        scanError = null
+                    },
+                    onScan = ::launchQrScanner,
+                    onPaste = ::pasteLicense,
+                    onSubmit = { submitLicense(license) },
                 )
-            }
-
-            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 11.dp))
-            ReferenceOrDivider()
-            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 11.dp))
-
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(if (keyboardVisible) 12.dp else 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box {
-                        ReferenceLoginSquareButton(
-                            icon = R.drawable.logo_google,
-                            contentDescription = quickText("ورود با گوگل", "Sign in with Google"),
-                            onClick = onGoogleRequested,
-                            iconTint = Color.Unspecified,
-                            compact = keyboardVisible,
-                        )
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .background(Color(0xFFE9EAED), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 5.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("10GB", color = Color(0xFF282B31), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(2.dp))
-                            Icon(
-                                painterResource(R.drawable.ic_gift),
-                                contentDescription = null,
-                                tint = Color(0xFF282B31),
-                                modifier = Modifier.size(11.dp),
-                            )
-                        }
-                    }
-                    ReferenceLoginSquareButton(
-                        icon = R.drawable.ic_mail,
-                        contentDescription = quickText("ورود با ایمیل", "Sign in with email"),
-                        onClick = {
-                            email = ""
-                            password = ""
-                            showEmailDialog = true
-                        },
-                        compact = keyboardVisible,
-                    )
+                val visibleError = scanError ?: error
+                if (!visibleError.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    ReferenceLoginError(visibleError)
                 }
             }
 
-            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 10.dp))
-            Row(
-                modifier = Modifier.clickable(onClick = onHelpRequested),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    painterResource(R.drawable.ic_help_hexagon),
-                    contentDescription = null,
-                    tint = Color(0xFFA6AAB4),
-                    modifier = Modifier.size(if (keyboardVisible) 14.dp else 15.dp),
-                )
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    quickText("به کمک نیاز دارید؟", "Need help?"),
-                    color = Color(0xFFA6AAB4),
-                    fontFamily = Peyda,
-                    fontSize = if (keyboardVisible) 11.sp else 12.sp,
-                )
-            }
+            ReferenceOrDivider(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (635.dp * layoutScale))
+                    .padding(horizontal = 18.dp),
+            )
 
-            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 12.dp))
-            ReferenceLoginTerms(compact = keyboardVisible)
-            Spacer(Modifier.height(if (keyboardVisible) 5.dp else 12.dp))
+            ReferenceSocialButtons(
+                compact = false,
+                onGoogleRequested = onGoogleRequested,
+                onEmailRequested = {
+                    email = ""
+                    password = ""
+                    showEmailDialog = true
+                },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (655.dp * layoutScale)),
+            )
+
+            ReferenceHelpRow(
+                onHelpRequested = onHelpRequested,
+                compact = false,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (745.dp * layoutScale)),
+            )
+
+            ReferenceLoginTerms(
+                compact = false,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (780.dp * layoutScale))
+                    .padding(horizontal = 26.dp),
+            )
+        } else {
+            // Preserve the established keyboard rule: hero becomes compact while input stays reachable.
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .imePadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(40.dp),
+                    horizontalArrangement = Arrangement.Absolute.Right,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ReferenceLanguageSelector(
+                        language = language,
+                        compact = true,
+                        onClick = { showLanguageDialog = true },
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Image(
+                    painter = painterResource(R.drawable.nimhub_logo),
+                    contentDescription = "NimHUB Vpn",
+                    modifier = Modifier.size(width = 104.dp, height = 70.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                Spacer(Modifier.height(3.dp))
+                ReferenceWelcomeText(typedWelcome, cursorVisible, true)
+                Spacer(Modifier.height(14.dp))
+                ReferenceLicenseBar(
+                    value = license,
+                    enabled = !busy,
+                    compact = true,
+                    onValueChange = {
+                        license = it
+                        scanError = null
+                    },
+                    onScan = ::launchQrScanner,
+                    onPaste = ::pasteLicense,
+                    onSubmit = { submitLicense(license) },
+                )
+                val visibleError = scanError ?: error
+                if (!visibleError.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    ReferenceLoginError(visibleError)
+                }
+                Spacer(Modifier.height(5.dp))
+                ReferenceOrDivider()
+                Spacer(Modifier.height(5.dp))
+                ReferenceSocialButtons(
+                    compact = true,
+                    onGoogleRequested = onGoogleRequested,
+                    onEmailRequested = {
+                        email = ""
+                        password = ""
+                        showEmailDialog = true
+                    },
+                )
+                Spacer(Modifier.height(6.dp))
+                ReferenceHelpRow(onHelpRequested, compact = true)
+                Spacer(Modifier.height(6.dp))
+                ReferenceLoginTerms(compact = true)
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 
@@ -511,6 +516,163 @@ fun ReferenceLoginScreen(
 }
 
 @Composable
+private fun ReferenceLanguageSelector(
+    language: AppLanguage,
+    compact: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(Color(0xFF11151D).copy(alpha = .94f), RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFF252B35), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(
+                horizontal = if (compact) 11.dp else 12.dp,
+                vertical = if (compact) 7.dp else 8.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            language.label,
+            color = Color(0xFFBDC1CA),
+            fontFamily = Peyda,
+            fontSize = if (compact) 11.5.sp else 12.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Spacer(Modifier.width(5.dp))
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_down),
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(12.dp),
+        )
+    }
+}
+
+@Composable
+private fun ReferenceWelcomeText(
+    text: String,
+    cursorVisible: Boolean,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "│",
+                color = Color(0xFF4A82FF).copy(alpha = if (cursorVisible) 1f else 0f),
+                fontFamily = Peyda,
+                fontSize = if (compact) 16.sp else 18.sp,
+                fontWeight = FontWeight.Normal,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = text,
+                color = Color(0xFFD1D4DB),
+                fontFamily = Peyda,
+                fontSize = if (compact) 16.sp else 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReferenceLoginError(message: String) {
+    Text(
+        referenceLocalizedLoginError(message),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2A1116).copy(alpha = .72f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        color = Color(0xFFFF9AA8),
+        fontFamily = Peyda,
+        fontSize = 11.5.sp,
+        lineHeight = 15.sp,
+        textAlign = TextAlign.Center,
+        maxLines = 3,
+    )
+}
+
+@Composable
+private fun ReferenceSocialButtons(
+    compact: Boolean,
+    onGoogleRequested: () -> Unit,
+    onEmailRequested: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 12.dp else 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                ReferenceLoginSquareButton(
+                    icon = R.drawable.logo_google,
+                    contentDescription = quickText("ورود با گوگل", "Sign in with Google"),
+                    onClick = onGoogleRequested,
+                    iconTint = Color.Unspecified,
+                    compact = compact,
+                )
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-7).dp)
+                        .background(Color(0xFFE9EAED), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("10GB", color = Color(0xFF282B31), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(2.dp))
+                    Icon(
+                        painterResource(R.drawable.ic_gift),
+                        contentDescription = null,
+                        tint = Color(0xFF282B31),
+                        modifier = Modifier.size(11.dp),
+                    )
+                }
+            }
+            ReferenceLoginSquareButton(
+                icon = R.drawable.ic_mail,
+                contentDescription = quickText("ورود با ایمیل", "Sign in with email"),
+                onClick = onEmailRequested,
+                compact = compact,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReferenceHelpRow(
+    onHelpRequested: () -> Unit,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.clickable(onClick = onHelpRequested),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_help_hexagon),
+            contentDescription = null,
+            tint = Color(0xFFA6AAB4),
+            modifier = Modifier.size(if (compact) 14.dp else 15.dp),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            quickText("به کمک نیاز دارید؟", "Need help?"),
+            color = Color(0xFFA6AAB4),
+            fontFamily = Peyda,
+            fontSize = if (compact) 11.sp else 12.sp,
+        )
+    }
+}
+
+@Composable
 private fun ReferenceLicenseBar(
     value: String,
     enabled: Boolean,
@@ -585,8 +747,8 @@ private fun ReferenceLoginInnerButton(icon: Int, onClick: () -> Unit, enabled: B
 }
 
 @Composable
-private fun ReferenceOrDivider() {
-    Row(Modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ReferenceOrDivider(modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().height(18.dp), verticalAlignment = Alignment.CenterVertically) {
         Canvas(Modifier.weight(1f).height(1.dp)) {
             drawLine(Color(0xFF292C33), androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Offset(size.width, 0f))
         }
@@ -625,7 +787,10 @@ private fun ReferenceLoginSquareButton(
 }
 
 @Composable
-private fun ReferenceLoginTerms(compact: Boolean) {
+private fun ReferenceLoginTerms(
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = buildAnnotatedString {
             append(quickText("با ادامه دادن، شما با ", "By continuing, you agree to the "))
@@ -638,7 +803,7 @@ private fun ReferenceLoginTerms(compact: Boolean) {
             }
             append(quickText(" موافقت می‌کنید", ""))
         },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = if (compact) 4.dp else 8.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = if (compact) 4.dp else 8.dp),
         color = Color(0xFF858A95),
         fontFamily = Peyda,
         fontSize = if (compact) 11.sp else 12.5.sp,
