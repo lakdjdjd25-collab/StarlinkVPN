@@ -208,9 +208,21 @@ export async function PATCH(request: NextRequest) {
           countTraffic: true, createdAt: true, updatedAt: true,
         },
       });
-      if (input.data.enabled === false || input.data.accessTier === "VIP") {
+
+      const revokesAllActiveSessions = input.data.enabled === false || Boolean(parsed);
+      const restrictsToVip = before.accessTier === "STANDARD" && input.data.accessTier === "VIP";
+      if (revokesAllActiveSessions) {
         await tx.trafficSession.updateMany({
           where: { manualServerId: before.id, status: "ACTIVE" },
+          data: { status: "REVOKED", endedAt: new Date() },
+        });
+      } else if (restrictsToVip) {
+        await tx.trafficSession.updateMany({
+          where: {
+            manualServerId: before.id,
+            status: "ACTIVE",
+            service: { vipAccess: false },
+          },
           data: { status: "REVOKED", endedAt: new Date() },
         });
       }
