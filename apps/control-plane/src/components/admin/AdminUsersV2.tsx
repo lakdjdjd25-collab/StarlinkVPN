@@ -87,6 +87,8 @@ const activityLabels: Record<string, string> = {
   "managed_license.update": "اشتراک ویرایش شد",
   "managed_license.resetCredentials": "رمز ورود بازنشانی شد",
   "managed_license.migrateProvider": "Provider اشتراک تغییر کرد",
+  "user.suspend": "حساب کاربر معلق شد",
+  "user.reactivate": "حساب کاربر فعال شد",
   "service.vipAccess": "دسترسی VIP تغییر کرد",
   "service.addTraffic": "حجم اضافه شد",
   "service.extend": "اشتراک تمدید شد",
@@ -230,10 +232,13 @@ export function AdminUsersV2() {
 
   async function mutate(payload: Record<string, unknown>, success: string, receipt = false) {
     const actionKey = `${String(payload.action)}:${String(payload.serviceId ?? payload.deviceId ?? payload.userId ?? "")}`;
+    const endpoint = payload.action === "set_account_status"
+      ? "/api/v1/admin/control-center/users/account-status"
+      : "/api/v1/admin/control-center/users";
     setBusy(actionKey);
     setError("");
     try {
-      const response = await fetch("/api/v1/admin/control-center/users", {
+      const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -402,7 +407,7 @@ function UserDrawer({
         <nav className="v2-drawer-tabs" aria-label="بخش‌های کاربر">{tabLabels.map((item) => <button type="button" className={tab === item.id ? "is-active" : ""} onClick={() => setTab(item.id)} key={item.id}>{item.label}</button>)}</nav>
 
         <div className="v2-drawer-body">
-          {tab === "overview" ? <OverviewTab user={user} /> : null}
+          {tab === "overview" ? <OverviewTab user={user} busy={busy} onMutate={onMutate} /> : null}
           {tab === "subscription" ? (
             <section className="v2-drawer-section">
               <SectionHead title="مدیریت اشتراک" note="حجم و اعتبار به صورت افزایشی اعمال می‌شوند و مصرف صفر نمی‌شود." />
@@ -445,9 +450,60 @@ function SectionHead({ title, note }: { title: string; note?: string }) {
   return <div className="v2-drawer-section-head"><h3>{title}</h3>{note ? <p>{note}</p> : null}</div>;
 }
 
-function OverviewTab({ user }: { user: UserItem }) {
+function OverviewTab({
+  user, busy, onMutate,
+}: {
+  user: UserItem;
+  busy: string;
+  onMutate: (payload: Record<string, unknown>, success: string, receipt?: boolean) => Promise<boolean>;
+}) {
   const service = user.primaryService;
-  return <section className="v2-drawer-section"><SectionHead title="نمای کلی" /><div className="v2-overview-grid"><Fact label="وضعیت Account" value={user.accountStatus === "ACTIVE" ? "فعال" : "معلق"} /><Fact label="وضعیت اشتراک" value={service?.status ?? "—"} /><Fact label="دسترسی" value={service?.vipAccess ? "VIP" : "Standard"} /><Fact label="دستگاه فعال" value={`${user.activeDevices} / ${service?.maxDevices ?? "—"}`} /><Fact label="مانده حجم" value={service ? formatBytes(service.remainingBytes) : "—"} /><Fact label="انقضا" value={service ? formatDate(service.expiresAt) : "—"} /><Fact label="گروه سرورها" value={service?.serverGroup ?? "—"} /><Fact label="تعداد سرور" value={service ? formatNumber(service.serverCount) : "—"} /></div>{user.services.length > 1 ? <div className="v2-service-list"><SectionHead title="اشتراک‌های این حساب" />{user.services.map((item) => <div key={item.id}><span className={`v2-status-dot is-${item.status === "ACTIVE" ? "success" : "danger"}`} /><span><strong>{item.name}</strong><small>{formatBytes(item.remainingBytes)} مانده · {formatDate(item.expiresAt)}</small></span>{item.vipAccess ? <StatusBadge tone="vip">VIP</StatusBadge> : null}</div>)}</div> : null}</section>;
+  const nextAccountStatus = user.accountStatus === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
+  const suspending = nextAccountStatus === "SUSPENDED";
+
+  return (
+    <section className="v2-drawer-section">
+      <SectionHead title="نمای کلی" />
+      <div className="v2-overview-grid">
+        <Fact label="وضعیت Account" value={user.accountStatus === "ACTIVE" ? "فعال" : "معلق"} />
+        <Fact label="وضعیت اشتراک" value={service?.status ?? "—"} />
+        <Fact label="دسترسی" value={service?.vipAccess ? "VIP" : "Standard"} />
+        <Fact label="دستگاه فعال" value={`${user.activeDevices} / ${service?.maxDevices ?? "—"}`} />
+        <Fact label="مانده حجم" value={service ? formatBytes(service.remainingBytes) : "—"} />
+        <Fact label="انقضا" value={service ? formatDate(service.expiresAt) : "—"} />
+        <Fact label="گروه سرورها" value={service?.serverGroup ?? "—"} />
+        <Fact label="تعداد سرور" value={service ? formatNumber(service.serverCount) : "—"} />
+      </div>
+
+      <div className="v2-danger-zone">
+        <div>
+          <strong>{suspending ? "تعلیق حساب کاربر" : "فعال‌سازی حساب کاربر"}</strong>
+          <small>{suspending ? "ورود و Sessionهای فعال بسته می‌شوند؛ وضعیت اشتراک‌ها تغییر نمی‌کند." : "فقط Account فعال می‌شود؛ اشتراک‌های متوقف یا منقضی خودکار تغییر نمی‌کنند."}</small>
+        </div>
+        <button
+          type="button"
+          disabled={Boolean(busy)}
+          className={suspending ? "is-danger" : "is-success"}
+          onClick={() => {
+            if (suspending && !window.confirm("حساب این کاربر معلق شود؟ همه Sessionها و دستگاه‌های فعال لغو می‌شوند، اما وضعیت Serviceها دست‌نخورده می‌ماند.")) return;
+            void onMutate(
+              { action: "set_account_status", userId: user.id, status: nextAccountStatus },
+              suspending ? "حساب کاربر معلق شد؛ Serviceها تغییر نکردند." : "حساب کاربر فعال شد.",
+            );
+          }}
+        >
+          {suspending ? "تعلیق حساب" : "فعال‌سازی حساب"}
+        </button>
+      </div>
+
+      {user.services.length > 1 ? (
+        <div className="v2-service-list">
+          <SectionHead title="اشتراک‌های این حساب" />
+          {user.services.map((item) => <div key={item.id}><span className={`v2-status-dot is-${item.status === "ACTIVE" ? "success" : "danger"}`} /><span><strong>{item.name}</strong><small>{formatBytes(item.remainingBytes)} مانده · {formatDate(item.expiresAt)}</small></span>{item.vipAccess ? <StatusBadge tone="vip">VIP</StatusBadge> : null}</div>)}
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function UsageBlock({ service }: { service: ServiceItem }) {
