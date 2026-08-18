@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAccessTier, filterAccessibleNodes } from "./vip-access";
+import { canAccessTier, filterAccessibleNodes, VIP_ACCESS_REQUIRED } from "./vip-access";
 
 describe("VIP access policy", () => {
   it("allows STANDARD nodes for every service", () => {
@@ -12,10 +12,11 @@ describe("VIP access policy", () => {
     expect(canAccessTier(true, "VIP")).toBe(true);
   });
 
-  it("rejects the authorization decision for a direct VIP config attempt from a STANDARD service", () => {
+  it("keeps the direct VIP authorization error contract stable", () => {
     const standardServiceVipAccess = false;
     const directlyRequestedNodeTier = "VIP" as const;
     expect(canAccessTier(standardServiceVipAccess, directlyRequestedNodeTier)).toBe(false);
+    expect(VIP_ACCESS_REQUIRED).toBe("VIP_ACCESS_REQUIRED");
   });
 
   it("filters VIP metadata out of STANDARD bootstrap responses", () => {
