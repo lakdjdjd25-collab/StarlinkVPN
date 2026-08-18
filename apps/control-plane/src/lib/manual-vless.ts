@@ -39,6 +39,14 @@ function queryObject(params: URLSearchParams): Record<string, string> {
   return result;
 }
 
+function queryValue(parsed: URL, ...names: string[]): string | undefined {
+  for (const name of names) {
+    const value = parsed.searchParams.get(name)?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
 function parseBoolean(value: string | null | undefined): boolean {
   if (!value) return false;
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
@@ -49,14 +57,31 @@ function parseAlpn(value: string | null): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function normalizedTransport(parsed: URL): string {
+  const raw = (queryValue(parsed, "type", "transport") || "tcp").toLowerCase();
+  const aliases: Record<string, string> = {
+    raw: "tcp",
+    none: "tcp",
+    websocket: "ws",
+    http2: "h2",
+    "http-upgrade": "httpupgrade",
+  };
+  const transport = aliases[raw] || raw;
+  const headerType = (queryValue(parsed, "headerType", "header_type") || "").toLowerCase();
+  // Xray/V2Ray links commonly represent HTTP disguising as type=tcp&headerType=http.
+  // sing-box models this as the HTTP V2Ray transport instead of a generic TCP transport.
+  if (transport === "tcp" && headerType === "http") return "http";
+  return transport;
+}
+
 function transportConfig(parsed: URL, transport: string): Record<string, unknown> | undefined {
-  const path = parsed.searchParams.get("path") || undefined;
-  const hostHeader = parsed.searchParams.get("host") || undefined;
-  const serviceName = parsed.searchParams.get("serviceName") || undefined;
+  const path = queryValue(parsed, "path");
+  const hostHeader = queryValue(parsed, "host");
+  const serviceName = queryValue(parsed, "serviceName", "service_name");
   switch (transport) {
     case "ws": {
-      const maxEarlyData = Number(parsed.searchParams.get("ed") || 0);
-      const earlyDataHeaderName = parsed.searchParams.get("eh") || undefined;
+      const maxEarlyData = Number(queryValue(parsed, "ed", "maxEarlyData", "max_early_data") || 0);
+      const earlyDataHeaderName = queryValue(parsed, "eh", "earlyDataHeaderName", "early_data_header_name");
       return {
         type: "ws",
         ...(path ? { path } : {}),
@@ -68,12 +93,14 @@ function transportConfig(parsed: URL, transport: string): Record<string, unknown
     case "grpc":
       return { type: "grpc", ...(serviceName ? { service_name: serviceName } : {}) };
     case "http":
-    case "h2":
+    case "h2": {
+      const hosts = hostHeader?.split(",").map((item) => item.trim()).filter(Boolean) ?? [];
       return {
         type: "http",
         ...(path ? { path } : {}),
-        ...(hostHeader ? { host: [hostHeader] } : {}),
+        ...(hosts.length ? { host: hosts } : {}),
       };
+    }
     case "httpupgrade":
       return {
         type: "httpupgrade",
@@ -126,6 +153,17 @@ export function overrideVlessEndpoint(
   return checked.data;
 }
 
+export function resolveVlessReplacementEndpoint(
+  previous: { host: string; port: number },
+  parsed: Pick<ParsedVless, "host" | "port">,
+  submitted: { host?: string; port?: number },
+): { host: string; port: number } {
+  const submittedHost = submitted.host?.trim();
+  const host = submittedHost && submittedHost !== previous.host ? submittedHost : parsed.host;
+  const port = submitted.port !== undefined && submitted.port !== previous.port ? submitted.port : parsed.port;
+  return validateEndpoint(host, port);
+}
+
 export function parseVlessUri(value: string): ParsedVless {
   const raw = value.trim();
   if (!raw.toLowerCase().startsWith("vless://")) throw new Error("VLESS_CONFIG_REQUIRED");
@@ -140,20 +178,20 @@ export function parseVlessUri(value: string): ParsedVless {
   const endpoint = validateEndpoint(parsed.hostname, Number(parsed.port || 443));
   const host = endpoint.host;
   const port = endpoint.port;
-  const transport = (parsed.searchParams.get("type") || "tcp").toLowerCase();
+  const transport = normalizedTransport(parsed);
   if (!SUPPORTED_TRANSPORTS.has(transport)) throw new Error("VLESS_TRANSPORT_UNSUPPORTED");
-  const security = (parsed.searchParams.get("security") || "none").toLowerCase();
+  const security = (queryValue(parsed, "security") || "none").toLowerCase();
   if (!SUPPORTED_SECURITY.has(security)) throw new Error("VLESS_SECURITY_UNSUPPORTED");
-  const encryption = (parsed.searchParams.get("encryption") || "none").toLowerCase();
+  const encryption = (queryValue(parsed, "encryption") || "none").toLowerCase();
   if (encryption !== "none") throw new Error("VLESS_ENCRYPTION_UNSUPPORTED");
-  const sni = parsed.searchParams.get("sni") || parsed.searchParams.get("serverName") || undefined;
-  const requestedFingerprint = parsed.searchParams.get("fp") || parsed.searchParams.get("fingerprint") || undefined;
+  const sni = queryValue(parsed, "sni", "serverName", "server_name");
+  const requestedFingerprint = queryValue(parsed, "fp", "fingerprint");
   const fingerprint = requestedFingerprint || (security === "reality" ? "chrome" : undefined);
-  const flow = parsed.searchParams.get("flow") || undefined;
-  const path = parsed.searchParams.get("path") || undefined;
-  const serviceName = parsed.searchParams.get("serviceName") || undefined;
+  const flow = queryValue(parsed, "flow");
+  const path = queryValue(parsed, "path");
+  const serviceName = queryValue(parsed, "serviceName", "service_name");
   const packetEncoding = (
-    parsed.searchParams.get("packetEncoding") || parsed.searchParams.get("packet_encoding") || ""
+    queryValue(parsed, "packetEncoding", "packet_encoding") || ""
   ).toLowerCase();
   if (!SUPPORTED_PACKET_ENCODINGS.has(packetEncoding)) throw new Error("VLESS_PACKET_ENCODING_UNSUPPORTED");
 
@@ -173,14 +211,14 @@ export function parseVlessUri(value: string): ParsedVless {
     const tls: Record<string, unknown> = {
       enabled: true,
       ...(sni ? { server_name: sni } : {}),
-      ...(parseBoolean(parsed.searchParams.get("allowInsecure") || parsed.searchParams.get("insecure")) ? { insecure: true } : {}),
+      ...(parseBoolean(queryValue(parsed, "allowInsecure", "allow_insecure", "insecure")) ? { insecure: true } : {}),
       ...(alpn.length ? { alpn } : {}),
       ...(fingerprint ? { utls: { enabled: true, fingerprint } } : {}),
     };
     if (security === "reality") {
-      const publicKey = parsed.searchParams.get("pbk") || parsed.searchParams.get("publicKey") || "";
+      const publicKey = queryValue(parsed, "pbk", "publicKey", "public_key") || "";
       if (!publicKey) throw new Error("VLESS_REALITY_KEY_REQUIRED");
-      const shortId = parsed.searchParams.get("sid") || parsed.searchParams.get("shortId") || "";
+      const shortId = queryValue(parsed, "sid", "shortId", "short_id") || "";
       validateReality(publicKey, shortId);
       tls.reality = {
         enabled: true,
@@ -222,7 +260,7 @@ export function parseVlessUri(value: string): ParsedVless {
     path,
     serviceName,
     flow,
-    fragment: parsed.hash ? decodeURIComponent(parsed.hash.slice(1)) : undefined,
+    fragment: parsed.hash ? decodeURIComponent(parsed.hash.slice(1)).trim() || undefined : undefined,
     query: queryObject(parsed.searchParams),
     runtimeConfig: checked.data,
   };

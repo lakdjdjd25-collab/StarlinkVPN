@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminIcon } from "./AdminIcon";
 
 type Preview = {
@@ -12,6 +12,8 @@ type Preview = {
   country: string;
   countryCode: string;
   flag: string;
+  fragment: string | null;
+  suggestedName: string;
 };
 
 type ManualServer = {
@@ -53,6 +55,22 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.error?.message ?? "درخواست انجام نشد");
   }
   return body.data;
+}
+
+async function validateManualConfig(
+  config: string,
+  countryOverride?: string | null,
+  countryCodeOverride?: string | null,
+): Promise<Preview> {
+  return api<Preview>("/api/v1/admin/manual-servers/validate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      config,
+      countryOverride: countryOverride?.trim() || null,
+      countryCodeOverride: countryCodeOverride?.trim() || null,
+    }),
+  });
 }
 
 function formatNumber(value: number | string): string {
@@ -123,11 +141,15 @@ export function AdminManualServersV2() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [configInput, setConfigInput] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [address, setAddress] = useState("");
   const [port, setPort] = useState("");
   const [countryOverride, setCountryOverride] = useState("");
   const [countryCode, setCountryCode] = useState("");
+  const [autoImporting, setAutoImporting] = useState(false);
   const [createCategory, setCreateCategory] = useState<"UNLIMITED" | "LIMITED">("UNLIMITED");
+  const createNameTouched = useRef(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -142,6 +164,47 @@ export function AdminManualServersV2() {
   }, []);
 
   useEffect(() => { void reload(); }, [reload]);
+
+  useEffect(() => {
+    const config = configInput.trim();
+    if (!config) {
+      setPreview(null);
+      setAutoImporting(false);
+      return;
+    }
+    if (!config.toLowerCase().startsWith("vless://")) {
+      setPreview(null);
+      setAutoImporting(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setAutoImporting(true);
+      void validateManualConfig(config)
+        .then((result) => {
+          if (cancelled) return;
+          setPreview(result);
+          setAddress(result.host);
+          setPort(String(result.port));
+          setCountryOverride(result.country === "Unknown" ? "" : result.country);
+          setCountryCode(result.countryCode.toLowerCase() === "global" ? "" : result.countryCode);
+          if (!createNameTouched.current) setDisplayName(result.suggestedName);
+          setError("");
+        })
+        .catch((cause) => {
+          if (cancelled) return;
+          setPreview(null);
+          setError(cause instanceof Error ? cause.message : "خواندن لینک VLESS ناموفق بود");
+        })
+        .finally(() => {
+          if (!cancelled) setAutoImporting(false);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [configInput]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -168,6 +231,15 @@ export function AdminManualServersV2() {
     };
   }, [servers]);
 
+  function applyCreateImport(result: Preview) {
+    setPreview(result);
+    setAddress(result.host);
+    setPort(String(result.port));
+    setCountryOverride(result.country === "Unknown" ? "" : result.country);
+    setCountryCode(result.countryCode.toLowerCase() === "global" ? "" : result.countryCode);
+    if (!createNameTouched.current) setDisplayName(result.suggestedName);
+  }
+
   async function validate(form: HTMLFormElement): Promise<Preview | null> {
     const data = new FormData(form);
     const config = String(data.get("config") ?? "").trim();
@@ -178,20 +250,12 @@ export function AdminManualServersV2() {
     setBusy(true);
     setError("");
     try {
-      const result = await api<Preview>("/api/v1/admin/manual-servers/validate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          config,
-          countryOverride: String(data.get("countryOverride") ?? "").trim() || null,
-          countryCodeOverride: String(data.get("countryCode") ?? "").trim() || null,
-        }),
-      });
-      setPreview(result);
-      setAddress((value) => value.trim() || result.host);
-      setPort((value) => value.trim() || String(result.port));
-      setCountryOverride((value) => value.trim() || (result.country === "Unknown" ? "" : result.country));
-      setCountryCode((value) => value.trim() || (result.countryCode.toLowerCase() === "global" ? "" : result.countryCode));
+      const result = await validateManualConfig(
+        config,
+        String(data.get("countryOverride") ?? "").trim() || null,
+        String(data.get("countryCode") ?? "").trim() || null,
+      );
+      applyCreateImport(result);
       return result;
     } catch (cause) {
       setPreview(null);
@@ -217,7 +281,7 @@ export function AdminManualServersV2() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           config: String(data.get("config")),
-          displayName: String(data.get("displayName")),
+          displayName: String(data.get("displayName") || checked.suggestedName),
           host: String(data.get("host") ?? "").trim() || checked.host,
           port: Number(String(data.get("port") ?? "").trim() || checked.port),
           category,
@@ -227,12 +291,15 @@ export function AdminManualServersV2() {
           enabled: data.get("enabled") === "on",
           countTraffic: data.get("countTraffic") === "on",
           sortOrder: Number(data.get("sortOrder") || 0),
-          countryOverride: String(data.get("countryOverride") ?? "").trim() || (checked.country === "Unknown" ? "" : checked.country),
+          countryOverride: String(data.get("countryOverride") ?? "").trim() || (checked.country === "Unknown" ? checked.host : checked.country),
           countryCode: String(data.get("countryCode") ?? "").trim() || null,
         }),
       });
       form.reset();
+      createNameTouched.current = false;
       setPreview(null);
+      setConfigInput("");
+      setDisplayName("");
       setAddress("");
       setPort("");
       setCountryOverride("");
@@ -357,12 +424,12 @@ export function AdminManualServersV2() {
       </div>
 
       <details className="v2-server-provision v2-manual-provision">
-        <summary><span><strong>افزودن Manual Server</strong><small>VLESS Config را Validate کن و سپس به کنترل سنتر اضافه کن.</small></span><span className="v2-server-provision-marker">+</span></summary>
+        <summary><span><strong>افزودن Manual Server</strong><small>فقط لینک VLESS را وارد کن؛ مشخصات اتصال خودکار پر می‌شوند و قابل ویرایش می‌مانند.</small></span><span className="v2-server-provision-marker">+</span></summary>
         <div className="v2-manual-provision-body">
           <form onSubmit={create}>
-            <div className="field"><label>VLESS Config</label><textarea className="textarea" name="config" rows={4} dir="ltr" placeholder="vless://..." required onChange={() => setPreview(null)} /></div>
+            <div className="field"><label>VLESS Config</label><textarea className="textarea" name="config" rows={4} dir="ltr" placeholder="vless://..." required value={configInput} onChange={(event) => { setConfigInput(event.target.value); setPreview(null); }} /></div>
             <div className="form-grid">
-              <div className="field"><label>نام سرور</label><input className="input" name="displayName" required /></div>
+              <div className="field"><label>نام سرور</label><input className="input" name="displayName" value={displayName} onChange={(event) => { createNameTouched.current = true; setDisplayName(event.target.value); }} required /></div>
               <div className="field"><label>آدرس</label><input className="input" name="host" dir="ltr" value={address} onChange={(event) => setAddress(event.target.value)} required /></div>
               <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} value={port} onChange={(event) => setPort(event.target.value)} required /></div>
               <div className="field"><label>کشور</label><input className="input" name="countryOverride" value={countryOverride} onChange={(event) => setCountryOverride(event.target.value)} required /></div>
@@ -373,7 +440,7 @@ export function AdminManualServersV2() {
               <div className="field"><label>ترتیب</label><input className="input" name="sortOrder" type="number" defaultValue={0} /></div>
             </div>
             <div className="v2-manual-switches"><label><input type="checkbox" name="vip" /> VIP</label><label><input type="checkbox" name="enabled" defaultChecked /> فعال</label><label><input type="checkbox" name="countTraffic" defaultChecked /> کسر ترافیک</label></div>
-            <div className="v2-manual-create-actions"><button className="button secondary" type="button" disabled={busy} onClick={(event) => void validate(event.currentTarget.form!)}>Validate</button><button className="button" disabled={busy}>ذخیره سرور</button></div>
+            <div className="v2-manual-create-actions"><button className="button secondary" type="button" disabled={busy || autoImporting} onClick={(event) => void validate(event.currentTarget.form!)}>{autoImporting ? "در حال خواندن…" : "بررسی دوباره"}</button><button className="button" disabled={busy || autoImporting}>ذخیره سرور</button></div>
             {preview ? <div className="v2-manual-preview"><strong>{preview.flag} {preview.country}</strong><code dir="ltr">{preview.protocol} · {preview.host}:{preview.port} · {preview.transport} · {preview.security}</code></div> : null}
           </form>
         </div>
@@ -392,6 +459,60 @@ function ManualEditDrawer({ server, busy, onClose, onSubmit, onDelete }: {
   onDelete: (server: ManualServer) => Promise<void>;
 }) {
   const [category, setCategory] = useState<"UNLIMITED" | "LIMITED">(server.category);
+  const [replacement, setReplacement] = useState("");
+  const [displayName, setDisplayName] = useState(server.displayName);
+  const [host, setHost] = useState(server.host);
+  const [port, setPort] = useState(String(server.port));
+  const [country, setCountry] = useState(server.countryOverride ?? server.displayCountry);
+  const [countryCode, setCountryCode] = useState(server.countryCode ?? "");
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const nameTouched = useRef(false);
+
+  useEffect(() => {
+    const config = replacement.trim();
+    if (!config) {
+      setPreview(null);
+      setImportError("");
+      setImporting(false);
+      return;
+    }
+    if (!config.toLowerCase().startsWith("vless://")) {
+      setPreview(null);
+      setImportError("لینک جایگزین باید با vless:// شروع شود");
+      setImporting(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setImporting(true);
+      setImportError("");
+      void validateManualConfig(config)
+        .then((result) => {
+          if (cancelled) return;
+          setPreview(result);
+          setHost(result.host);
+          setPort(String(result.port));
+          setCountry(result.country === "Unknown" ? "" : result.country);
+          setCountryCode(result.countryCode.toLowerCase() === "global" ? "" : result.countryCode);
+          if (!nameTouched.current) setDisplayName(result.suggestedName);
+        })
+        .catch((cause) => {
+          if (cancelled) return;
+          setPreview(null);
+          setImportError(cause instanceof Error ? cause.message : "خواندن لینک جایگزین ناموفق بود");
+        })
+        .finally(() => {
+          if (!cancelled) setImporting(false);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [replacement]);
+
   return (
     <div className="v2-server-drawer-layer" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <aside className="v2-server-drawer" role="dialog" aria-modal="true" aria-label={`ویرایش ${server.displayName}`}>
@@ -399,21 +520,24 @@ function ManualEditDrawer({ server, busy, onClose, onSubmit, onDelete }: {
         <form onSubmit={(event) => void onSubmit(event, server)}>
           <div className="v2-server-drawer-body">
             <div className="form-grid">
-              <div className="field"><label>نام سرور</label><input className="input" name="displayName" defaultValue={server.displayName} required /></div>
-              <div className="field"><label>آدرس</label><input className="input" name="host" defaultValue={server.host} dir="ltr" required /></div>
-              <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} defaultValue={server.port} required /></div>
-              <div className="field"><label>کشور</label><input className="input" name="countryOverride" defaultValue={server.countryOverride ?? server.displayCountry} required /></div>
+              <div className="field"><label>نام سرور</label><input className="input" name="displayName" value={displayName} onChange={(event) => { nameTouched.current = true; setDisplayName(event.target.value); }} required /></div>
+              <div className="field"><label>آدرس</label><input className="input" name="host" value={host} onChange={(event) => setHost(event.target.value)} dir="ltr" required /></div>
+              <div className="field"><label>پورت</label><input className="input" name="port" type="number" min={1} max={65535} value={port} onChange={(event) => setPort(event.target.value)} required /></div>
+              <div className="field"><label>کشور</label><input className="input" name="countryOverride" value={country} onChange={(event) => setCountry(event.target.value)} required /></div>
               <div className="field"><label>دسته حجم</label><select className="select" name="category" value={category} onChange={(event) => setCategory(event.target.value as "UNLIMITED" | "LIMITED")}><option value="UNLIMITED">Unlimited ∞</option><option value="LIMITED">Limited</option></select></div>
               <div className="field"><label>نوع کاربرد</label><SubcategorySelect defaultValue={server.subcategory} /></div>
               <div className="field"><label>حجم سرور (GB)</label><input className="input" name="volumeGb" type="number" min="0.01" step="0.01" defaultValue={bytesToGbInput(server.volumeBytes)} required={category === "LIMITED"} disabled={category === "UNLIMITED"} /></div>
-              <div className="field"><label>کد کشور</label><input className="input" name="countryCode" defaultValue={server.countryCode ?? ""} maxLength={2} dir="ltr" /></div>
+              <div className="field"><label>کد کشور</label><input className="input" name="countryCode" value={countryCode} onChange={(event) => setCountryCode(event.target.value)} maxLength={2} dir="ltr" /></div>
               <div className="field"><label>ترتیب</label><input className="input" name="sortOrder" type="number" defaultValue={server.sortOrder} /></div>
             </div>
-            <div className="field"><label>جایگزینی VLESS Config</label><textarea className="textarea" name="config" rows={3} dir="ltr" placeholder="برای حفظ کانفیگ فعلی خالی بگذار" /></div>
+            <div className="field"><label>جایگزینی VLESS Config</label><textarea className="textarea" name="config" rows={3} dir="ltr" value={replacement} onChange={(event) => { setReplacement(event.target.value); setPreview(null); }} placeholder="لینک جدید را paste کن؛ فیلدها خودکار پر می‌شوند. برای حفظ کانفیگ فعلی خالی بگذار." /></div>
+            {importing ? <div className="v2-manual-preview"><strong>در حال خواندن لینک…</strong><code dir="ltr">VLESS auto import</code></div> : null}
+            {importError ? <div className="v2-users-error"><span className="v2-status-dot is-danger" /><span>{importError}</span></div> : null}
+            {preview && !importing ? <div className="v2-manual-preview"><strong>{preview.flag} {preview.country}</strong><code dir="ltr">{preview.protocol} · {preview.host}:{preview.port} · {preview.transport} · {preview.security}</code></div> : null}
             <div className="v2-manual-switches"><label><input type="checkbox" name="vip" defaultChecked={server.accessTier === "VIP"} /> VIP</label><label><input type="checkbox" name="enabled" defaultChecked={server.enabled} /> فعال</label><label><input type="checkbox" name="countTraffic" defaultChecked={server.countTraffic} /> کسر ترافیک</label></div>
             <div className="v2-manual-drawer-stats"><span><small>Traffic</small><strong>{formatBytes(server.stats.totalTraffic)}</strong></span><span><small>Sessions</small><strong>{formatNumber(server.stats.sessions)}</strong></span><span><small>Users</small><strong>{formatNumber(server.stats.uniqueUsers)}</strong></span><span><small>Last Used</small><strong>{formatDateTime(server.stats.lastUsed)}</strong></span></div>
           </div>
-          <footer><button className="button secondary v2-delete-button" type="button" disabled={busy} onClick={() => void onDelete(server)}>حذف سرور</button><div><button className="button secondary" type="button" onClick={onClose} disabled={busy}>انصراف</button><button className="button" disabled={busy}>ثبت تغییرات</button></div></footer>
+          <footer><button className="button secondary v2-delete-button" type="button" disabled={busy || importing} onClick={() => void onDelete(server)}>حذف سرور</button><div><button className="button secondary" type="button" onClick={onClose} disabled={busy || importing}>انصراف</button><button className="button" disabled={busy || importing || (replacement.trim().length > 0 && !preview)}>ثبت تغییرات</button></div></footer>
         </form>
       </aside>
     </div>

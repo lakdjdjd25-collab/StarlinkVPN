@@ -4,7 +4,13 @@ import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { decryptConfig, encryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
-import { countryFlag, detectGeoCountry, overrideVlessEndpoint, parseVlessUri } from "@/lib/manual-vless";
+import {
+  countryFlag,
+  detectGeoCountry,
+  overrideVlessEndpoint,
+  parseVlessUri,
+  resolveVlessReplacementEndpoint,
+} from "@/lib/manual-vless";
 
 const categorySchema = z.enum(["UNLIMITED", "LIMITED"]);
 const hostSchema = z.string().trim().min(1).max(253).refine((value) => !/\s/.test(value), "آدرس سرور معتبر نیست");
@@ -71,7 +77,11 @@ function parserMessage(error: unknown): string {
     VLESS_ENDPOINT_INVALID: "آدرس یا پورت سرور معتبر نیست",
     VLESS_TRANSPORT_UNSUPPORTED: "Transport این لینک پشتیبانی نمی‌شود",
     VLESS_SECURITY_UNSUPPORTED: "Security این لینک پشتیبانی نمی‌شود",
+    VLESS_ENCRYPTION_UNSUPPORTED: "Encryption این لینک با VLESS استاندارد سازگار نیست",
+    VLESS_PACKET_ENCODING_UNSUPPORTED: "Packet Encoding این لینک پشتیبانی نمی‌شود",
     VLESS_REALITY_KEY_REQUIRED: "کلید عمومی Reality در لینک وجود ندارد",
+    VLESS_REALITY_KEY_INVALID: "کلید عمومی Reality معتبر نیست",
+    VLESS_REALITY_SHORT_ID_INVALID: "Short ID مربوط به Reality معتبر نیست",
     VLESS_RUNTIME_INVALID: "این لینک به پیکربندی معتبر sing-box تبدیل نشد",
   };
   return messages[code] ?? "لینک VLESS قابل استفاده نیست";
@@ -245,14 +255,22 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const parsed = input.data.config ? parseVlessUri(input.data.config) : null;
-    const nextHost = input.data.host ?? parsed?.host ?? before.host;
-    const nextPort = input.data.port ?? parsed?.port ?? before.port;
-    const endpointChanged = Boolean(parsed) || input.data.host !== undefined || input.data.port !== undefined;
+    const replacementEndpoint = parsed
+      ? resolveVlessReplacementEndpoint(
+          { host: before.host, port: before.port },
+          parsed,
+          { host: input.data.host, port: input.data.port },
+        )
+      : null;
+    const nextHost = replacementEndpoint?.host ?? input.data.host ?? before.host;
+    const nextPort = replacementEndpoint?.port ?? input.data.port ?? before.port;
+    const configReplaced = Boolean(parsed);
+    const endpointChanged = configReplaced || nextHost !== before.host || nextPort !== before.port;
     const runtimeBase = parsed?.runtimeConfig ?? decryptConfig<Record<string, unknown>>(before.configCiphertext);
     const runtimeConfig = endpointChanged
       ? overrideVlessEndpoint(runtimeBase, nextHost, nextPort)
       : runtimeBase;
-    const geo = endpointChanged ? await detectGeoCountry(nextHost) : null;
+    const geo = nextHost !== before.host || configReplaced ? await detectGeoCountry(nextHost) : null;
 
     const updated = await db.$transaction(async (tx) => {
       const node = await tx.manualServer.update({
@@ -338,7 +356,7 @@ export async function PATCH(request: NextRequest) {
           enabled: updated.enabled,
           countTraffic: updated.countTraffic,
           sortOrder: updated.sortOrder,
-          configReplaced: Boolean(parsed),
+          configReplaced,
         },
       },
     });

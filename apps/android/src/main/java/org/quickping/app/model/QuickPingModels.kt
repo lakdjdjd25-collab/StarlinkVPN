@@ -2,6 +2,8 @@ package org.quickping.app.model
 
 enum class ConnectionStatus { Disconnected, Connecting, Connected, Error }
 
+enum class ServerPingState { CHECKING, AVAILABLE, TIMEOUT, UNKNOWN, CONNECTED }
+
 data class Server(
     val id: String,
     val countryCode: String,
@@ -24,6 +26,7 @@ data class Server(
     val locked: Boolean = false,
     val canConnect: Boolean = true,
     val sortOrder: Int = 0,
+    val pingState: ServerPingState = ServerPingState.CHECKING,
 ) {
     val isVip: Boolean get() = accessTier.equals("VIP", ignoreCase = true)
     val isManual: Boolean get() = serverType.equals("MANUAL", ignoreCase = true)

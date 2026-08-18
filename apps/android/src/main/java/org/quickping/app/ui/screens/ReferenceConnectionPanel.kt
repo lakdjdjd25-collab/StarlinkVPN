@@ -161,7 +161,7 @@ private fun ReferenceSelectedSummary(
     }
 
     Row(verticalAlignment = Alignment.Top) {
-        ReferencePingChip(server.pingMs)
+        ReferencePingChip(server)
         Spacer(Modifier.width(11.dp))
         Column(
             modifier = Modifier.width(132.dp),

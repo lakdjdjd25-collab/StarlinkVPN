@@ -11,28 +11,31 @@ internal data class PendingManualTrafficSession(
 internal object ManualTrafficRuntimeRegistry {
     private val access = Any()
     private var pending: PendingManualTrafficSession? = null
-    private var activeManualTunnel = false
+    private var trafficMonitorRequired = false
 
     fun replace(value: PendingManualTrafficSession?) {
         synchronized(access) {
             pending = value
-            activeManualTunnel = false
+            trafficMonitorRequired = false
         }
     }
 
     fun take(): PendingManualTrafficSession? = synchronized(access) {
         pending.also { value ->
             pending = null
-            activeManualTunnel = value != null
+            // Accounting is a connection requirement only when this Manual Server is configured
+            // to count traffic. An unmetered/manual tunnel must not fail solely because the
+            // optional sing-box status monitor is unavailable.
+            trafficMonitorRequired = value?.countTraffic == true
         }
     }
 
-    fun trafficMonitoringRequired(): Boolean = synchronized(access) { activeManualTunnel }
+    fun trafficMonitoringRequired(): Boolean = synchronized(access) { trafficMonitorRequired }
 
     fun clear() {
         synchronized(access) {
             pending = null
-            activeManualTunnel = false
+            trafficMonitorRequired = false
         }
     }
 }
