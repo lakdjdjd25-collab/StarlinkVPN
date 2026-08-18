@@ -118,26 +118,31 @@ export async function GET(request: NextRequest) {
           || service.pasarGuardBinding.providerId !== activeProvider.id
           || !service.pasarGuardBinding.lastSyncAt),
       );
-      const managedServers = service.nodes.map(({ node }) => {
-        const access = serverAccessState(service.vipAccess, node.accessTier);
-        return {
-          id: node.id,
-          location: node.region.name,
-          countryCode: node.region.countryCode,
-          remarks: node.name,
-          host: access.canConnect ? node.host : "",
-          port: access.canConnect ? node.port : 0,
-          coreType: node.coreType,
-          freeAllowed: node.freeAllowed,
-          unmetered: node.unmetered,
-          accessTier: node.accessTier,
-          status: node.status,
-          category: null,
-          serverType: "MANAGED",
-          countTraffic: false,
-          ...access,
-        };
-      });
+      // Preserve the original VIP privacy contract for managed nodes: a STANDARD service never
+      // receives managed VIP node metadata. Manual VIP entries are the only visible-but-locked
+      // entries because that behavior is required by the Manual Server list UX.
+      const managedServers = service.nodes
+        .filter(({ node }) => service.vipAccess || node.accessTier !== "VIP")
+        .map(({ node }) => {
+          const access = serverAccessState(service.vipAccess, node.accessTier);
+          return {
+            id: node.id,
+            location: node.region.name,
+            countryCode: node.region.countryCode,
+            remarks: node.name,
+            host: node.host,
+            port: node.port,
+            coreType: node.coreType,
+            freeAllowed: node.freeAllowed,
+            unmetered: node.unmetered,
+            accessTier: node.accessTier,
+            status: node.status,
+            category: null,
+            serverType: "MANAGED",
+            countTraffic: false,
+            ...access,
+          };
+        });
       const dynamicManualServers = manualServers.map((node) => {
         const access = serverAccessState(service.vipAccess, node.accessTier);
         const country = node.countryOverride || node.country || "Unknown";
