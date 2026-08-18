@@ -1,0 +1,23 @@
+.v2-operator-admin { display: grid; gap: 12px; }
+.v2-operator-create { display: grid; grid-template-columns: minmax(180px,1fr) 150px minmax(180px,.8fr) auto; gap: 9px; align-items: end; }
+.v2-operator-create .button { min-height: 38px; }
+.v2-operator-message { margin: 0; color: #8fcfa9; font-size: 9px; }
+.v2-operator-list { display: grid; border: 1px solid rgba(255,255,255,.055); border-radius: 9px; overflow: hidden; }
+.v2-operator-row { display: grid; grid-template-columns: minmax(220px,1fr) 125px 125px auto; gap: 8px; align-items: center; padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,.04); background: rgba(255,255,255,.01); }
+.v2-operator-row:last-child { border-bottom: 0; }
+.v2-operator-row > span { display: grid; gap: 2px; min-width: 0; }
+.v2-operator-row strong { color: #cdd1d8; font-size: 9px; overflow: hidden; text-overflow: ellipsis; }
+.v2-operator-row small { color: #6e7480; font-size: 8px; }
+.v2-operator-row .select { min-height: 31px; font-size: 9px; }
+.v2-operator-row .button { min-height: 31px; padding: 0 8px; font-size: 9px; }
+@media (max-width: 900px) {
+  .v2-operator-create { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .v2-operator-create .button { width: 100%; }
+  .v2-operator-row { grid-template-columns: minmax(180px,1fr) 110px 110px auto; }
+}
+@media (max-width: 720px) {
+  .v2-operator-create { grid-template-columns: 1fr; }
+  .v2-operator-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .v2-operator-row > span { grid-column: 1 / -1; }
+  .v2-operator-row .button { width: 100%; }
+}
