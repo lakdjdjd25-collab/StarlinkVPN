@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { overrideVlessEndpoint, parseVlessUri } from "./manual-vless";
+import {
+  overrideVlessEndpoint,
+  parseVlessUri,
+  resolveVlessReplacementEndpoint,
+} from "./manual-vless";
 
 const REALITY_PUBLIC_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -33,6 +37,31 @@ describe("manual VLESS parser", () => {
     expect(outbound.packet_encoding).toBe("xudp");
   });
 
+  it("converts Xray tcp plus HTTP header disguise into sing-box HTTP transport", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:80?type=tcp&headerType=http&host=edge-a.example.com%2Cedge-b.example.com&path=%2Fhidden&security=none",
+    );
+    const outbound = (parsed.runtimeConfig.outbounds as Array<Record<string, unknown>>)[0];
+    expect(parsed.transport).toBe("http");
+    expect(outbound.transport).toEqual({
+      type: "http",
+      path: "/hidden",
+      host: ["edge-a.example.com", "edge-b.example.com"],
+    });
+  });
+
+  it("accepts common raw and websocket transport aliases", () => {
+    const raw = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=raw&security=none",
+    );
+    const websocket = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=websocket&security=tls&sni=example.com&path=%2Fws",
+    );
+    expect(raw.transport).toBe("tcp");
+    expect((raw.runtimeConfig.outbounds as Array<Record<string, unknown>>)[0].transport).toBeUndefined();
+    expect(websocket.transport).toBe("ws");
+  });
+
   it("supports an IP endpoint and keeps unknown query parameters", () => {
     const parsed = parseVlessUri(
       "vless://11111111-1111-4111-8111-111111111111@203.0.113.9:8443?security=none&type=tcp&vendorFlag=alpha#IP%20Node",
@@ -57,12 +86,13 @@ describe("manual VLESS parser", () => {
     expect(tls.reality).toEqual({ enabled: true, public_key: REALITY_PUBLIC_KEY, short_id: "abcd" });
   });
 
-  it("parses gRPC service name", () => {
+  it("parses gRPC service-name aliases", () => {
     const parsed = parseVlessUri(
-      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&security=tls&serviceName=nimhub&sni=example.com",
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?type=grpc&security=tls&service_name=nimhub&sni=example.com",
     );
     expect(parsed.transport).toBe("grpc");
     expect(parsed.serviceName).toBe("nimhub");
+    expect(((parsed.runtimeConfig.outbounds as Array<Record<string, unknown>>)[0].transport as Record<string, unknown>).service_name).toBe("nimhub");
   });
 
   it("overrides the connection address and port without changing TLS metadata", () => {
@@ -74,6 +104,28 @@ describe("manual VLESS parser", () => {
     expect(outbound.server).toBe("198.51.100.20");
     expect(outbound.server_port).toBe(8443);
     expect((outbound.tls as Record<string, unknown>).server_name).toBe("edge.example.com");
+  });
+
+  it("uses the replacement URI endpoint when a legacy edit form resubmits the old endpoint", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@new.example.com:8443?security=none",
+    );
+    expect(resolveVlessReplacementEndpoint(
+      { host: "old.example.com", port: 443 },
+      parsed,
+      { host: "old.example.com", port: 443 },
+    )).toEqual({ host: "new.example.com", port: 8443 });
+  });
+
+  it("preserves an explicit endpoint override made while replacing a URI", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@new.example.com:8443?security=none",
+    );
+    expect(resolveVlessReplacementEndpoint(
+      { host: "old.example.com", port: 443 },
+      parsed,
+      { host: "override.example.com", port: 9443 },
+    )).toEqual({ host: "override.example.com", port: 9443 });
   });
 
   it("rejects invalid endpoint overrides", () => {
