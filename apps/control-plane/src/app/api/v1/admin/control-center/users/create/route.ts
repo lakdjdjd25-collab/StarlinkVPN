@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { NextRequest as ForwardRequest } from "next/server";
+import { POST as createManagedLicense } from "@/app/api/v1/admin/licenses/route";
 import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { db } from "@/lib/db";
-import { POST as createManagedLicense } from "@/app/api/v1/admin/licenses/route";
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return fail(403, "invalid_origin", "مبدأ درخواست معتبر نیست");
@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
   const input = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!input || typeof input !== "object") return fail(400, "invalid_input", "اطلاعات کاربر معتبر نیست");
   const vipAccess = input.vipAccess === true;
-  const { vipAccess: _ignored, ...legacyPayload } = input;
+  const legacyPayload = { ...input };
+  delete legacyPayload.vipAccess;
 
   const forwarded = new ForwardRequest(request.url, {
     method: "POST",
