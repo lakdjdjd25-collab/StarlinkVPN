@@ -59,6 +59,7 @@ enum AccessTier {
 enum ManualServerCategory {
   UNLIMITED
   GAMING
+  LIMITED
 }
 
 enum TrafficSessionStatus {
@@ -131,22 +132,6 @@ model Device {
   refreshTokens RefreshToken[]
 
   @@index([userId, revokedAt])
-}
-
-model RefreshToken {
-  id            String    @id @default(cuid())
-  userId        String
-  deviceId      String
-  tokenHash     String    @unique
-  expiresAt     DateTime
-  revokedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  rotatedFromId String?
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-
-  @@index([userId, expiresAt])
   @@index([deviceId, expiresAt])
 }
 
@@ -288,6 +273,8 @@ model ManualServer {
   countryCode      String?
   countryOverride  String?
   category         ManualServerCategory @default(UNLIMITED)
+  subcategory      String?
+  volumeBytes      BigInt?
   accessTier       AccessTier           @default(STANDARD)
   enabled          Boolean              @default(false)
   sortOrder        Int                  @default(0)
