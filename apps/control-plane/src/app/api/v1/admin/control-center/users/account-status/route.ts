@@ -30,6 +30,9 @@ export async function PATCH(request: NextRequest) {
   if (!user || user.role !== "CUSTOMER") {
     return fail(404, "customer_not_found", "حساب کاربر پیدا نشد");
   }
+  if (user.status !== "ACTIVE" && user.status !== "SUSPENDED") {
+    return fail(409, "account_deleted", "حساب حذف‌شده از این بخش قابل فعال‌سازی یا تعلیق نیست");
+  }
 
   const transition = adminAccountTransition(user.status, input.data.status);
   if (!transition.changed) {
