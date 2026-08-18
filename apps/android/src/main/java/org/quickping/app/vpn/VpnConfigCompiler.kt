@@ -26,7 +26,7 @@ internal object VpnConfigCompiler {
         val config = JSONObject(rawConfigJson)
         val route = config.optJSONObject("route") ?: JSONObject().also { config.put("route", it) }
         migrateLegacyProviderConfig(config, route)
-        val proxyOutbound = route.optString("final").takeIf(String::isNotBlank)
+        val proxyOutbound = configuredProxyOutboundTag(config, route)
             ?: firstUsableOutboundTag(config)
             ?: error("No usable proxy outbound is configured")
 
@@ -452,6 +452,24 @@ internal object VpnConfigCompiler {
         }
         outbounds.put(JSONObject().put("type", "direct").put("tag", DIRECT_OUTBOUND_TAG))
         return DIRECT_OUTBOUND_TAG
+    }
+
+    private fun configuredProxyOutboundTag(config: JSONObject, route: JSONObject): String? {
+        val configured = route.optString("final").takeIf(String::isNotBlank) ?: return null
+        config.optJSONArray("outbounds")?.let { outbounds ->
+            for (index in 0 until outbounds.length()) {
+                val outbound = outbounds.optJSONObject(index) ?: continue
+                if (outbound.optString("tag") != configured) continue
+                return configured.takeIf { outbound.optString("type") !in setOf("direct", "block", "dns") }
+            }
+        }
+        config.optJSONArray("endpoints")?.let { endpoints ->
+            for (index in 0 until endpoints.length()) {
+                val endpoint = endpoints.optJSONObject(index) ?: continue
+                if (endpoint.optString("tag") == configured) return configured
+            }
+        }
+        return null
     }
 
     private fun firstUsableOutboundTag(config: JSONObject): String? {

@@ -47,7 +47,13 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     private var pingJob: Job? = null
     private var accountJob: Job? = null
     private var restartJob: Job? = null
-    private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load(), management = settingsStore.loadManagement()))
+    private val _state = MutableStateFlow(
+        QuickPingUiState(
+            settings = settingsStore.load(),
+            management = settingsStore.loadManagement(),
+            selectedServerId = settingsStore.loadSelectedServerId(),
+        ),
+    )
     val state: StateFlow<QuickPingUiState> = _state.asStateFlow()
 
     init {
@@ -136,6 +142,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun selectServer(id: String) {
         if (id.isBlank() || id == _state.value.selectedServerId) return
+        settingsStore.saveSelectedServerId(id)
         _state.update { it.copy(selectedServerId = id) }
         restartVpnIfActive()
     }
@@ -313,6 +320,7 @@ class QuickPingViewModel(application: Application) : AndroidViewModel(applicatio
     fun signOut() {
         disconnectVpn()
         repository.signOut()
+        settingsStore.clearSelectedServerId()
         _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load(), management = settingsStore.loadManagement())
     }
 
@@ -562,7 +570,9 @@ private fun QuickPingUiState.withBootstrap(
         user = payload.user,
         service = service,
         servers = servers,
-        selectedServerId = servers.firstOrNull()?.id.orEmpty(),
+        selectedServerId = selectedServerId.takeIf { currentId ->
+            currentId.isNotBlank() && servers.any { server -> server.id == currentId }
+        } ?: servers.firstOrNull()?.id.orEmpty(),
         guardianCategories = guardian,
         notifications = payload.notifications,
         management = payload.management,

@@ -56,6 +56,23 @@ class QuickPingSettingsStore(context: Context) {
         preferences.edit().putString(KEY_MANAGER_TELEGRAM, normalized).apply()
     }
 
+    fun loadSelectedServerId(): String = preferences.getString(KEY_SELECTED_SERVER_ID, null)
+        .orEmpty()
+        .trim()
+
+    fun saveSelectedServerId(id: String) {
+        val normalized = id.trim()
+        if (normalized.isBlank()) {
+            clearSelectedServerId()
+        } else {
+            preferences.edit().putString(KEY_SELECTED_SERVER_ID, normalized).apply()
+        }
+    }
+
+    fun clearSelectedServerId() {
+        preferences.edit().remove(KEY_SELECTED_SERVER_ID).apply()
+    }
+
     fun save(settings: AppSettings) {
         preferences.edit()
             .putInt(KEY_SETTINGS_SCHEMA_VERSION, CURRENT_SETTINGS_SCHEMA_VERSION)
@@ -164,6 +181,7 @@ class QuickPingSettingsStore(context: Context) {
         private const val KEY_PROXY_PORT = "proxy_port"
         private const val KEY_LANGUAGE = "language"
         private const val KEY_MANAGER_TELEGRAM = "manager_telegram"
+        private const val KEY_SELECTED_SERVER_ID = "selected_server_id"
         private const val KEY_RECONNECT = "reconnect_on_network_change"
         private const val KEY_STRICT_ROUTE = "strict_route"
         private const val KEY_IPV6 = "ipv6_enabled"
