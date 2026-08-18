@@ -43,8 +43,11 @@ internal fun mergeStablePingValues(
     servers: List<Server>,
     cachedValues: Map<String, Int>,
 ): List<Server> = servers.map { server ->
-    if (server.pingMs != null) server
-    else cachedValues[stablePingEndpointKey(server)]?.let { server.copy(pingMs = it) } ?: server
+    when {
+        !server.selectable -> server.copy(pingMs = null)
+        server.pingMs != null -> server
+        else -> cachedValues[stablePingEndpointKey(server)]?.let { server.copy(pingMs = it) } ?: server
+    }
 }
 
 /**
@@ -65,11 +68,11 @@ internal fun rememberStableServerPings(
         servers.joinToString(separator = ";") { stablePingEndpointKey(it) }
     }
     val observedPingKey = remember(servers) {
-        servers.joinToString(separator = ";") { "${stablePingEndpointKey(it)}:${it.pingMs ?: -1}" }
+        servers.joinToString(separator = ";") { "${stablePingEndpointKey(it)}:${it.pingMs ?: -1}:${it.selectable}" }
     }
     var measuredValues by remember(endpointKey) {
         mutableStateOf(
-            servers.mapNotNull { server ->
+            servers.filter { it.selectable }.mapNotNull { server ->
                 stableServerPingCache[stablePingEndpointKey(server)]?.valueMs?.let { value ->
                     stablePingEndpointKey(server) to value
                 }
@@ -82,7 +85,7 @@ internal fun rememberStableServerPings(
 
         // Accept any successful value already produced by the ViewModel and remember it across
         // bootstrap/navigation refreshes that recreate Server objects with pingMs = null.
-        servers.forEach { server ->
+        servers.filter { it.selectable }.forEach { server ->
             val ping = server.pingMs ?: return@forEach
             val key = stablePingEndpointKey(server)
             val previous = stableServerPingCache[key]
@@ -95,7 +98,7 @@ internal fun rememberStableServerPings(
         if (!enabled) return@LaunchedEffect
 
         val targets = servers.filter { server ->
-            if (server.host.isBlank() || server.port !in 1..65535) return@filter false
+            if (!server.selectable || server.host.isBlank() || server.port !in 1..65535) return@filter false
             val cached = stableServerPingCache[stablePingEndpointKey(server)]
             cached == null || now - cached.measuredAtElapsedMs >= STABLE_PING_CACHE_TTL_MS
         }
@@ -120,7 +123,7 @@ internal fun rememberStableServerPings(
     }
 
     val cachedNow = buildMap {
-        servers.forEach { server ->
+        servers.filter { it.selectable }.forEach { server ->
             val key = stablePingEndpointKey(server)
             val value = measuredValues[key] ?: stableServerPingCache[key]?.valueMs
             if (value != null) put(key, value)
