@@ -94,11 +94,10 @@ export async function startManualTrafficSession(input: {
     if (!canAccessTier(service.vipAccess, server.accessTier)) {
       throw new ManualTrafficError(403, VIP_ACCESS_REQUIRED, "VIP access is required for this server");
     }
+
+    // A service may legitimately be active on more than one licensed device. Each tunnel owns its
+    // own cumulative session, so starting a new one must not revoke another device's live session.
     const now = new Date();
-    await tx.trafficSession.updateMany({
-      where: { serviceId: service.id, status: "ACTIVE" },
-      data: { status: "REVOKED", endedAt: now },
-    });
     const session = await tx.trafficSession.create({
       data: { serviceId: service.id, manualServerId: server.id },
       select: { id: true, startedAt: true },
