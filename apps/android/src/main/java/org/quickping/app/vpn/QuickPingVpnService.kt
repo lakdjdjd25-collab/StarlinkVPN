@@ -134,7 +134,7 @@ class QuickPingVpnService : VpnService() {
         if (state.sessionId != sessionId || !state.countTraffic || state.localRemainingBytes > 0L) return
         if (!quotaStopTriggered.compareAndSet(false, true)) return
         serviceScope.launch {
-            flushManualTraffic()
+            runCatching { flushManualTraffic() }
             stopForTrafficFailure(
                 VpnFailure(
                     code = "quota_exhausted",
