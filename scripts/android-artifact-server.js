@@ -53,7 +53,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, {
       'content-type': 'application/vnd.android.package-archive',
       'content-length': stat.size,
-      'content-disposition': 'attachment; filename="NimHUB-Vpn-2.6.11-release.apk"',
+      'content-disposition': 'attachment; filename="NimHUB-Vpn-2.6.19-release.apk"',
       'cache-control': 'public, max-age=300',
     });
     if (req.method === 'HEAD') return res.end();
