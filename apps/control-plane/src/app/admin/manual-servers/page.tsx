@@ -8,7 +8,7 @@ export default function ManualServersPage() {
       <header className="page-header">
         <div>
           <h1>سرورهای دستی</h1>
-          <p>افزودن VLESS اشتراکی، دسته‌بندی، VIP/Public، ترتیب و آمار مصرف</p>
+          <p>VLESS اشتراکی، Unlimited/Limited، زیردسته، حجم، VIP/Standard و محاسبه ترافیک</p>
         </div>
         <span className="badge blue">Server-Driven</span>
       </header>
