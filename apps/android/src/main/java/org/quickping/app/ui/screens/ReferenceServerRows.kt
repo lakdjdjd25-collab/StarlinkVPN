@@ -19,7 +19,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -80,6 +79,7 @@ internal fun ReferenceServerRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val lockedVip = server.isVip && !server.selectable
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         Row(
             modifier = Modifier
@@ -103,56 +103,91 @@ internal fun ReferenceServerRow(
                     .clip(RoundedCornerShape(7.dp)),
             )
             Spacer(Modifier.width(10.dp))
-            Text(
-                text = title,
+            Row(
                 modifier = Modifier.weight(1f),
-                color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                fontFamily = Peyda,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Start,
-            )
-            if (server.unmetered || server.isUnlimitedCategory) {
-                Spacer(Modifier.width(5.dp))
-                ReferenceCapabilityBadge("∞", width = 28)
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f, fill = false),
+                    color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                    fontFamily = Peyda,
+                    fontSize = 17.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Start,
+                )
+                if (server.unmetered || server.isUnlimitedCategory) {
+                    Spacer(Modifier.width(5.dp))
+                    ReferenceUnlimitedBadge()
+                }
+                if (server.isGaming) {
+                    Spacer(Modifier.width(5.dp))
+                    ReferenceGamingBadge()
+                }
+                if (lockedVip) {
+                    Spacer(Modifier.width(5.dp))
+                    ReferenceVipBadge()
+                } else if (server.isVip) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(
+                        painter = painterResource(R.drawable.ic_vip_crown),
+                        contentDescription = quickText("سرور VIP", "VIP server"),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
-            if (server.isGaming) {
-                Spacer(Modifier.width(5.dp))
-                ReferenceCapabilityBadge("🎮", width = 30)
-            }
-            if (server.isVip) {
-                Spacer(Modifier.width(5.dp))
-                ReferenceVipBadge()
-            }
-            Spacer(Modifier.width(7.dp))
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                ReferencePingChip(server.pingMs)
+            if (!lockedVip) {
+                Spacer(Modifier.width(7.dp))
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    ReferencePingChip(server.pingMs)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ReferenceCapabilityBadge(label: String, width: Int) {
+private fun ReferenceUnlimitedBadge() {
     Box(
         modifier = Modifier
             .height(25.dp)
-            .width(width.dp)
+            .width(28.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF171B22))
             .border(1.dp, Color(0xFF303641), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = label,
+            text = "∞",
             color = QuickPingColors.TextSecondary,
             fontFamily = Peyda,
-            fontSize = 12.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun ReferenceGamingBadge() {
+    Box(
+        modifier = Modifier
+            .height(25.dp)
+            .width(30.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF171B22))
+            .border(1.dp, Color(0xFF303641), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_game),
+            contentDescription = quickText("گیمینگ", "Gaming"),
+            tint = QuickPingColors.TextSecondary,
+            modifier = Modifier.size(15.dp),
         )
     }
 }
@@ -164,16 +199,8 @@ private fun ReferenceVipBadge() {
             .width(43.dp)
             .height(25.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(
-                        Color(0xFF6655CE),
-                        Color(0xFF9A80D2),
-                        Color(0xFFD8D985),
-                    ),
-                ),
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp)),
+            .background(Color(0xFF7157D9))
+            .border(1.dp, Color(0xFF8B73E6), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
