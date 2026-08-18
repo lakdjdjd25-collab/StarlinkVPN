@@ -56,7 +56,7 @@ internal fun ReferenceRecentServers(
                 modifier = Modifier.fillMaxWidth().height(104.dp),
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                state.servers.take(3).forEach { server ->
+                state.servers.filter { it.selectable }.take(3).forEach { server ->
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -85,7 +85,7 @@ internal fun ReferenceRecentServers(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(5.dp))
-                        ReferenceMiniPingChip(server.pingMs)
+                        ReferenceMiniPingChip(server)
                     }
                 }
             }
