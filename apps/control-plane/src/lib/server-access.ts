@@ -1,4 +1,4 @@
-import { canAccessTier, type VipAccessTier } from "@/lib/vip-access";
+import { canAccessTier, type VipAccessTier } from "./vip-access";
 
 export type ServiceAccessShape = {
   status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELLED";
