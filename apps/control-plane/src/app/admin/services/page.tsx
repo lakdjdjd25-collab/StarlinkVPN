@@ -1,3 +1,4 @@
+import { AdminCreateUserV2 } from "@/components/admin/AdminCreateUserV2";
 import { AdminUsersV2 } from "@/components/admin/AdminUsersV2";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export default function ServicesPage() {
           <h1>کاربران</h1>
           <p>مدیریت اشتراک، حجم، اعتبار، دستگاه‌ها، VIP، مجوز و وضعیت Provider بدون وابستگی صفحه به اتصال زنده پنل VPN</p>
         </div>
+        <AdminCreateUserV2 />
       </header>
       <AdminUsersV2 />
     </>
