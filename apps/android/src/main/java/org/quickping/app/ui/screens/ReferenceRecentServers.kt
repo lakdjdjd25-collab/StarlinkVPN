@@ -85,7 +85,7 @@ internal fun ReferenceRecentServers(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(5.dp))
-                        if (server.locked) ReferenceLockedChip() else ReferenceMiniPingChip(server.pingMs)
+                        ReferenceMiniPingChip(server.pingMs)
                     }
                 }
             }
