@@ -13,6 +13,8 @@ import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.network.EmailChallenge
 import org.quickping.app.data.network.GoogleAuthApiClient
 import org.quickping.app.data.network.GoogleNonceChallenge
+import org.quickping.app.data.network.ManualTrafficResult
+import org.quickping.app.data.network.ManualTrafficSession
 import org.quickping.app.data.network.QuickPingApiClient
 import org.quickping.app.data.security.SecureTokenStore
 import org.quickping.app.data.security.StoredSession
@@ -87,6 +89,30 @@ class QuickPingRepository(context: Context) {
         } catch (error: ApiException) {
             if (error.status != 401) throw error
             api.runtimeConfig(refreshAccessToken(force = true), serviceId, nodeId)
+        }
+    }
+
+    suspend fun startManualTraffic(serviceId: String, serverId: String): ManualTrafficSession =
+        withContext(Dispatchers.IO) {
+            authenticatedRequest { accessToken ->
+                api.startManualTraffic(accessToken, serviceId, serverId)
+            }
+        }
+
+    suspend fun reportManualTraffic(
+        sessionId: String,
+        uploadedBytes: Long,
+        downloadedBytes: Long,
+        finalize: Boolean = false,
+    ): ManualTrafficResult = withContext(Dispatchers.IO) {
+        authenticatedRequest { accessToken ->
+            api.reportManualTraffic(
+                accessToken = accessToken,
+                sessionId = sessionId,
+                uploadedBytes = uploadedBytes,
+                downloadedBytes = downloadedBytes,
+                finalize = finalize,
+            )
         }
     }
 
