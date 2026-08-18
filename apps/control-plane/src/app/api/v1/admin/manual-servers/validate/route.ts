@@ -19,7 +19,11 @@ function parserMessage(error: unknown): string {
     VLESS_ENDPOINT_INVALID: "آدرس یا پورت سرور معتبر نیست",
     VLESS_TRANSPORT_UNSUPPORTED: "Transport این لینک هنوز پشتیبانی نمی‌شود",
     VLESS_SECURITY_UNSUPPORTED: "Security این لینک پشتیبانی نمی‌شود",
+    VLESS_ENCRYPTION_UNSUPPORTED: "Encryption این لینک با VLESS استاندارد سازگار نیست",
+    VLESS_PACKET_ENCODING_UNSUPPORTED: "Packet Encoding این لینک پشتیبانی نمی‌شود",
     VLESS_REALITY_KEY_REQUIRED: "کلید عمومی Reality در لینک وجود ندارد",
+    VLESS_REALITY_KEY_INVALID: "کلید عمومی Reality معتبر نیست",
+    VLESS_REALITY_SHORT_ID_INVALID: "Short ID مربوط به Reality معتبر نیست",
     VLESS_RUNTIME_INVALID: "این لینک به پیکربندی معتبر sing-box تبدیل نشد",
   };
   return messages[code] ?? "لینک VLESS قابل استفاده نیست";
