@@ -111,7 +111,11 @@ export async function GET(request: NextRequest) {
 
   const where = {
     role: "CUSTOMER" as const,
-    ...(accountStatus === "ACTIVE" || accountStatus === "SUSPENDED" ? { status: accountStatus } : {}),
+    ...(accountStatus === "ACTIVE"
+      ? { status: "ACTIVE" as const }
+      : accountStatus === "SUSPENDED"
+        ? { status: "SUSPENDED" as const }
+        : {}),
     ...(query ? {
       OR: [
         { email: { contains: query, mode: "insensitive" as const } },
