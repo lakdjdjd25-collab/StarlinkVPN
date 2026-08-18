@@ -115,59 +115,43 @@ internal fun ReferenceServerRow(
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Start,
             )
-            if (server.isManual) {
-                Spacer(Modifier.width(6.dp))
-                ReferenceManualCategoryBadge(server)
+            if (server.unmetered || server.isUnlimitedCategory) {
+                Spacer(Modifier.width(5.dp))
+                ReferenceCapabilityBadge("∞", width = 28)
+            }
+            if (server.isGaming) {
+                Spacer(Modifier.width(5.dp))
+                ReferenceCapabilityBadge("🎮", width = 30)
             }
             if (server.isVip) {
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(5.dp))
                 ReferenceVipBadge()
             }
             Spacer(Modifier.width(7.dp))
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                if (server.locked) ReferenceLockedChip() else ReferencePingChip(server.pingMs)
+                ReferencePingChip(server.pingMs)
             }
         }
     }
 }
 
 @Composable
-private fun ReferenceManualCategoryBadge(server: Server) {
+private fun ReferenceCapabilityBadge(label: String, width: Int) {
     Box(
         modifier = Modifier
             .height(25.dp)
-            .width(32.dp)
+            .width(width.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF171B22))
             .border(1.dp, Color(0xFF303641), RoundedCornerShape(12.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (server.isLimitedCategory) "L" else "∞",
+            text = label,
             color = QuickPingColors.TextSecondary,
             fontFamily = Peyda,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-@Composable
-internal fun ReferenceLockedChip() {
-    Box(
-        modifier = Modifier
-            .height(25.dp)
-            .width(43.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF20232B))
-            .border(1.dp, Color(0xFF343945), RoundedCornerShape(12.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "🔒",
-            color = QuickPingColors.TextSecondary,
-            fontSize = 11.sp,
             textAlign = TextAlign.Center,
         )
     }
