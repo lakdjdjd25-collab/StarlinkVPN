@@ -13,6 +13,7 @@ import org.quickping.app.data.network.BootstrapPayload
 import org.quickping.app.data.network.EmailChallenge
 import org.quickping.app.data.network.GoogleAuthApiClient
 import org.quickping.app.data.network.GoogleNonceChallenge
+import org.quickping.app.data.network.ManualServerApiClient
 import org.quickping.app.data.network.ManualTrafficResult
 import org.quickping.app.data.network.ManualTrafficSession
 import org.quickping.app.data.network.QuickPingApiClient
@@ -24,6 +25,7 @@ import org.quickping.app.data.traffic.PendingManualTrafficSession
 
 class QuickPingRepository(context: Context) {
     private val api = QuickPingApiClient(BuildConfig.API_BASE_URL)
+    private val manualApi = ManualServerApiClient(BuildConfig.API_BASE_URL)
     private val googleApi = GoogleAuthApiClient(BuildConfig.API_BASE_URL)
     private val tokens = SecureTokenStore(context.applicationContext)
     private val manualTrafficStore = ManualTrafficStore(context.applicationContext)
@@ -92,8 +94,15 @@ class QuickPingRepository(context: Context) {
     suspend fun runtimeConfig(serviceId: String, nodeId: String): String = withContext(Dispatchers.IO) {
         recoverStoredManualTraffic()
         ManualTrafficRuntimeRegistry.clear()
-        val config = authenticatedRequest { accessToken -> api.runtimeConfig(accessToken, serviceId, nodeId) }
-        if (manualServersByService[serviceId]?.contains(nodeId) == true) {
+        val manual = manualServersByService[serviceId]?.contains(nodeId) == true
+        val config = authenticatedRequest { accessToken ->
+            if (manual) {
+                manualApi.runtimeConfig(accessToken, serviceId, nodeId)
+            } else {
+                api.runtimeConfig(accessToken, serviceId, nodeId)
+            }
+        }
+        if (manual) {
             val traffic = authenticatedRequest { accessToken ->
                 api.startManualTraffic(accessToken, serviceId, nodeId)
             }
