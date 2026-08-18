@@ -14,22 +14,24 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.verticalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -107,7 +109,7 @@ fun ReferenceLoginScreen(
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val keyboardVisible = androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density) > 0
+    val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
     var license by remember { mutableStateOf("") }
     var scanError by remember { mutableStateOf<String?>(null) }
@@ -221,7 +223,6 @@ fun ReferenceLoginScreen(
         )
 
         if (!keyboardVisible) {
-            // Measured against the 955x2048 Quick Ping source: ring centre ≈ (478, 818px).
             Image(
                 painter = painterResource(R.drawable.header_login),
                 contentDescription = null,
@@ -325,7 +326,6 @@ fun ReferenceLoginScreen(
                     .padding(horizontal = 26.dp),
             )
         } else {
-            // Preserve the established keyboard rule: hero becomes compact while input stays reachable.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
