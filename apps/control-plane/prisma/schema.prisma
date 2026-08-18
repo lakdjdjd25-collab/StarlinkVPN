@@ -132,6 +132,22 @@ model Device {
   refreshTokens RefreshToken[]
 
   @@index([userId, revokedAt])
+}
+
+model RefreshToken {
+  id            String    @id @default(cuid())
+  userId        String
+  deviceId      String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  rotatedFromId String?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
   @@index([deviceId, expiresAt])
 }
 
