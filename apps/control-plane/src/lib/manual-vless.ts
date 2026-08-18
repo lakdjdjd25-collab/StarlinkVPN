@@ -2,9 +2,12 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { singBoxRuntimeConfigSchema } from "./sing-box-config";
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 const SUPPORTED_TRANSPORTS = new Set(["tcp", "ws", "grpc", "http", "h2", "httpupgrade"]);
 const SUPPORTED_SECURITY = new Set(["none", "tls", "reality"]);
+const SUPPORTED_PACKET_ENCODINGS = new Set(["", "xudp", "packetaddr"]);
+const REALITY_PUBLIC_KEY_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const REALITY_SHORT_ID_PATTERN = /^(?:[0-9a-fA-F]{2}){0,8}$/;
 const GEOIP_TIMEOUT_MS = 2_500;
 
 export type ParsedVless = {
@@ -36,17 +39,32 @@ function queryObject(params: URLSearchParams): Record<string, string> {
   return result;
 }
 
+function parseBoolean(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function parseAlpn(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 function transportConfig(parsed: URL, transport: string): Record<string, unknown> | undefined {
   const path = parsed.searchParams.get("path") || undefined;
   const hostHeader = parsed.searchParams.get("host") || undefined;
   const serviceName = parsed.searchParams.get("serviceName") || undefined;
   switch (transport) {
-    case "ws":
+    case "ws": {
+      const maxEarlyData = Number(parsed.searchParams.get("ed") || 0);
+      const earlyDataHeaderName = parsed.searchParams.get("eh") || undefined;
       return {
         type: "ws",
         ...(path ? { path } : {}),
         ...(hostHeader ? { headers: { Host: hostHeader } } : {}),
+        ...(Number.isInteger(maxEarlyData) && maxEarlyData > 0 ? { max_early_data: maxEarlyData } : {}),
+        ...(earlyDataHeaderName ? { early_data_header_name: earlyDataHeaderName } : {}),
       };
+    }
     case "grpc":
       return { type: "grpc", ...(serviceName ? { service_name: serviceName } : {}) };
     case "http":
@@ -74,6 +92,18 @@ function validateEndpoint(host: string, port: number): { host: string; port: num
     throw new Error("VLESS_ENDPOINT_INVALID");
   }
   return { host: normalizedHost, port };
+}
+
+function validateReality(publicKey: string, shortId: string): void {
+  if (!REALITY_PUBLIC_KEY_PATTERN.test(publicKey)) throw new Error("VLESS_REALITY_KEY_INVALID");
+  let decoded: Buffer;
+  try {
+    decoded = Buffer.from(publicKey, "base64url");
+  } catch {
+    throw new Error("VLESS_REALITY_KEY_INVALID");
+  }
+  if (decoded.length !== 32) throw new Error("VLESS_REALITY_KEY_INVALID");
+  if (!REALITY_SHORT_ID_PATTERN.test(shortId)) throw new Error("VLESS_REALITY_SHORT_ID_INVALID");
 }
 
 export function overrideVlessEndpoint(
@@ -114,11 +144,19 @@ export function parseVlessUri(value: string): ParsedVless {
   if (!SUPPORTED_TRANSPORTS.has(transport)) throw new Error("VLESS_TRANSPORT_UNSUPPORTED");
   const security = (parsed.searchParams.get("security") || "none").toLowerCase();
   if (!SUPPORTED_SECURITY.has(security)) throw new Error("VLESS_SECURITY_UNSUPPORTED");
+  const encryption = (parsed.searchParams.get("encryption") || "none").toLowerCase();
+  if (encryption !== "none") throw new Error("VLESS_ENCRYPTION_UNSUPPORTED");
   const sni = parsed.searchParams.get("sni") || parsed.searchParams.get("serverName") || undefined;
-  const fingerprint = parsed.searchParams.get("fp") || parsed.searchParams.get("fingerprint") || undefined;
+  const requestedFingerprint = parsed.searchParams.get("fp") || parsed.searchParams.get("fingerprint") || undefined;
+  const fingerprint = requestedFingerprint || (security === "reality" ? "chrome" : undefined);
   const flow = parsed.searchParams.get("flow") || undefined;
   const path = parsed.searchParams.get("path") || undefined;
   const serviceName = parsed.searchParams.get("serviceName") || undefined;
+  const packetEncoding = (
+    parsed.searchParams.get("packetEncoding") || parsed.searchParams.get("packet_encoding") || ""
+  ).toLowerCase();
+  if (!SUPPORTED_PACKET_ENCODINGS.has(packetEncoding)) throw new Error("VLESS_PACKET_ENCODING_UNSUPPORTED");
+
   const outbound: Record<string, unknown> = {
     type: "vless",
     tag: "proxy",
@@ -126,22 +164,28 @@ export function parseVlessUri(value: string): ParsedVless {
     server_port: port,
     uuid,
     ...(flow ? { flow } : {}),
+    ...(packetEncoding ? { packet_encoding: packetEncoding } : {}),
   };
   const transportValue = transportConfig(parsed, transport);
   if (transportValue) outbound.transport = transportValue;
   if (security === "tls" || security === "reality") {
+    const alpn = parseAlpn(parsed.searchParams.get("alpn"));
     const tls: Record<string, unknown> = {
       enabled: true,
       ...(sni ? { server_name: sni } : {}),
+      ...(parseBoolean(parsed.searchParams.get("allowInsecure") || parsed.searchParams.get("insecure")) ? { insecure: true } : {}),
+      ...(alpn.length ? { alpn } : {}),
       ...(fingerprint ? { utls: { enabled: true, fingerprint } } : {}),
     };
     if (security === "reality") {
       const publicKey = parsed.searchParams.get("pbk") || parsed.searchParams.get("publicKey") || "";
       if (!publicKey) throw new Error("VLESS_REALITY_KEY_REQUIRED");
+      const shortId = parsed.searchParams.get("sid") || parsed.searchParams.get("shortId") || "";
+      validateReality(publicKey, shortId);
       tls.reality = {
         enabled: true,
         public_key: publicKey,
-        short_id: parsed.searchParams.get("sid") || parsed.searchParams.get("shortId") || "",
+        short_id: shortId,
       };
     }
     outbound.tls = tls;
