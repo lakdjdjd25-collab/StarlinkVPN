@@ -19,12 +19,14 @@ import org.quickping.app.data.network.QuickPingApiClient
 import org.quickping.app.data.security.SecureTokenStore
 import org.quickping.app.data.security.StoredSession
 import org.quickping.app.data.traffic.ManualTrafficRuntimeRegistry
+import org.quickping.app.data.traffic.ManualTrafficStore
 import org.quickping.app.data.traffic.PendingManualTrafficSession
 
 class QuickPingRepository(context: Context) {
     private val api = QuickPingApiClient(BuildConfig.API_BASE_URL)
     private val googleApi = GoogleAuthApiClient(BuildConfig.API_BASE_URL)
     private val tokens = SecureTokenStore(context.applicationContext)
+    private val manualTrafficStore = ManualTrafficStore(context.applicationContext)
     private val refreshMutex = Mutex()
 
     @Volatile
@@ -88,6 +90,7 @@ class QuickPingRepository(context: Context) {
         }
 
     suspend fun runtimeConfig(serviceId: String, nodeId: String): String = withContext(Dispatchers.IO) {
+        recoverStoredManualTraffic()
         ManualTrafficRuntimeRegistry.clear()
         val config = authenticatedRequest { accessToken -> api.runtimeConfig(accessToken, serviceId, nodeId) }
         if (manualServersByService[serviceId]?.contains(nodeId) == true) {
@@ -164,6 +167,29 @@ class QuickPingRepository(context: Context) {
         tokens.clear()
     }
 
+    private suspend fun recoverStoredManualTraffic() {
+        val stale = manualTrafficStore.load() ?: return
+        try {
+            val result = authenticatedRequest { accessToken ->
+                api.reportManualTraffic(
+                    accessToken = accessToken,
+                    sessionId = stale.sessionId,
+                    uploadedBytes = stale.uploadedBytes,
+                    downloadedBytes = stale.downloadedBytes,
+                    finalize = true,
+                )
+            }
+            manualTrafficStore.confirm(result.remainingBytes, result.totalBytes)
+            manualTrafficStore.clear()
+        } catch (error: ApiException) {
+            if (error.code in CLOSED_TRAFFIC_ERRORS) {
+                manualTrafficStore.clear()
+                return
+            }
+            throw error
+        }
+    }
+
     private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {
         tokens.save(
             StoredSession(
@@ -231,5 +257,6 @@ class QuickPingRepository(context: Context) {
 
     private companion object {
         val AUTH_TOKEN_ERRORS = setOf("missing_token", "invalid_token")
+        val CLOSED_TRAFFIC_ERRORS = setOf("traffic_session_closed", "traffic_session_not_found")
     }
 }
