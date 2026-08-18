@@ -1,3 +1,4 @@
+import { AdminServerTabs } from "@/components/admin/AdminServerTabs";
 import { ManualServerManager } from "@/components/ManualServerManager";
 
 export const dynamic = "force-dynamic";
@@ -7,11 +8,13 @@ export default function ManualServersPage() {
     <>
       <header className="page-header">
         <div>
-          <h1>سرورهای دستی</h1>
-          <p>VLESS اشتراکی، Unlimited/Limited، زیردسته، حجم، VIP/Standard و محاسبه ترافیک</p>
+          <span className="v2-eyebrow">SERVER CONTROL CENTER</span>
+          <h1>سرورها</h1>
+          <p>Manual VLESS در همان مرکز سرورها؛ Unlimited/Limited، زیردسته، حجم، VIP/Standard و محاسبه ترافیک.</p>
         </div>
-        <span className="badge blue">Server-Driven</span>
+        <span className="badge blue">Manual</span>
       </header>
+      <AdminServerTabs />
       <ManualServerManager />
     </>
   );
