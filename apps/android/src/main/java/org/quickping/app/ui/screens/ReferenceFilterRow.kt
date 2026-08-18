@@ -22,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
@@ -78,8 +77,7 @@ internal fun ReferenceFilterRow(
                     modifier = Modifier
                         .weight(1f)
                         .height(36.dp)
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(Color(0xFF0C0E12))
+                        .background(Color(0xFF0C0E12), RoundedCornerShape(15.dp))
                         .border(1.dp, Color(0xFF20242C), RoundedCornerShape(15.dp))
                         .padding(horizontal = 11.dp),
                     contentAlignment = Alignment.CenterEnd,
@@ -120,17 +118,29 @@ internal fun ReferenceFilterRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ReferenceQuickFilter.entries.forEachIndexed { index, mode ->
                         val selected = quickFilter == mode
-                        Text(
-                            text = mode.referenceLabel(),
+                        Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
                                 .clickable { onQuickFilterChange(mode) }
                                 .padding(horizontal = 4.dp, vertical = 5.dp),
-                            color = if (selected) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
-                            fontFamily = Peyda,
-                            fontSize = 12.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                        )
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (mode == ReferenceQuickFilter.Gaming) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_game),
+                                    contentDescription = null,
+                                    tint = if (selected) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                                Spacer(Modifier.width(3.dp))
+                            }
+                            Text(
+                                text = mode.referenceLabel(),
+                                color = if (selected) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                                fontFamily = Peyda,
+                                fontSize = 12.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                            )
+                        }
                         if (index < ReferenceQuickFilter.entries.lastIndex) Spacer(Modifier.width(4.dp))
                     }
                 }
@@ -143,7 +153,7 @@ internal fun ReferenceFilterRow(
 private fun ReferenceQuickFilter.referenceLabel(): String = when (this) {
     ReferenceQuickFilter.All -> quickText("همه", "All")
     ReferenceQuickFilter.Unlimited -> quickText("نامحدود ∞", "Unlimited ∞")
-    ReferenceQuickFilter.Gaming -> quickText("گیمینگ 🎮", "Gaming 🎮")
+    ReferenceQuickFilter.Gaming -> quickText("گیمینگ", "Gaming")
 }
 
 @Composable
@@ -156,8 +166,7 @@ private fun ReferenceRoundIconButton(
     Box(
         modifier = Modifier
             .size(40.dp)
-            .clip(CircleShape)
-            .background(Color(0xFF0C0E12))
+            .background(Color(0xFF0C0E12), CircleShape)
             .border(
                 if (active) 1.5.dp else 1.dp,
                 if (active) QuickPingColors.Primary else Color(0xFF1C2028),
