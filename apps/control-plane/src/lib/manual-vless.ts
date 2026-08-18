@@ -67,6 +67,35 @@ function transportConfig(parsed: URL, transport: string): Record<string, unknown
   }
 }
 
+function validateEndpoint(host: string, port: number): { host: string; port: number } {
+  const normalizedHost = host.trim().replace(/^\[(.*)]$/, "$1");
+  if (!normalizedHost || normalizedHost.length > 253 || /\s/.test(normalizedHost) ||
+      !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("VLESS_ENDPOINT_INVALID");
+  }
+  return { host: normalizedHost, port };
+}
+
+export function overrideVlessEndpoint(
+  runtimeConfig: Record<string, unknown>,
+  host: string,
+  port: number,
+): Record<string, unknown> {
+  const endpoint = validateEndpoint(host, port);
+  const clone = structuredClone(runtimeConfig) as Record<string, unknown>;
+  const outbounds = Array.isArray(clone.outbounds) ? clone.outbounds : [];
+  const outbound = outbounds.find((item) =>
+    typeof item === "object" && item !== null && (item as Record<string, unknown>).type === "vless",
+  );
+  if (!outbound || typeof outbound !== "object") throw new Error("VLESS_RUNTIME_INVALID");
+  const vless = outbound as Record<string, unknown>;
+  vless.server = endpoint.host;
+  vless.server_port = endpoint.port;
+  const checked = singBoxRuntimeConfigSchema.safeParse(clone);
+  if (!checked.success) throw new Error("VLESS_RUNTIME_INVALID");
+  return checked.data;
+}
+
 export function parseVlessUri(value: string): ParsedVless {
   const raw = value.trim();
   if (!raw.toLowerCase().startsWith("vless://")) throw new Error("VLESS_CONFIG_REQUIRED");
@@ -78,11 +107,9 @@ export function parseVlessUri(value: string): ParsedVless {
   }
   const uuid = decodeURIComponent(parsed.username || "");
   if (!UUID_PATTERN.test(uuid)) throw new Error("VLESS_UUID_INVALID");
-  const host = parsed.hostname;
-  const port = Number(parsed.port || 443);
-  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("VLESS_ENDPOINT_INVALID");
-  }
+  const endpoint = validateEndpoint(parsed.hostname, Number(parsed.port || 443));
+  const host = endpoint.host;
+  const port = endpoint.port;
   const transport = (parsed.searchParams.get("type") || "tcp").toLowerCase();
   if (!SUPPORTED_TRANSPORTS.has(transport)) throw new Error("VLESS_TRANSPORT_UNSUPPORTED");
   const security = (parsed.searchParams.get("security") || "none").toLowerCase();

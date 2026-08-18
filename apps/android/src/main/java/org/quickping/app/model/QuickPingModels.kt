@@ -16,6 +16,8 @@ data class Server(
     val unmetered: Boolean = false,
     val accessTier: String = "STANDARD",
     val category: String? = null,
+    val subcategory: String? = null,
+    val volumeBytes: Long? = null,
     val serverType: String = "MANAGED",
     val countTraffic: Boolean = false,
     val requiresVip: Boolean = false,
@@ -27,6 +29,7 @@ data class Server(
     val isManual: Boolean get() = serverType.equals("MANUAL", ignoreCase = true)
     val isGaming: Boolean get() = category.equals("GAMING", ignoreCase = true)
     val isUnlimitedCategory: Boolean get() = category.equals("UNLIMITED", ignoreCase = true)
+    val isLimitedCategory: Boolean get() = category.equals("LIMITED", ignoreCase = true)
     val selectable: Boolean get() = canConnect && !locked
 }
 

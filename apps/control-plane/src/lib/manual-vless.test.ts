@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVlessUri } from "./manual-vless";
+import { overrideVlessEndpoint, parseVlessUri } from "./manual-vless";
 
 describe("manual VLESS parser", () => {
   it("parses a supported VLESS TLS websocket link into sing-box runtime config", () => {
@@ -44,6 +44,25 @@ describe("manual VLESS parser", () => {
     );
     expect(parsed.transport).toBe("grpc");
     expect(parsed.serviceName).toBe("nimhub");
+  });
+
+  it("overrides the connection address and port without changing TLS metadata", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@origin.example.com:443?type=tcp&security=tls&sni=edge.example.com",
+    );
+    const runtime = overrideVlessEndpoint(parsed.runtimeConfig, "198.51.100.20", 8443);
+    const outbound = (runtime.outbounds as Array<Record<string, unknown>>)[0];
+    expect(outbound.server).toBe("198.51.100.20");
+    expect(outbound.server_port).toBe(8443);
+    expect((outbound.tls as Record<string, unknown>).server_name).toBe("edge.example.com");
+  });
+
+  it("rejects invalid endpoint overrides", () => {
+    const parsed = parseVlessUri(
+      "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=none",
+    );
+    expect(() => overrideVlessEndpoint(parsed.runtimeConfig, "bad host", 70000))
+      .toThrow("VLESS_ENDPOINT_INVALID");
   });
 
   it("rejects an invalid VLESS UUID", () => {

@@ -59,6 +59,7 @@ enum AccessTier {
 enum ManualServerCategory {
   UNLIMITED
   GAMING
+  LIMITED
 }
 
 enum TrafficSessionStatus {
@@ -288,6 +289,8 @@ model ManualServer {
   countryCode      String?
   countryOverride  String?
   category         ManualServerCategory @default(UNLIMITED)
+  subcategory      String?
+  volumeBytes      BigInt?
   accessTier       AccessTier           @default(STANDARD)
   enabled          Boolean              @default(false)
   sortOrder        Int                  @default(0)
