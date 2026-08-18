@@ -1,6 +1,11 @@
 package org.quickping.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,10 +33,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -47,6 +54,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 import org.quickping.app.R
 import org.quickping.app.core.design.QuickPingColors
@@ -111,6 +119,7 @@ fun AccountScreen(
         ) {
             ProfileCard(
                 user = user,
+                vipAccess = service.vipAccess,
                 onChangePassword = {
                     onClearAction()
                     currentPassword = ""
@@ -261,9 +270,7 @@ fun AccountScreen(
                 Spacer(Modifier.height(28.dp))
                 SheetConfirmButton(
                     text = if (busy) quickText("لطفاً صبر کنید…", "Please wait…") else quickText("تأیید", "Confirm"),
-                    onClick = {
-                        onConfirmPasswordChange(currentPassword, newPassword)
-                    },
+                    onClick = { onConfirmPasswordChange(currentPassword, newPassword) },
                     enabled = !busy && currentPassword.isNotBlank() && newPassword.length >= 8 && repeatedNewPassword == newPassword,
                 )
                 Spacer(Modifier.height(10.dp))
@@ -347,9 +354,19 @@ fun AccountScreen(
 @Composable
 private fun ProfileCard(
     user: UserInfo,
+    vipAccess: Boolean,
     onChangePassword: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var crownVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(vipAccess) {
+        crownVisible = false
+        if (vipAccess) {
+            delay(35)
+            crownVisible = true
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -361,21 +378,50 @@ private fun ProfileCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF284D85)),
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(QuickPingColors.SurfaceHigh)
+                    .border(1.dp, QuickPingColors.Border, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(R.drawable.ic_user), null, tint = Color(0xFF94BCFF), modifier = Modifier.size(28.dp))
+                Image(
+                    painter = painterResource(R.drawable.nimhub_logo),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxWidth().padding(6.dp),
+                    contentScale = ContentScale.Fit,
+                )
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    user.email,
-                    color = QuickPingColors.TextPrimary,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        user.email,
+                        modifier = Modifier.weight(1f, fill = false),
+                        color = QuickPingColors.TextPrimary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    AnimatedVisibility(
+                        visible = crownVisible,
+                        enter = fadeIn(tween(240)) + scaleIn(
+                            initialScale = 0.9f,
+                            animationSpec = tween(240),
+                        ),
+                    ) {
+                        Row {
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_vip_crown),
+                                contentDescription = quickText("کاربر VIP", "VIP user"),
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(7.dp))
                 val suspended = user.status == "SUSPENDED"
                 StatusPill(
