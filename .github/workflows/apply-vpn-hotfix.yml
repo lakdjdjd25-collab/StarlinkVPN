@@ -1,0 +1,99 @@
+name: Apply VPN hotfix
+
+on:
+  push:
+    branches:
+      - fix/vpn-routing-selection-hotfix
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/vpn-routing-selection-hotfix
+          fetch-depth: 0
+
+      - name: Patch VPN routing and selected-server state
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected block not found in {path}")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one block in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          vm = "apps/android/src/main/java/org/quickping/app/state/QuickPingViewModel.kt"
+          replace_once(
+              vm,
+              "    private val _state = MutableStateFlow(QuickPingUiState(settings = settingsStore.load(), management = settingsStore.loadManagement()))",
+              """    private val _state = MutableStateFlow(\n        QuickPingUiState(\n            settings = settingsStore.load(),\n            management = settingsStore.loadManagement(),\n            selectedServerId = settingsStore.loadSelectedServerId(),\n        ),\n    )""",
+          )
+          replace_once(
+              vm,
+              """    fun selectServer(id: String) {\n        if (id.isBlank() || id == _state.value.selectedServerId) return\n        _state.update { it.copy(selectedServerId = id) }\n        restartVpnIfActive()\n    }""",
+              """    fun selectServer(id: String) {\n        if (id.isBlank() || id == _state.value.selectedServerId) return\n        settingsStore.saveSelectedServerId(id)\n        _state.update { it.copy(selectedServerId = id) }\n        restartVpnIfActive()\n    }""",
+          )
+          replace_once(
+              vm,
+              """    fun signOut() {\n        disconnectVpn()\n        repository.signOut()\n        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load(), management = settingsStore.loadManagement())\n    }""",
+              """    fun signOut() {\n        disconnectVpn()\n        repository.signOut()\n        settingsStore.clearSelectedServerId()\n        _state.value = QuickPingUiState(initialized = true, settings = settingsStore.load(), management = settingsStore.loadManagement())\n    }""",
+          )
+          replace_once(
+              vm,
+              "        selectedServerId = servers.firstOrNull()?.id.orEmpty(),",
+              """        selectedServerId = selectedServerId.takeIf { currentId ->\n            currentId.isNotBlank() && servers.any { server -> server.id == currentId }\n        } ?: servers.firstOrNull()?.id.orEmpty(),""",
+          )
+
+          settings = "apps/android/src/main/java/org/quickping/app/data/settings/QuickPingSettingsStore.kt"
+          replace_once(
+              settings,
+              """    fun saveManagement(info: ManagementInfo) {\n        val normalized = info.telegramUsername.trim().removePrefix(\"@\").takeIf {\n            it.matches(Regex(\"[A-Za-z0-9_]{5,32}\"))\n        } ?: \"Folwn\"\n        preferences.edit().putString(KEY_MANAGER_TELEGRAM, normalized).apply()\n    }\n""",
+              """    fun saveManagement(info: ManagementInfo) {\n        val normalized = info.telegramUsername.trim().removePrefix(\"@\").takeIf {\n            it.matches(Regex(\"[A-Za-z0-9_]{5,32}\"))\n        } ?: \"Folwn\"\n        preferences.edit().putString(KEY_MANAGER_TELEGRAM, normalized).apply()\n    }\n\n    fun loadSelectedServerId(): String = preferences.getString(KEY_SELECTED_SERVER_ID, null)\n        .orEmpty()\n        .trim()\n\n    fun saveSelectedServerId(id: String) {\n        val normalized = id.trim()\n        if (normalized.isBlank()) {\n            clearSelectedServerId()\n        } else {\n            preferences.edit().putString(KEY_SELECTED_SERVER_ID, normalized).apply()\n        }\n    }\n\n    fun clearSelectedServerId() {\n        preferences.edit().remove(KEY_SELECTED_SERVER_ID).apply()\n    }\n""",
+          )
+          replace_once(
+              settings,
+              "        private const val KEY_MANAGER_TELEGRAM = \"manager_telegram\"",
+              """        private const val KEY_MANAGER_TELEGRAM = \"manager_telegram\"\n        private const val KEY_SELECTED_SERVER_ID = \"selected_server_id\"""",
+          )
+
+          compiler = "apps/android/src/main/java/org/quickping/app/vpn/VpnConfigCompiler.kt"
+          replace_once(
+              compiler,
+              """        val proxyOutbound = route.optString(\"final\").takeIf(String::isNotBlank)\n            ?: firstUsableOutboundTag(config)\n            ?: error(\"No usable proxy outbound is configured\")""",
+              """        val proxyOutbound = configuredProxyOutboundTag(config, route)\n            ?: firstUsableOutboundTag(config)\n            ?: error(\"No usable proxy outbound is configured\")""",
+          )
+          replace_once(
+              compiler,
+              """    private fun firstUsableOutboundTag(config: JSONObject): String? {""",
+              """    private fun configuredProxyOutboundTag(config: JSONObject, route: JSONObject): String? {\n        val configured = route.optString(\"final\").takeIf(String::isNotBlank) ?: return null\n        config.optJSONArray(\"outbounds\")?.let { outbounds ->\n            for (index in 0 until outbounds.length()) {\n                val outbound = outbounds.optJSONObject(index) ?: continue\n                if (outbound.optString(\"tag\") != configured) continue\n                return configured.takeIf { outbound.optString(\"type\") !in setOf(\"direct\", \"block\", \"dns\") }\n            }\n        }\n        config.optJSONArray(\"endpoints\")?.let { endpoints ->\n            for (index in 0 until endpoints.length()) {\n                val endpoint = endpoints.optJSONObject(index) ?: continue\n                if (endpoint.optString(\"tag\") == configured) return configured\n            }\n        }\n        return null\n    }\n\n    private fun firstUsableOutboundTag(config: JSONObject): String? {""",
+          )
+
+          test = Path("apps/android/src/test/java/org/quickping/app/vpn/VpnConfigCompilerRoutingTest.kt")
+          test.write_text('''package org.quickping.app.vpn\n\nimport org.json.JSONObject\nimport org.junit.Assert.assertEquals\nimport org.junit.Test\nimport org.quickping.app.model.AppSettings\n\nclass VpnConfigCompilerRoutingTest {\n    @Test\n    fun `direct provider final cannot bypass selected vpn outbound`() {\n        val raw = """\n            {\n              "inbounds":[{"type":"tun","tag":"tun-in","address":["172.19.0.1/30"],"auto_route":true}],\n              "outbounds":[\n                {"type":"direct","tag":"direct"},\n                {"type":"vless","tag":"proxy","server":"example.com","server_port":443,"uuid":"11111111-1111-4111-8111-111111111111"}\n              ],\n              "route":{\n                "final":"direct",\n                "rules":[{"domain_suffix":["telegram.org"],"action":"route","outbound":"proxy"}]\n              }\n            }\n        """.trimIndent()\n\n        val compiled = VpnConfigCompiler.compile(\n            rawConfigJson = raw,\n            settings = AppSettings(blockIrDomains = false, guardianEnabled = false),\n            enabledGuardianCategories = emptySet(),\n            applicationPackage = "org.quickping",\n        )\n\n        val route = JSONObject(compiled.configJson).getJSONObject("route")\n        assertEquals("proxy", route.getString("final"))\n    }\n}\n''')
+
+          Path(".github/workflows/apply-vpn-hotfix.yml").unlink()
+          PY
+
+      - name: Commit focused hotfix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/android/src/main/java/org/quickping/app/state/QuickPingViewModel.kt \
+                  apps/android/src/main/java/org/quickping/app/data/settings/QuickPingSettingsStore.kt \
+                  apps/android/src/main/java/org/quickping/app/vpn/VpnConfigCompiler.kt \
+                  apps/android/src/test/java/org/quickping/app/vpn/VpnConfigCompilerRoutingTest.kt \
+                  .github/workflows/apply-vpn-hotfix.yml
+          git commit -m "Fix VPN routing and preserve selected server"
+          git push origin HEAD:fix/vpn-routing-selection-hotfix
