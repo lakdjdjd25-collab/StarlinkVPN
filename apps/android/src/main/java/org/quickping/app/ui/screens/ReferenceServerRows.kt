@@ -119,18 +119,7 @@ internal fun ReferenceServerRow(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Start,
                 )
-                if (server.unmetered || server.isUnlimitedCategory) {
-                    Spacer(Modifier.width(5.dp))
-                    ReferenceUnlimitedBadge()
-                }
-                if (server.isGaming) {
-                    Spacer(Modifier.width(5.dp))
-                    ReferenceGamingBadge()
-                }
-                if (lockedVip) {
-                    Spacer(Modifier.width(5.dp))
-                    ReferenceVipBadge()
-                } else if (server.isVip) {
+                if (server.isVip && !lockedVip) {
                     Spacer(Modifier.width(5.dp))
                     Icon(
                         painter = painterResource(R.drawable.ic_vip_crown),
@@ -139,9 +128,19 @@ internal fun ReferenceServerRow(
                         modifier = Modifier.size(18.dp),
                     )
                 }
+                if (server.unmetered || server.isUnlimitedCategory) {
+                    Spacer(Modifier.width(5.dp))
+                    ReferenceUnlimitedBadge()
+                }
+                if (server.isGaming) {
+                    Spacer(Modifier.width(5.dp))
+                    ReferenceGamingBadge()
+                }
             }
-            if (!lockedVip) {
-                Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(7.dp))
+            if (lockedVip) {
+                ReferenceVipBadge()
+            } else {
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                     ReferencePingChip(server.pingMs)
                 }
