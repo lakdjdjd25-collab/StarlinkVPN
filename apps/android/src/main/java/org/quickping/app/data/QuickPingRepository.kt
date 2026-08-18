@@ -18,12 +18,17 @@ import org.quickping.app.data.network.ManualTrafficSession
 import org.quickping.app.data.network.QuickPingApiClient
 import org.quickping.app.data.security.SecureTokenStore
 import org.quickping.app.data.security.StoredSession
+import org.quickping.app.data.traffic.ManualTrafficRuntimeRegistry
+import org.quickping.app.data.traffic.PendingManualTrafficSession
 
 class QuickPingRepository(context: Context) {
     private val api = QuickPingApiClient(BuildConfig.API_BASE_URL)
     private val googleApi = GoogleAuthApiClient(BuildConfig.API_BASE_URL)
     private val tokens = SecureTokenStore(context.applicationContext)
     private val refreshMutex = Mutex()
+
+    @Volatile
+    private var manualServersByService: Map<String, Set<String>> = emptyMap()
 
     suspend fun restoreSession(): BootstrapPayload? = withContext(Dispatchers.IO) {
         if (tokens.load() == null) return@withContext null
@@ -83,13 +88,23 @@ class QuickPingRepository(context: Context) {
         }
 
     suspend fun runtimeConfig(serviceId: String, nodeId: String): String = withContext(Dispatchers.IO) {
-        val accessToken = validAccessToken()
-        try {
-            api.runtimeConfig(accessToken, serviceId, nodeId)
-        } catch (error: ApiException) {
-            if (error.status != 401) throw error
-            api.runtimeConfig(refreshAccessToken(force = true), serviceId, nodeId)
+        ManualTrafficRuntimeRegistry.clear()
+        val config = authenticatedRequest { accessToken -> api.runtimeConfig(accessToken, serviceId, nodeId) }
+        if (manualServersByService[serviceId]?.contains(nodeId) == true) {
+            val traffic = authenticatedRequest { accessToken ->
+                api.startManualTraffic(accessToken, serviceId, nodeId)
+            }
+            ManualTrafficRuntimeRegistry.replace(
+                PendingManualTrafficSession(
+                    sessionId = traffic.sessionId,
+                    serviceId = traffic.serviceId,
+                    serverId = traffic.serverId,
+                    remainingBytes = traffic.remainingBytes,
+                    countTraffic = traffic.countTraffic,
+                ),
+            )
         }
+        config
     }
 
     suspend fun startManualTraffic(serviceId: String, serverId: String): ManualTrafficSession =
@@ -143,7 +158,11 @@ class QuickPingRepository(context: Context) {
         }
     }
 
-    fun signOut() = tokens.clear()
+    fun signOut() {
+        ManualTrafficRuntimeRegistry.clear()
+        manualServersByService = emptyMap()
+        tokens.clear()
+    }
 
     private fun saveAndBootstrap(session: org.quickping.app.data.network.AuthSession): BootstrapPayload {
         tokens.save(
@@ -154,7 +173,7 @@ class QuickPingRepository(context: Context) {
             ),
         )
         return try {
-            api.bootstrap(session.accessToken)
+            api.bootstrap(session.accessToken).also(::rememberServerKinds)
         } catch (error: Throwable) {
             tokens.clear()
             throw error
@@ -162,12 +181,14 @@ class QuickPingRepository(context: Context) {
     }
 
     private suspend fun bootstrapAuthenticated(): BootstrapPayload {
-        val accessToken = validAccessToken()
-        return try {
-            api.bootstrap(accessToken)
-        } catch (error: ApiException) {
-            if (error.status != 401) throw error
-            api.bootstrap(refreshAccessToken(force = true))
+        val payload = authenticatedRequest(api::bootstrap)
+        rememberServerKinds(payload)
+        return payload
+    }
+
+    private fun rememberServerKinds(payload: BootstrapPayload) {
+        manualServersByService = payload.serversByService.mapValues { (_, servers) ->
+            servers.asSequence().filter { it.isManual }.map { it.id }.toSet()
         }
     }
 
