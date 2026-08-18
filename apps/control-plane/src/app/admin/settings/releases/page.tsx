@@ -49,7 +49,7 @@ export default async function ReleasesSettingsPage() {
             <tbody>{releases.map((release) => <tr key={release.id}>
               <td><span className="v2-settings-state is-neutral">{release.platform}</span></td>
               <td><span className="v2-release-version"><strong dir="ltr">{release.versionName}</strong><small dir="ltr">code {release.versionCode}</small></span></td>
-              <td dir="ltr">{release.minSupportedVersionCode}</td>
+              <td dir="ltr">{release.minimumVersionCode}</td>
               <td><span className={`v2-settings-state is-${release.mandatory ? "warning" : "neutral"}`}>{release.mandatory ? "اجباری" : "اختیاری"}</span></td>
               <td>{formatDateTime(release.publishedAt)}</td>
               <td>{release.downloadUrl ? <a href={release.downloadUrl} target="_blank" rel="noreferrer">Download</a> : "—"}</td>
