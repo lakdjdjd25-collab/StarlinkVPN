@@ -36,6 +36,11 @@
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
 }
 
+.v2-server-tab:focus-visible {
+  outline: 2px solid var(--v2-focus, #7c8cff);
+  outline-offset: 2px;
+}
+
 .v2-server-tab-icon {
   display: grid;
   place-items: center;
