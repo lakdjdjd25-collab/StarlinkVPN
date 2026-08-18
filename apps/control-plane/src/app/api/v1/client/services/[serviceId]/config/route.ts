@@ -2,11 +2,10 @@ import type { NextRequest } from "next/server";
 import { fail, ok, requireBearer } from "@/lib/api";
 import { decryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
+import { supportsManualTraffic } from "@/lib/manual-client-capability";
 import { activePasarGuardProviderSummary } from "@/lib/pasarguard/provider";
 import { remainingServiceBytes } from "@/lib/server-access";
 import { canAccessTier, VIP_ACCESS_REQUIRED } from "@/lib/vip-access";
-
-const MANUAL_TRAFFIC_CAPABILITY_HEADER = "x-nimhub-manual-traffic";
 
 export async function GET(
   request: NextRequest,
@@ -83,7 +82,7 @@ export async function GET(
     });
   }
   if (!manualServer) return fail(404, "node_unavailable", "The selected server is unavailable");
-  if (request.headers.get(MANUAL_TRAFFIC_CAPABILITY_HEADER) !== "1") {
+  if (!supportsManualTraffic(request)) {
     return fail(426, "client_upgrade_required", "Update NimHUB to use Manual Servers");
   }
   if (!canAccessTier(service.vipAccess, manualServer.accessTier)) {
