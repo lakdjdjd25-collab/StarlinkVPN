@@ -1,4 +1,5 @@
 import { ManagementInfoForm } from "@/components/EntityForms";
+import { AdminSettingsTabs } from "@/components/admin/AdminSettingsTabs";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -14,29 +15,26 @@ export default async function ManagementPage() {
     <>
       <header className="page-header">
         <div>
-          <h1>اطلاعات مدیریت</h1>
-          <p>اطلاعاتی که اپ بدون انتشار APK جدید از Backend دریافت می‌کند</p>
+          <span className="v2-eyebrow">SYSTEM SETTINGS</span>
+          <h1>تنظیمات</h1>
+          <p>اطلاعات خرید و پشتیبانی که Client مستقیماً از Backend دریافت می‌کند.</p>
         </div>
       </header>
+      <AdminSettingsTabs />
 
-      <section className="card section">
-        <div className="section-title"><h2>تلگرام مدیریت و خرید سرویس</h2></div>
-        <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          دکمه Upgrade / خرید سرویس در Android از همین مقدار استفاده می‌کند. تغییر این مقدار برای کاربران نیاز به انتشار نسخه جدید ندارد.
-        </p>
-        <ManagementInfoForm telegramUsername={telegramUsername} />
+      <section className="v2-settings-catalog">
+        <div className="v2-settings-section-head"><div><span className="v2-eyebrow">MANAGEMENT</span><h2>خرید و پشتیبانی</h2><p>تنظیم تایپ‌شده `client.management`؛ بدون نیاز به ویرایش JSON.</p></div></div>
+        <div className="v2-settings-form-body">
+          <ManagementInfoForm telegramUsername={telegramUsername} />
+        </div>
       </section>
 
-      <section className="card section">
-        <div className="section-title"><h2>وضعیت فعلی</h2></div>
-        <div className="table-wrap">
-          <table>
-            <tbody>
-              <tr><th>آیدی تلگرام فعال</th><td dir="ltr">@{telegramUsername.replace(/^@/, "")}</td></tr>
-              <tr><th>منبع Android</th><td>Bootstrap / Backend</td></tr>
-              <tr><th>نیاز به APK جدید برای تغییر آیدی</th><td><span className="badge green">خیر</span></td></tr>
-            </tbody>
-          </table>
+      <section className="v2-settings-catalog">
+        <div className="v2-settings-section-head"><div><span className="v2-eyebrow">CURRENT STATE</span><h2>وضعیت فعلی</h2></div></div>
+        <div className="v2-management-facts">
+          <div><small>Telegram</small><strong dir="ltr">@{telegramUsername.replace(/^@/, "")}</strong></div>
+          <div><small>Source</small><strong>Bootstrap / Backend</strong></div>
+          <div><small>نیاز به انتشار نسخه جدید</small><span className="v2-settings-state is-success">خیر</span></div>
         </div>
       </section>
     </>

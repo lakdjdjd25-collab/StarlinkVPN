@@ -1,4 +1,5 @@
-import { ManagedLicenseForm } from "@/components/ManagedLicenseForm";
+import { AdminCreateUserV2 } from "@/components/admin/AdminCreateUserV2";
+import { AdminUsersV2 } from "@/components/admin/AdminUsersV2";
 
 export const dynamic = "force-dynamic";
 
@@ -7,11 +8,13 @@ export default function ServicesPage() {
     <>
       <header className="page-header">
         <div>
-          <h1>کاربران و مجوزها</h1>
-          <p>صدور، مسدودی، حجم، تمدید، دستگاه و گروه سرورها در یک صفحه</p>
+          <span className="v2-eyebrow">CUSTOMERS & ACCESS</span>
+          <h1>کاربران</h1>
+          <p>مدیریت اشتراک، حجم، اعتبار، دستگاه‌ها، VIP، مجوز و وضعیت Provider بدون وابستگی صفحه به اتصال زنده پنل VPN</p>
         </div>
+        <AdminCreateUserV2 />
       </header>
-      <ManagedLicenseForm />
+      <AdminUsersV2 />
     </>
   );
 }
