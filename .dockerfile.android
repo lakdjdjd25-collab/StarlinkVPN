@@ -60,14 +60,14 @@ RUN test -n "${ANDROID_RELEASE_KEYSTORE_B64}" \
     && SHA256="$(sha256sum "${APK}" | awk '{print $1}')" \
     && test -n "${SHA1}" \
     && mkdir -p /out \
-    && cp "${APK}" /out/NimHUB-Vpn-2.6.11-release.apk \
-    && printf '{"version":"2.6.11","variant":"release","applicationId":"org.quickping","sha1":"%s","sha256":"%s"}\n' "${SHA1}" "${SHA256}" > /out/metadata.json \
+    && cp "${APK}" /out/NimHUB-Vpn-2.6.19-release.apk \
+    && printf '{"version":"2.6.19","variant":"release","applicationId":"org.quickping","sha1":"%s","sha256":"%s"}\n' "${SHA1}" "${SHA256}" > /out/metadata.json \
     && rm -f /tmp/nimhub-release.jks
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /out/NimHUB-Vpn-2.6.11-release.apk /app/NimHUB-Vpn.apk
+COPY --from=build /out/NimHUB-Vpn-2.6.19-release.apk /app/NimHUB-Vpn.apk
 COPY --from=build /out/metadata.json /app/metadata.json
 COPY scripts/android-artifact-server.js /app/server.js
 CMD ["node", "/app/server.js"]
