@@ -195,7 +195,7 @@ export async function GET(request: NextRequest) {
     notifications: notifications.map(({ deliveries, ...notification }) => ({
       ...notification,
       read: Boolean(deliveries[0]?.readAt),
-      delivered: Boolean(deliveries[0]?.delieveredAt),
+      delivered: Boolean(deliveries[0]?.deliveredAt),
     })),
   });
 }
