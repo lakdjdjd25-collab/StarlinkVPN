@@ -3,9 +3,10 @@ package org.quickping.app.model
 private const val VIP_TIE_WINDOW_MS = 12
 
 internal fun selectBestServerForAuto(servers: List<Server>): Server? {
-    if (servers.isEmpty()) return null
-    val measured = servers.filter { it.pingMs != null }
-    if (measured.isEmpty()) return servers.first()
+    val eligible = servers.filter { it.selectable }
+    if (eligible.isEmpty()) return null
+    val measured = eligible.filter { it.pingMs != null }
+    if (measured.isEmpty()) return eligible.first()
     val fastestPing = measured.minOf { it.pingMs ?: Int.MAX_VALUE }
     return measured
         .filter { (it.pingMs ?: Int.MAX_VALUE) <= fastestPing + VIP_TIE_WINDOW_MS }
