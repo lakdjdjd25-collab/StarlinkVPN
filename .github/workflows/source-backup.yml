@@ -1,0 +1,53 @@
+name: Source Backup Export
+
+on:
+  push:
+    branches:
+      - backup/full-source-20260819
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch all refs
+        run: |
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*' --prune
+
+      - name: Build source backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          git bundle create backup/StarlinkVPN-complete.git.bundle --all
+          git archive --format=zip --output=backup/StarlinkVPN-main-source.zip origin/main
+          if git show-ref --verify --quiet refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build; then
+            git archive --format=zip --output=backup/StarlinkVPN-final-hotfix-v3-source.zip refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build
+          fi
+          git show-ref > backup/git-refs.txt
+          {
+            echo "Repository: lakdjdjd25-collab/StarlinkVPN"
+            echo "Created UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Main: $(git rev-parse refs/remotes/origin/main)"
+            if git show-ref --verify --quiet refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build; then
+              echo "Final hotfix v3 branch: $(git rev-parse refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build)"
+            fi
+            echo "Bundle verification:"
+            git bundle verify backup/StarlinkVPN-complete.git.bundle
+          } > backup/BACKUP-MANIFEST.txt 2>&1
+          sha256sum backup/* > backup/SHA256SUMS.txt
+
+      - name: Upload source backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: NimHUB-Full-Source-Backup-2026-08-19
+          path: backup/
+          if-no-files-found: error
+          retention-days: 90
