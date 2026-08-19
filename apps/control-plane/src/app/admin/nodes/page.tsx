@@ -3,6 +3,7 @@ import { VipCreateNodeForm } from "@/components/VipNodeForms";
 import { AdminManagedServersV2 } from "@/components/admin/AdminManagedServersV2";
 import { AdminServerTabs } from "@/components/admin/AdminServerTabs";
 import { db } from "@/lib/db";
+import { groupManagedNodesForAdmin } from "@/lib/pasarguard/logical-node";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,14 @@ export default async function NodesPage() {
   const [nodes, regions] = await Promise.all([
     db.vpnNode.findMany({
       orderBy: [{ region: { priority: "desc" } }, { name: "asc" }],
-      include: { region: true },
+      include: {
+        region: true,
+        pasarGuardBinding: { select: { lastSyncAt: true } },
+        services: {
+          where: { enabled: true },
+          select: { service: { select: { userId: true, maxDevices: true } } },
+        },
+      },
     }),
     db.serverRegion.findMany({
       where: { enabled: true },
@@ -18,32 +26,42 @@ export default async function NodesPage() {
     }),
   ]);
 
+  const groupedNodes = groupManagedNodesForAdmin(nodes.map((node) => ({
+    id: node.id,
+    name: node.name,
+    provider: node.provider,
+    providerTag: node.providerTag,
+    accessTier: node.accessTier,
+    status: node.status,
+    regionName: node.region.name,
+    countryCode: node.region.countryCode,
+    protocol: node.protocol,
+    host: node.host,
+    port: node.port,
+    capacity: node.capacity,
+    activeSessions: node.activeSessions,
+    lastSeenAt: node.lastSeenAt,
+    lastSyncAt: node.pasarGuardBinding?.lastSyncAt ?? null,
+    assignments: node.services.map(({ service }) => ({ userId: service.userId, maxDevices: service.maxDevices })),
+  })));
+
   return (
     <>
       <header className="page-header">
         <div>
           <span className="v2-eyebrow">SERVER CONTROL CENTER</span>
           <h1>سرورها</h1>
-          <p>نمای عملیاتی Managed و Manual؛ سلامت، ظرفیت و سطح دسترسی بدون تغییر در منطق تحویل سرور.</p>
+          <p>هر سرور واقعی پاسارگاد فقط یک‌بار نمایش داده می‌شود؛ تعداد کاربران و آخرین Sync بدون نمایش ظرفیت ساختگی.</p>
         </div>
       </header>
 
       <AdminServerTabs />
 
       <AdminManagedServersV2
-        nodes={nodes.map((node) => ({
-          id: node.id,
-          name: node.name,
-          accessTier: node.accessTier,
-          status: node.status,
-          regionName: node.region.name,
-          countryCode: node.region.countryCode,
-          protocol: node.protocol,
-          host: node.host,
-          port: node.port,
-          activeSessions: node.activeSessions,
-          capacity: node.capacity,
+        nodes={groupedNodes.map((node) => ({
+          ...node,
           lastSeenAt: node.lastSeenAt?.toISOString() ?? null,
+          lastSyncAt: node.lastSyncAt?.toISOString() ?? null,
         }))}
       />
 
