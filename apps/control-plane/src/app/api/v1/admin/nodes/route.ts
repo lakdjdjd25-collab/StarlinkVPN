@@ -21,8 +21,9 @@ const schema = z.object({
 const updateSchema = z.object({
   id: z.string().min(1),
   status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]),
-  capacity: z.number().int().min(1).max(1_000_000),
+  capacity: z.number().int().min(1).max(1_000_000).optional(),
   accessTier: z.enum(["STANDARD", "VIP"]),
+  scope: z.enum(["PASARGUARD"]).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -71,16 +72,85 @@ export async function PATCH(request: NextRequest) {
   if (!admin || admin.role !== "ADMIN") return fail(403, "forbidden", "فقط مدیر اصلی مجاز است");
   const input = updateSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "تغییرات نود معتبر نیست");
+
   const before = await db.vpnNode.findUnique({
     where: { id: input.data.id },
-    select: { id: true, status: true, capacity: true, accessTier: true },
+    select: {
+      id: true,
+      name: true,
+      provider: true,
+      providerTag: true,
+      host: true,
+      port: true,
+      protocol: true,
+      status: true,
+      capacity: true,
+      accessTier: true,
+    },
   });
   if (!before) return fail(404, "node_not_found", "نود پیدا نشد");
+
+  if (input.data.scope === "PASARGUARD") {
+    if (before.provider.toUpperCase() !== "PASARGUARD") {
+      return fail(400, "invalid_scope", "این کنترل فقط برای سرورهای پاسارگاد قابل استفاده است");
+    }
+
+    const logicalWhere = {
+      provider: "PASARGUARD",
+      host: before.host,
+      port: before.port,
+      protocol: before.protocol,
+      ...(before.providerTag ? { providerTag: before.providerTag } : { name: before.name }),
+    } as const;
+    const targets = await db.vpnNode.findMany({
+      where: logicalWhere,
+      select: { id: true, status: true, accessTier: true },
+    });
+    if (!targets.length) return fail(404, "logical_node_not_found", "سرور منطقی پاسارگاد پیدا نشد");
+
+    const now = new Date();
+    await db.vpnNode.updateMany({
+      where: logicalWhere,
+      data: {
+        status: input.data.status,
+        accessTier: input.data.accessTier,
+        lastSeenAt: input.data.status === "ONLINE" ? now : undefined,
+      },
+    });
+    await db.auditLog.create({
+      data: {
+        actorId: admin.sub,
+        action: "node.logical.update",
+        entityType: "VpnNode",
+        entityId: before.id,
+        before: {
+          scope: "PASARGUARD",
+          affectedNodes: targets.length,
+          vipNodes: targets.filter((node) => node.accessTier === "VIP").length,
+        },
+        after: {
+          scope: "PASARGUARD",
+          affectedNodes: targets.length,
+          status: input.data.status,
+          accessTier: input.data.accessTier,
+        },
+      },
+    });
+    return ok({
+      id: before.id,
+      scope: "PASARGUARD",
+      affectedNodes: targets.length,
+      status: input.data.status,
+      accessTier: input.data.accessTier,
+      lastSeenAt: input.data.status === "ONLINE" ? now : null,
+    });
+  }
+
   const node = await db.vpnNode.update({
     where: { id: before.id },
     data: {
       status: input.data.status,
-      capacity: input.data.capacity,
+      capacity: input.data.capacity ?? before.capacity,
       accessTier: input.data.accessTier,
       lastSeenAt: input.data.status === "ONLINE" ? new Date() : undefined,
     },
