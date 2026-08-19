@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,14 +21,16 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.quickping.app.model.Server
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 private const val STABLE_PING_CACHE_TTL_MS = 60_000L
-private const val STABLE_PING_CONNECT_TIMEOUT_MS = 1_800
+private const val STABLE_PING_CONNECT_TIMEOUT_MS = 1_500
 private const val STABLE_PING_PARALLELISM = 4
+private const val STABLE_PING_PROBE_COUNT = 3
 
 private data class CachedServerPing(
     val valueMs: Int,
@@ -38,6 +41,13 @@ private val stableServerPingCache = ConcurrentHashMap<String, CachedServerPing>(
 
 internal fun stablePingEndpointKey(server: Server): String =
     "${server.id}|${server.host.lowercase()}|${server.port}"
+
+internal fun medianSuccessfulPing(samples: List<Int>): Int? {
+    if (samples.isEmpty()) return null
+    val sorted = samples.sorted()
+    val middle = sorted.size / 2
+    return if (sorted.size % 2 == 1) sorted[middle] else (sorted[middle - 1] + sorted[middle]) / 2
+}
 
 internal fun mergeStablePingValues(
     servers: List<Server>,
@@ -51,12 +61,11 @@ internal fun mergeStablePingValues(
 }
 
 /**
- * Keeps the last successful latency visible while a background refresh runs. This prevents
- * navigation/account bootstrap refreshes from flashing every server back to "Check".
+ * Stable endpoint ping based on the actual server host/port.
  *
- * Probes prefer a validated non-VPN network (Wi-Fi/cellular/ethernet) so latency remains available
- * whether NimHUB, another VPN, or no VPN is currently the system default route. If Android does not
- * expose an underlying physical network, the normal default route is used as a safe fallback.
+ * The probe prefers a physical non-VPN Network. It never falls back through an active VPN because
+ * that can produce misleadingly low values for unrelated endpoints. OEM/network exceptions are
+ * isolated and degrade to an unavailable ping instead of escaping the Home coroutine.
  */
 @Composable
 internal fun rememberStableServerPings(
@@ -83,8 +92,6 @@ internal fun rememberStableServerPings(
     LaunchedEffect(endpointKey, observedPingKey, enabled) {
         val now = SystemClock.elapsedRealtime()
 
-        // Accept any successful value already produced by the ViewModel and remember it across
-        // bootstrap/navigation refreshes that recreate Server objects with pingMs = null.
         servers.filter { it.selectable }.forEach { server ->
             val ping = server.pingMs ?: return@forEach
             val key = stablePingEndpointKey(server)
@@ -105,17 +112,23 @@ internal fun rememberStableServerPings(
         if (targets.isEmpty()) return@LaunchedEffect
 
         val semaphore = Semaphore(STABLE_PING_PARALLELISM)
-        coroutineScope {
+        val results = coroutineScope {
             targets.map { server ->
                 async(Dispatchers.IO) {
                     semaphore.withPermit {
-                        val value = physicalNetworkTcpPing(context, server.host, server.port)
+                        val value = safePhysicalNetworkTcpPing(context, server.host, server.port)
                         server to value
                     }
                 }
-            }.awaitAll().forEach { (server, value) ->
-                if (value == null) return@forEach
-                val key = stablePingEndpointKey(server)
+            }.awaitAll()
+        }
+
+        results.forEach { (server, value) ->
+            val key = stablePingEndpointKey(server)
+            if (value == null) {
+                stableServerPingCache.remove(key)
+                measuredValues = measuredValues - key
+            } else {
                 stableServerPingCache[key] = CachedServerPing(value, SystemClock.elapsedRealtime())
                 measuredValues = measuredValues + (key to value)
             }
@@ -132,24 +145,43 @@ internal fun rememberStableServerPings(
     return mergeStablePingValues(servers, cachedNow)
 }
 
+private suspend fun safePhysicalNetworkTcpPing(
+    context: Context,
+    host: String,
+    port: Int,
+): Int? = try {
+    physicalNetworkTcpPing(context, host, port)
+} catch (error: CancellationException) {
+    throw error
+} catch (_: Throwable) {
+    null
+}
+
 private suspend fun physicalNetworkTcpPing(
     context: Context,
     host: String,
     port: Int,
 ): Int? = withContext(Dispatchers.IO) {
     val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-    val candidates = connectivity?.let(::physicalNetworks).orEmpty()
+        ?: return@withContext null
 
+    val candidates = physicalNetworks(connectivity)
     candidates.forEach { network ->
-        tcpConnectPing(network, host, port)?.let { return@withContext it }
+        tcpConnectMedian(network, host, port)?.let { return@withContext it }
     }
 
-    // Fallback keeps compatibility on devices/OEMs that hide the underlying network while a VPN
-    // owns the default route.
-    tcpConnectPing(null, host, port)
+    // Only use the default route when it is a real non-VPN Internet network.
+    val active = runCatching { connectivity.activeNetwork }.getOrNull()
+        ?: return@withContext null
+    val capabilities = runCatching { connectivity.getNetworkCapabilities(active) }.getOrNull()
+        ?: return@withContext null
+    if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return@withContext null
+    if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@withContext null
+
+    tcpConnectMedian(null, host, port)
 }
 
-private fun physicalNetworks(connectivity: ConnectivityManager): List<Network> =
+private fun physicalNetworks(connectivity: ConnectivityManager): List<Network> = runCatching {
     connectivity.allNetworks
         .mapNotNull { network ->
             val capabilities = connectivity.getNetworkCapabilities(network) ?: return@mapNotNull null
@@ -168,23 +200,39 @@ private fun physicalNetworks(connectivity: ConnectivityManager): List<Network> =
             },
         )
         .map { it.first }
+}.getOrDefault(emptyList())
 
-private fun tcpConnectPing(network: Network?, host: String, port: Int): Int? = runCatching {
-    val addresses = if (network != null) network.getAllByName(host).toList() else emptyList()
-    val candidates = if (addresses.isNotEmpty()) addresses.take(2) else listOf(null)
-
-    var best: Int? = null
-    candidates.forEach { address ->
-        val socket = network?.socketFactory?.createSocket() ?: Socket()
-        socket.use {
-            val started = System.nanoTime()
-            val endpoint = if (address != null) InetSocketAddress(address, port) else InetSocketAddress(host, port)
-            it.connect(endpoint, STABLE_PING_CONNECT_TIMEOUT_MS)
-            val elapsed = ((System.nanoTime() - started) / 1_000_000.0)
-                .roundToInt()
-                .coerceAtLeast(1)
-            best = best?.let { previous -> minOf(previous, elapsed) } ?: elapsed
+private fun tcpConnectMedian(network: Network?, host: String, port: Int): Int? {
+    val addresses: List<InetAddress?> = runCatching {
+        if (network != null) {
+            network.getAllByName(host).take(2).map { it as InetAddress? }
+        } else {
+            listOf(null)
         }
+    }.getOrElse { return null }
+    if (addresses.isEmpty()) return null
+
+    val samples = ArrayList<Int>(STABLE_PING_PROBE_COUNT)
+    repeat(STABLE_PING_PROBE_COUNT) { index ->
+        val address = addresses[index % addresses.size]
+        tcpConnectPingOnce(network, host, address, port)?.let(samples::add)
     }
-    best
+    return medianSuccessfulPing(samples)
+}
+
+private fun tcpConnectPingOnce(
+    network: Network?,
+    host: String,
+    address: InetAddress?,
+    port: Int,
+): Int? = runCatching {
+    val socket = network?.socketFactory?.createSocket() ?: Socket()
+    socket.use {
+        val started = System.nanoTime()
+        val endpoint = if (address != null) InetSocketAddress(address, port) else InetSocketAddress(host, port)
+        it.connect(endpoint, STABLE_PING_CONNECT_TIMEOUT_MS)
+        ((System.nanoTime() - started) / 1_000_000.0)
+            .roundToInt()
+            .coerceAtLeast(1)
+    }
 }.getOrNull()

@@ -25,7 +25,7 @@ data class Server(
     val canConnect: Boolean = true,
     val sortOrder: Int = 0,
 ) {
-    val isVip: Boolean get() = accessTier.equals("VIP", ignoreCase = true)
+    val isVip: Boolean get() = requiresVip || accessTier.equals("VIP", ignoreCase = true)
     val isManual: Boolean get() = serverType.equals("MANUAL", ignoreCase = true)
     val isGaming: Boolean get() =
         subcategory.equals("GAMING", ignoreCase = true) || category.equals("GAMING", ignoreCase = true)

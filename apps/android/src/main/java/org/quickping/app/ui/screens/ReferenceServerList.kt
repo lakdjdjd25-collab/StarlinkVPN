@@ -37,6 +37,21 @@ import org.quickping.app.state.QuickPingUiState
 
 private enum class ReferenceFilterMode { Recommended, Fastest, Free }
 
+internal fun orderReferenceServers(servers: List<Server>, fastest: Boolean): List<Server> {
+    val lockedVip = servers.filter { it.isVip && !it.selectable }
+    val available = servers.filterNot { it.isVip && !it.selectable }
+    val orderedAvailable = if (fastest) {
+        available.sortedWith(
+            compareBy<Server> { !it.selectable }
+                .thenBy { it.pingMs == null }
+                .thenBy { it.pingMs ?: Int.MAX_VALUE },
+        )
+    } else {
+        available
+    }
+    return orderedAvailable + lockedVip
+}
+
 @Composable
 internal fun ReferenceServerList(
     modifier: Modifier,
@@ -55,33 +70,25 @@ internal fun ReferenceServerList(
     val filterMode = runCatching { ReferenceFilterMode.valueOf(filterModeName) }
         .getOrDefault(ReferenceFilterMode.Recommended)
     val normalizedQuery = query.trim().lowercase()
-    val visibleServers = state.servers.asSequence()
-        .filter { server ->
-            when (quickFilter) {
-                ReferenceQuickFilter.All -> true
-                ReferenceQuickFilter.Unlimited -> server.unmetered || server.isUnlimitedCategory
-                ReferenceQuickFilter.Gaming -> server.isReferenceGamingServer()
+    val visibleServers = orderReferenceServers(
+        servers = state.servers.asSequence()
+            .filter { server ->
+                when (quickFilter) {
+                    ReferenceQuickFilter.All -> true
+                    ReferenceQuickFilter.Unlimited -> server.unmetered || server.isUnlimitedCategory
+                    ReferenceQuickFilter.Gaming -> server.isReferenceGamingServer()
+                }
             }
-        }
-        .filter { normalizedQuery.isBlank() || referenceCountrySearchText(it).contains(normalizedQuery) }
-        .filter {
-            when (filterMode) {
-                ReferenceFilterMode.Free -> it.freeAllowed
-                else -> true
+            .filter { normalizedQuery.isBlank() || referenceCountrySearchText(it).contains(normalizedQuery) }
+            .filter {
+                when (filterMode) {
+                    ReferenceFilterMode.Free -> it.freeAllowed
+                    else -> true
+                }
             }
-        }
-        .toList()
-        .let { servers ->
-            if (filterMode == ReferenceFilterMode.Fastest) {
-                servers.sortedWith(
-                    compareBy<Server> { !it.selectable }
-                        .thenBy { it.pingMs == null }
-                        .thenBy { it.pingMs ?: Int.MAX_VALUE },
-                )
-            } else {
-                servers
-            }
-        }
+            .toList(),
+        fastest = filterMode == ReferenceFilterMode.Fastest,
+    )
 
     LazyColumn(
         modifier = modifier.fillMaxWidth(),
