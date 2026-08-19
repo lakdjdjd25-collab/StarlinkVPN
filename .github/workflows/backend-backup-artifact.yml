@@ -1,0 +1,126 @@
+name: Backend Backup Artifact
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Request repository-scoped OIDC token
+        id: oidc
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=nimhub-backup-20260819" | jq -r '.value')"
+          test -n "$token" && test "$token" != "null"
+          echo "::add-mask::$token"
+          echo "token=$token" >> "$GITHUB_OUTPUT"
+
+      - name: Download protected production backup
+        shell: bash
+        env:
+          BACKUP_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          curl --fail --silent --show-error --location --retry 3 \
+            -H "Authorization: Bearer ${BACKUP_OIDC_TOKEN}" \
+            --output backup/nimhub-backend-snapshot.json.gz \
+            'https://control-plane-production-a517.up.railway.app/api/internal/backup-export'
+          gzip -t backup/nimhub-backend-snapshot.json.gz
+
+      - name: Validate snapshot without printing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import gzip, json, pathlib
+          src = pathlib.Path('backup/nimhub-backend-snapshot.json.gz')
+          with gzip.open(src, 'rt', encoding='utf-8') as f:
+              data = json.load(f)
+          if data.get('format') != 'NimHUBBackendBackup/v1':
+              raise SystemExit('unexpected backup format')
+          db = data.get('database') or {}
+          tables = db.get('tables') or {}
+          env = data.get('environment') or {}
+          control = env.get('controlPlane') or {}
+          postgres = env.get('postgres') or {}
+          required = ['DATABASE_URL', 'CONFIG_ENCRYPTION_KEY', 'JWT_SECRET', 'ADMIN_EMAIL', 'ADMIN_PASSWORD']
+          missing = [key for key in required if not control.get(key)]
+          if missing:
+              raise SystemExit('missing required backend environment keys: ' + ', '.join(missing))
+          if not postgres.get('PGUSER') or not postgres.get('PGPASSWORD'):
+              raise SystemExit('postgres credentials missing')
+          rows = sum(len(v) for v in tables.values() if isinstance(v, list))
+          manifest = [
+              'NimHUB Backend/Data Backup',
+              f"Created: {data.get('createdAt')}",
+              f"Format: {data.get('format')}",
+              f"Public tables: {len(tables)}",
+              f"Total exported rows: {rows}",
+              f"Sequences: {len(db.get('sequences') or {})}",
+              f"Control-plane env keys: {len(control)}",
+              f"Postgres credential fields: {len(postgres)}",
+              '',
+              'Sensitive values are intentionally NOT printed in this manifest.',
+              'They are stored only inside nimhub-backend-snapshot.json.gz.',
+          ]
+          pathlib.Path('backup/BACKUP-MANIFEST.txt').write_text('\n'.join(manifest) + '\n', encoding='utf-8')
+          PY
+
+      - name: Add schema, migrations and restore notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp apps/control-plane/prisma/schema.prisma backup/schema.prisma
+          cp -R apps/control-plane/prisma/migrations backup/prisma-migrations
+          cat > backup/RAILWAY-METADATA.json <<'EOF'
+          {
+            "projectId": "d2b3a600-5b04-4ba9-a341-7959ab38e187",
+            "projectName": "StarlinkVPN",
+            "environmentId": "9c6e354a-60dd-476e-b6df-2126c9d6688b",
+            "environmentName": "production",
+            "controlPlaneServiceId": "a6c3406f-3de8-4205-a763-a00fff0db946",
+            "postgresServiceId": "23ab9ccf-acd6-433e-b7cf-9eafc68ce0cf",
+            "controlPlaneDomain": "control-plane-production-a517.up.railway.app",
+            "functionalBaselineCommit": "2fcf72613bf851bea5241945cf28a6d01b61e565"
+          }
+          EOF
+          cat > backup/RESTORE-NOTES.txt <<'EOF'
+          NimHUB backend/data backup.
+
+          WARNING: This archive contains production credentials and private user data.
+          Store it securely and do not upload it to a public repository or public file host.
+
+          The compressed snapshot contains:
+          - all rows from every PostgreSQL table in schema public
+          - column metadata
+          - constraints and indexes
+          - sequence values
+          - control-plane environment values required by the backend
+          - database connection credentials derived from DATABASE_URL
+
+          schema.prisma and prisma-migrations are included for reconstruction.
+          The separate Full Source Backup contains the complete Git bundle and source snapshots.
+          EOF
+          sha256sum backup/nimhub-backend-snapshot.json.gz backup/schema.prisma backup/RAILWAY-METADATA.json backup/BACKUP-MANIFEST.txt backup/RESTORE-NOTES.txt > backup/SHA256SUMS.txt
+
+      - name: Upload backend backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: NimHUB-Backend-Data-Backup-2026-08-19
+          path: backup/
+          if-no-files-found: error
+          retention-days: 7
