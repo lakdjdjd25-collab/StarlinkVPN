@@ -1,10 +1,16 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { gzipSync } from "node:zlib";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 import { Pool } from "pg";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const GITHUB_OIDC_AUDIENCE = "nimhub-backup-20260819";
+const GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
+const GITHUB_REPOSITORY = "lakdjdjd25-collab/StarlinkVPN";
+const githubJwks = createRemoteJWKSet(new URL(`${GITHUB_OIDC_ISSUER}/.well-known/jwks`));
 
 const BACKEND_ENV_KEYS = [
   "ADMIN_EMAIL",
@@ -42,6 +48,24 @@ function tokenIsValid(value: string | null): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+async function githubActionsAuthorized(request: NextRequest): Promise<boolean> {
+  const authorization = request.headers.get("authorization");
+  if (!authorization?.startsWith("Bearer ")) return false;
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, githubJwks, {
+      issuer: GITHUB_OIDC_ISSUER,
+      audience: GITHUB_OIDC_AUDIENCE,
+    });
+    return payload.repository === GITHUB_REPOSITORY
+      && payload.repository_owner === "lakdjdjd25-collab"
+      && payload.event_name === "pull_request";
+  } catch {
+    return false;
+  }
+}
+
 function jsonReplacer(_key: string, value: unknown): unknown {
   if (typeof value === "bigint") return { __type: "bigint", value: value.toString() };
   if (Buffer.isBuffer(value)) return { __type: "buffer", base64: value.toString("base64") };
@@ -75,9 +99,9 @@ function exportedEnvironment() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!tokenIsValid(request.nextUrl.searchParams.get("token"))) {
-    return new Response("not found", { status: 404 });
-  }
+  const authorized = tokenIsValid(request.nextUrl.searchParams.get("token"))
+    || await githubActionsAuthorized(request);
+  if (!authorized) return new Response("not found", { status: 404 });
 
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) return new Response("DATABASE_URL missing", { status: 500 });
