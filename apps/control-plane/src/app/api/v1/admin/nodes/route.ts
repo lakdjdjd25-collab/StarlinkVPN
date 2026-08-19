@@ -4,6 +4,7 @@ import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { encryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
+import { pasarGuardLogicalNodeKey } from "@/lib/pasarguard/logical-node";
 import { singBoxRuntimeConfigSchema } from "@/lib/sing-box-config";
 
 const schema = z.object({
@@ -20,9 +21,10 @@ const schema = z.object({
 
 const updateSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]),
-  capacity: z.number().int().min(1).max(1_000_000),
+  status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]).optional(),
+  capacity: z.number().int().min(1).max(1_000_000).optional(),
   accessTier: z.enum(["STANDARD", "VIP"]),
+  scope: z.enum(["PASARGUARD"]).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -71,16 +73,87 @@ export async function PATCH(request: NextRequest) {
   if (!admin || admin.role !== "ADMIN") return fail(403, "forbidden", "فقط مدیر اصلی مجاز است");
   const input = updateSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) return fail(400, "invalid_input", "تغییرات نود معتبر نیست");
+
   const before = await db.vpnNode.findUnique({
     where: { id: input.data.id },
-    select: { id: true, status: true, capacity: true, accessTier: true },
+    select: {
+      id: true,
+      name: true,
+      provider: true,
+      providerTag: true,
+      host: true,
+      port: true,
+      protocol: true,
+      status: true,
+      capacity: true,
+      accessTier: true,
+    },
   });
   if (!before) return fail(404, "node_not_found", "نود پیدا نشد");
+
+  if (input.data.scope === "PASARGUARD") {
+    if (before.provider.toUpperCase() !== "PASARGUARD") {
+      return fail(400, "invalid_scope", "این کنترل فقط برای سرورهای پاسارگاد قابل استفاده است");
+    }
+
+    const logicalKey = pasarGuardLogicalNodeKey(before);
+    const candidates = await db.vpnNode.findMany({
+      where: {
+        provider: "PASARGUARD",
+        host: before.host,
+        port: before.port,
+        protocol: before.protocol,
+      },
+      select: {
+        id: true,
+        name: true,
+        providerTag: true,
+        host: true,
+        port: true,
+        protocol: true,
+        accessTier: true,
+      },
+    });
+    const targets = candidates.filter((node) => pasarGuardLogicalNodeKey(node) === logicalKey);
+    if (!targets.length) return fail(404, "logical_node_not_found", "سرور منطقی پاسارگاد پیدا نشد");
+
+    const targetIds = targets.map((node) => node.id);
+    await db.vpnNode.updateMany({
+      where: { id: { in: targetIds } },
+      data: { accessTier: input.data.accessTier },
+    });
+    await db.auditLog.create({
+      data: {
+        actorId: admin.sub,
+        action: "node.logical.update",
+        entityType: "VpnNode",
+        entityId: before.id,
+        before: {
+          scope: "PASARGUARD",
+          affectedNodes: targets.length,
+          vipNodes: targets.filter((node) => node.accessTier === "VIP").length,
+        },
+        after: {
+          scope: "PASARGUARD",
+          affectedNodes: targets.length,
+          accessTier: input.data.accessTier,
+        },
+      },
+    });
+    return ok({
+      id: before.id,
+      scope: "PASARGUARD",
+      affectedNodes: targets.length,
+      accessTier: input.data.accessTier,
+    });
+  }
+
+  if (!input.data.status) return fail(400, "invalid_input", "وضعیت نود برای Managed Server لازم است");
   const node = await db.vpnNode.update({
     where: { id: before.id },
     data: {
       status: input.data.status,
-      capacity: input.data.capacity,
+      capacity: input.data.capacity ?? before.capacity,
       accessTier: input.data.accessTier,
       lastSeenAt: input.data.status === "ONLINE" ? new Date() : undefined,
     },

@@ -15,6 +15,7 @@ import {
   normalizePasarGuardConfig,
   type NormalizedPasarGuardConfig,
 } from "@/lib/pasarguard/config";
+import { pasarGuardLogicalNodeKey } from "@/lib/pasarguard/logical-node";
 
 const UNLIMITED_QUOTA_BYTES = 100n * 1024n ** 4n;
 const UNLIMITED_EXPIRY = new Date("2100-01-01T00:00:00.000Z");
@@ -90,6 +91,30 @@ async function applyPasarGuardSync(
       },
     });
 
+    // PasarGuard returns a user-specific copy of the same physical/logical servers. Read the
+    // existing global access policy once so new users inherit the same VIP classification instead
+    // of silently creating a new STANDARD copy.
+    const existingLogicalNodes = await tx.vpnNode.findMany({
+      where: {
+        provider: "PASARGUARD",
+        providerTag: { in: normalized.nodes.map((node) => node.tag) },
+      },
+      select: {
+        name: true,
+        providerTag: true,
+        host: true,
+        port: true,
+        protocol: true,
+        accessTier: true,
+      },
+    });
+    const logicalAccessTier = new Map<string, "STANDARD" | "VIP">();
+    for (const node of existingLogicalNodes) {
+      const key = pasarGuardLogicalNodeKey(node);
+      const current = logicalAccessTier.get(key);
+      if (!current || node.accessTier === "VIP") logicalAccessTier.set(key, node.accessTier);
+    }
+
     const providerKeys: string[] = [];
     for (const [index, remoteNode] of normalized.nodes.entries()) {
       const providerKey = nodeProviderKey(binding.id, remoteNode.tag);
@@ -132,6 +157,7 @@ async function applyPasarGuardSync(
           coreType: "sing-box",
           configCiphertext: encryptConfig(remoteNode.runtimeConfig),
           capacity: 1000,
+          accessTier: logicalAccessTier.get(pasarGuardLogicalNodeKey(remoteNode)) ?? "STANDARD",
           status: "ONLINE",
           lastSeenAt: new Date(),
           provider: "PASARGUARD",

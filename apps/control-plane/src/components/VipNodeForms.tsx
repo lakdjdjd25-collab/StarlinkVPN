@@ -86,11 +86,13 @@ export function VipNodeControlForm({
   status,
   capacity,
   accessTier,
+  logicalScope,
 }: {
   id: string;
   status: string;
-  capacity: number;
+  capacity?: number | null;
   accessTier: "STANDARD" | "VIP";
+  logicalScope?: "PASARGUARD";
 }) {
   const action = useMutation("PATCH");
   const [vip, setVip] = useState(accessTier === "VIP");
@@ -99,15 +101,16 @@ export function VipNodeControlForm({
     const data = new FormData(event.currentTarget);
     await action.send({
       id,
-      status: data.get("status"),
-      capacity: Number(data.get("capacity")),
+      ...(logicalScope ? {} : { status: data.get("status") }),
+      ...(capacity != null ? { capacity: Number(data.get("capacity")) } : {}),
       accessTier: vip ? "VIP" : "STANDARD",
+      ...(logicalScope ? { scope: logicalScope } : {}),
     });
   }
   return (
-    <form onSubmit={submit} style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 390, flexWrap: "wrap" }}>
-      <select className="select" name="status" defaultValue={status} aria-label="وضعیت نود"><option>ONLINE</option><option>DEGRADED</option><option>OFFLINE</option><option>MAINTENANCE</option></select>
-      <input className="input" name="capacity" type="number" min={1} defaultValue={capacity} aria-label="ظرفیت" style={{ width: 88 }} />
+    <form onSubmit={submit} style={{ display: "flex", gap: 6, alignItems: "center", minWidth: logicalScope ? 150 : 390, flexWrap: "wrap" }}>
+      {!logicalScope ? <select className="select" name="status" defaultValue={status} aria-label="وضعیت نود"><option>ONLINE</option><option>DEGRADED</option><option>OFFLINE</option><option>MAINTENANCE</option></select> : null}
+      {capacity != null ? <input className="input" name="capacity" type="number" min={1} defaultValue={capacity} aria-label="ظرفیت" style={{ width: 88 }} /> : null}
       <label style={{ display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap", color: vip ? "#d8ccff" : "var(--muted)" }}><input type="checkbox" checked={vip} onChange={(event) => setVip(event.target.checked)} /> VIP</label>
       <button className="button secondary" disabled={action.busy}>ثبت</button>
       {action.error ? <span className="error">{action.error}</span> : null}
