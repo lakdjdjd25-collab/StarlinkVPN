@@ -4,6 +4,7 @@ import { adminFromRequest, isSameOrigin } from "@/lib/admin-session";
 import { fail, ok } from "@/lib/api";
 import { encryptConfig } from "@/lib/config-encryption";
 import { db } from "@/lib/db";
+import { pasarGuardLogicalNodeKey } from "@/lib/pasarguard/logical-node";
 import { singBoxRuntimeConfigSchema } from "@/lib/sing-box-config";
 
 const schema = z.object({
@@ -95,22 +96,32 @@ export async function PATCH(request: NextRequest) {
       return fail(400, "invalid_scope", "این کنترل فقط برای سرورهای پاسارگاد قابل استفاده است");
     }
 
-    const logicalWhere = {
-      provider: "PASARGUARD",
-      host: before.host,
-      port: before.port,
-      protocol: before.protocol,
-      ...(before.providerTag ? { providerTag: before.providerTag } : { name: before.name }),
-    } as const;
-    const targets = await db.vpnNode.findMany({
-      where: logicalWhere,
-      select: { id: true, status: true, accessTier: true },
+    const logicalKey = pasarGuardLogicalNodeKey(before);
+    const candidates = await db.vpnNode.findMany({
+      where: {
+        provider: "PASARGUARD",
+        host: before.host,
+        port: before.port,
+        protocol: before.protocol,
+      },
+      select: {
+        id: true,
+        name: true,
+        providerTag: true,
+        host: true,
+        port: true,
+        protocol: true,
+        status: true,
+        accessTier: true,
+      },
     });
+    const targets = candidates.filter((node) => pasarGuardLogicalNodeKey(node) === logicalKey);
     if (!targets.length) return fail(404, "logical_node_not_found", "سرور منطقی پاسارگاد پیدا نشد");
 
+    const targetIds = targets.map((node) => node.id);
     const now = new Date();
     await db.vpnNode.updateMany({
-      where: logicalWhere,
+      where: { id: { in: targetIds } },
       data: {
         status: input.data.status,
         accessTier: input.data.accessTier,
