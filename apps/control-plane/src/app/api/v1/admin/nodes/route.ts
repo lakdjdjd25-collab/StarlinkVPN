@@ -21,7 +21,7 @@ const schema = z.object({
 
 const updateSchema = z.object({
   id: z.string().min(1),
-  status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]),
+  status: z.enum(["ONLINE", "DEGRADED", "OFFLINE", "MAINTENANCE"]).optional(),
   capacity: z.number().int().min(1).max(1_000_000).optional(),
   accessTier: z.enum(["STANDARD", "VIP"]),
   scope: z.enum(["PASARGUARD"]).optional(),
@@ -111,7 +111,6 @@ export async function PATCH(request: NextRequest) {
         host: true,
         port: true,
         protocol: true,
-        status: true,
         accessTier: true,
       },
     });
@@ -119,14 +118,9 @@ export async function PATCH(request: NextRequest) {
     if (!targets.length) return fail(404, "logical_node_not_found", "سرور منطقی پاسارگاد پیدا نشد");
 
     const targetIds = targets.map((node) => node.id);
-    const now = new Date();
     await db.vpnNode.updateMany({
       where: { id: { in: targetIds } },
-      data: {
-        status: input.data.status,
-        accessTier: input.data.accessTier,
-        lastSeenAt: input.data.status === "ONLINE" ? now : undefined,
-      },
+      data: { accessTier: input.data.accessTier },
     });
     await db.auditLog.create({
       data: {
@@ -142,7 +136,6 @@ export async function PATCH(request: NextRequest) {
         after: {
           scope: "PASARGUARD",
           affectedNodes: targets.length,
-          status: input.data.status,
           accessTier: input.data.accessTier,
         },
       },
@@ -151,12 +144,11 @@ export async function PATCH(request: NextRequest) {
       id: before.id,
       scope: "PASARGUARD",
       affectedNodes: targets.length,
-      status: input.data.status,
       accessTier: input.data.accessTier,
-      lastSeenAt: input.data.status === "ONLINE" ? now : null,
     });
   }
 
+  if (!input.data.status) return fail(400, "invalid_input", "وضعیت نود برای Managed Server لازم است");
   const node = await db.vpnNode.update({
     where: { id: before.id },
     data: {
