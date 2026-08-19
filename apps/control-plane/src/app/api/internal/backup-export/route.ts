@@ -6,6 +6,29 @@ import { Pool } from "pg";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const BACKEND_ENV_KEYS = [
+  "ADMIN_EMAIL",
+  "ADMIN_PASSWORD",
+  "CONFIG_ENCRYPTION_KEY",
+  "DATABASE_URL",
+  "DIAG_NONCE",
+  "GOOGLE_WEB_CLIENT_ID",
+  "JWT_SECRET",
+  "NEXT_TELEMETRY_DISABLED",
+  "NIMHUB_DEPLOY_REFRESH",
+  "NIMHUB_RELEASE_ID",
+  "NO_CACHE",
+  "OTP_HASH_SECRET",
+  "PASARGUARD_BASE_URL",
+  "PASARGUARD_PASSWORD",
+  "PASARGUARD_USERNAME",
+  "PUBLIC_APP_URL",
+  "RAILPACK_INSTALL_CMD",
+  "RAILPACK_PACKAGES",
+  "SEED_DEMO_DATA",
+  "SIGNUP_ENABLED",
+] as const;
+
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
@@ -27,12 +50,27 @@ function jsonReplacer(_key: string, value: unknown): unknown {
 
 function exportedEnvironment() {
   const controlPlane: Record<string, string> = {};
-  const postgres: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined) continue;
-    if (key.startsWith("SOURCE_")) controlPlane[key.slice("SOURCE_".length)] = value;
-    if (key.startsWith("PGSOURCE_")) postgres[key.slice("PGSOURCE_".length)] = value;
+  for (const key of BACKEND_ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) controlPlane[key] = value;
   }
+
+  const postgres: Record<string, string> = {};
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl) {
+    try {
+      const parsed = new URL(databaseUrl);
+      postgres.PGUSER = decodeURIComponent(parsed.username);
+      postgres.PGPASSWORD = decodeURIComponent(parsed.password);
+      postgres.PGHOST = parsed.hostname;
+      postgres.PGPORT = parsed.port || "5432";
+      postgres.PGDATABASE = parsed.pathname.replace(/^\//, "");
+      postgres.DATABASE_URL = databaseUrl;
+    } catch {
+      postgres.DATABASE_URL = databaseUrl;
+    }
+  }
+
   return { controlPlane, postgres };
 }
 
