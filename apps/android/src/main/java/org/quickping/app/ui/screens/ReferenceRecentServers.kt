@@ -61,8 +61,7 @@ internal fun ReferenceRecentServers(
                 modifier = Modifier.fillMaxWidth().height(104.dp),
                 horizontalArrangement = Arrangement.spacedBy(9.dp),
             ) {
-                state.servers.take(3).forEach { server ->
-                    val lockedVip = server.isVip && !server.selectable
+                state.servers.filter { it.selectable }.take(3).forEach { server ->
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -83,7 +82,7 @@ internal fun ReferenceRecentServers(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = referenceServerTitle(server, state.servers),
-                                color = if (server.selectable) QuickPingColors.TextPrimary else QuickPingColors.TextMuted,
+                                color = QuickPingColors.TextPrimary,
                                 fontFamily = Peyda,
                                 fontSize = 14.sp,
                                 lineHeight = 18.sp,
@@ -91,7 +90,7 @@ internal fun ReferenceRecentServers(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (server.isVip && server.selectable) {
+                            if (server.isVip) {
                                 Spacer(Modifier.width(4.dp))
                                 Icon(
                                     painter = painterResource(R.drawable.ic_vip_crown),
@@ -102,27 +101,7 @@ internal fun ReferenceRecentServers(
                             }
                         }
                         Spacer(Modifier.height(5.dp))
-                        if (lockedVip) {
-                            Box(
-                                modifier = Modifier
-                                    .width(38.dp)
-                                    .height(21.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF7157D9))
-                                    .border(1.dp, Color(0xFF8B73E6), RoundedCornerShape(10.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "VIP",
-                                    color = Color.White,
-                                    fontFamily = Peyda,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        } else {
-                            ReferenceMiniPingChip(server.pingMs)
-                        }
+                        ReferenceMiniPingChip(server.pingMs)
                     }
                 }
             }
