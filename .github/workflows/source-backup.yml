@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - backup/full-source-20260819
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -27,7 +30,7 @@ jobs:
           set -euo pipefail
           mkdir -p backup
           git bundle create backup/StarlinkVPN-complete.git.bundle --all
-          git archive --format=zip --output=backup/StarlinkVPN-main-source.zip origin/main
+          git archive --format=zip --output=backup/StarlinkVPN-main-source.zip refs/remotes/origin/main
           if git show-ref --verify --quiet refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build; then
             git archive --format=zip --output=backup/StarlinkVPN-final-hotfix-v3-source.zip refs/remotes/origin/feat/final-hotfix-avatar-vip-ping-build
           fi
